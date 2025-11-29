@@ -9,12 +9,10 @@ export default function LoginPage() {
     const [role, setRole] = useState<UserRole>('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
         setError(null);
 
         try {
@@ -39,8 +37,6 @@ export default function LoginPage() {
 
         } catch (err: any) {
             setError(err.message || 'Ошибка входа');
-        } finally {
-            setLoading(false);
         }
     };
 

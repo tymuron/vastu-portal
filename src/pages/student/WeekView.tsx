@@ -69,7 +69,7 @@ export default function WeekView() {
                 <div className="p-6 md:p-8 min-h-[400px]">
                     {activeTab === 'days' ? (
                         <div className="space-y-4">
-                            {week.days.map((day, index) => (
+                            {week.days.map((day) => (
                                 <Link
                                     key={day.id}
                                     to={`/student/week/${week.id}/day/${day.id}`}

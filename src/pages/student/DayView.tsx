@@ -1,7 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
-import { cn } from '../../lib/utils';
 
 export default function DayView() {
     const { weekId, dayId } = useParams();

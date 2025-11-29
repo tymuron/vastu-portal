@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LogOut, User as UserIcon, BookOpen, Menu, X } from 'lucide-react';
+import { LogOut, User as UserIcon, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 

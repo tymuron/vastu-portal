@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Week, Day, Material } from '../lib/types';
+import { Week, Day } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
-
-// Helper to map DB result to our types
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mapWeek = (data: any): Week => ({
-    id: data.id,
-    title: data.title,
-    description: data.description,
-    isLocked: data.is_locked,
-    availableFrom: data.available_from,
-    days: [], // Populated separately or via join
-    weekMaterials: []
-});
 
 export function useWeeks() {
     const [weeks, setWeeks] = useState<Week[]>([]);

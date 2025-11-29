@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, GripVertical, ChevronDown, ChevronUp, FileText, Video } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Video } from 'lucide-react';
 import { MOCK_COURSE } from '../../lib/data';
 
 export default function CourseEditor() {
     // In a real app, this would be state from a store
-    const [weeks, setWeeks] = useState(MOCK_COURSE.weeks);
+    const [weeks] = useState(MOCK_COURSE.weeks);
 
     return (
         <div className="max-w-5xl mx-auto">
@@ -20,7 +20,7 @@ export default function CourseEditor() {
             </div>
 
             <div className="space-y-6">
-                {weeks.map((week, weekIndex) => (
+                {weeks.map((week) => (
                     <div key={week.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                         {/* Week Header */}
                         <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
