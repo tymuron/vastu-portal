@@ -8,6 +8,7 @@ import DayView from './pages/student/DayView';
 import TeacherLayout from './components/layout/TeacherLayout';
 import CourseEditor from './pages/teacher/CourseEditor';
 
+import Students from './pages/teacher/Students';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -27,7 +28,8 @@ function App() {
                     {/* Teacher Routes */}
                     <Route path="/teacher" element={<TeacherLayout />}>
                         <Route index element={<CourseEditor />} />
-                        <Route path="students" element={<div className="text-center p-10">Управление студентами (В разработке)</div>} />
+                        <Route path="course-editor" element={<CourseEditor />} />
+                        <Route path="students" element={<Students />} />
                         <Route path="settings" element={<div className="text-center p-10">Настройки (В разработке)</div>} />
                     </Route>
 
