@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
-import { LogOut, Layout, Users, Settings, Loader2 } from 'lucide-react';
+import { LogOut, Layout, Users, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 
