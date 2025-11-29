@@ -104,7 +104,12 @@ export default function CourseEditor() {
         const title = window.prompt('Название урока:');
         if (!title) return;
         const { error } = await supabase.from('days').insert([{ week_id: weekId, title, order_index: 99 }]);
-        if (!error) fetchWeeks();
+        if (error) {
+            alert('Ошибка при создании урока: ' + error.message);
+            console.error(error);
+        } else {
+            fetchWeeks();
+        }
     };
 
     const handleDeleteDay = async (id: string) => {
