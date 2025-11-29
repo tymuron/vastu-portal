@@ -1,9 +1,18 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LogOut, Layout, Users, Settings } from 'lucide-react';
+import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
+import { LogOut, Layout, Users, Settings, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function TeacherLayout() {
     const location = useLocation();
+    const { role, loading } = useAuth();
+
+    if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
+
+    // Protect the route
+    if (role !== 'teacher') {
+        return <Navigate to="/student" replace />;
+    }
 
     const navItems = [
         { path: '/teacher', label: 'Курс', icon: Layout },
