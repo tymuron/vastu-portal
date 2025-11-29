@@ -32,13 +32,19 @@ export default function LoginPage() {
 
             if (user) {
                 // Fetch real role
-                const { data: profile } = await supabase
+                const { data: profile, error: profileError } = await supabase
                     .from('profiles')
                     .select('role')
                     .eq('id', user.id)
                     .single();
 
+                if (profileError) {
+                    alert('Error fetching profile: ' + profileError.message);
+                    console.error(profileError);
+                }
+
                 const realRole = profile?.role || 'student';
+                alert('Login Success! Detected Role: ' + realRole); // DEBUG ALERT
 
                 if (realRole === 'teacher') {
                     navigate('/teacher');
@@ -48,6 +54,7 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
+            alert('Login Error: ' + err.message);
             setError(err.message || 'Ошибка входа');
         }
     };
