@@ -13,7 +13,10 @@ export default function CourseEditor() {
                     <h1 className="text-3xl font-serif text-vastu-dark mb-2">Структура курса</h1>
                     <p className="text-gray-500">Управление неделями и уроками</p>
                 </div>
-                <button className="bg-vastu-dark text-vastu-gold px-4 py-2 rounded-lg font-medium hover:bg-vastu-dark/90 transition-colors flex items-center gap-2">
+                <button
+                    onClick={() => alert('Функция добавления недель будет доступна в следующей версии')}
+                    className="bg-vastu-dark text-vastu-gold px-4 py-2 rounded-lg font-medium hover:bg-vastu-dark/90 transition-colors flex items-center gap-2"
+                >
                     <Plus size={18} />
                     Добавить неделю
                 </button>
@@ -34,10 +37,16 @@ export default function CourseEditor() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className="p-2 text-gray-500 hover:text-vastu-dark hover:bg-white rounded-lg transition-colors">
+                                <button
+                                    onClick={() => alert('Редактирование недели')}
+                                    className="p-2 text-gray-500 hover:text-vastu-dark hover:bg-white rounded-lg transition-colors"
+                                >
                                     <Edit2 size={18} />
                                 </button>
-                                <button className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <button
+                                    onClick={() => alert('Удаление недели')}
+                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
                                     <Trash2 size={18} />
                                 </button>
                             </div>
@@ -61,7 +70,10 @@ export default function CourseEditor() {
                                 </div>
                             ))}
 
-                            <button className="w-full py-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 hover:border-vastu-gold/50 hover:text-vastu-gold transition-all flex items-center justify-center gap-2 text-sm font-medium mt-2">
+                            <button
+                                onClick={() => alert('Добавление урока')}
+                                className="w-full py-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 hover:border-vastu-gold/50 hover:text-vastu-gold transition-all flex items-center justify-center gap-2 text-sm font-medium mt-2"
+                            >
                                 <Plus size={16} />
                                 Добавить урок
                             </button>
