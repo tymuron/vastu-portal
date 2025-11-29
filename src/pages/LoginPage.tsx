@@ -39,12 +39,10 @@ export default function LoginPage() {
                     .single();
 
                 if (profileError) {
-                    alert('Error fetching profile: ' + profileError.message);
-                    console.error(profileError);
+                    console.error('Error fetching profile:', profileError);
                 }
 
                 const realRole = profile?.role || 'student';
-                alert('Login Success! Detected Role: ' + realRole); // DEBUG ALERT
 
                 if (realRole === 'teacher') {
                     navigate('/teacher');
@@ -54,7 +52,6 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
-            alert('Login Error: ' + err.message);
             setError(err.message || 'Ошибка входа');
         }
     };
