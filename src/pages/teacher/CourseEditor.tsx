@@ -1,43 +1,74 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, GripVertical, Video, Loader2 } from 'lucide-react';
+```javascript
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Week } from '../../lib/types';
+import { Plus, Trash2, Edit2, ChevronDown, ChevronRight, Save, Upload, FileText, Video, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import FileUploader from '../../components/FileUploader';
+
+// ... interfaces ...
+interface Material {
+    id: string;
+    title: string;
+    type: 'video' | 'pdf' | 'doc' | 'link' | 'zip';
+    url: string;
+    week_id?: string;
+    day_id?: string;
+}
+
+interface Day {
+    id: string;
+    title: string;
+    order_index: number;
+    materials?: Material[];
+}
+
+interface Week {
+    id: string;
+    title: string;
+    description: string;
+    order_index: number;
+    days: Day[];
+    materials?: Material[]; // Week-level materials
+}
 
 export default function CourseEditor() {
     const [weeks, setWeeks] = useState<Week[]>([]);
     const [loading, setLoading] = useState(true);
+    const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
 
-    useEffect(() => {
-        fetchWeeks();
-    }, []);
-
+    // ... fetchWeeks ...
     async function fetchWeeks() {
         try {
             const { data, error } = await supabase
                 .from('weeks')
-                .select(`*, days (*), materials (*)`)
+                .select(`
+    *,
+    days(
+                        *,
+        materials(*)
+    ),
+    materials(*)
+        `)
                 .order('order_index', { ascending: true });
 
             if (error) throw error;
 
             if (data) {
-                const transformedWeeks: Week[] = data.map((w) => ({
-                    id: w.id,
-                    title: w.title,
-                    description: w.description,
-                    isLocked: w.is_locked,
-                    availableFrom: w.available_from,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    days: w.days.sort((a: any, b: any) => a.order_index - b.order_index).map((d: any) => ({
-                        id: d.id,
-                        title: d.title,
-                        description: d.description,
-                        videoUrl: d.video_url,
-                        materials: []
+                // Sort days and materials
+                const sortedWeeks: Week[] = data.map((week: any) => ({
+                    id: week.id,
+                    title: week.title,
+                    description: week.description,
+                    order_index: week.order_index,
+                    days: week.days.sort((a: any, b: any) => a.order_index - b.order_index).map((day: any) => ({
+                        id: day.id,
+                        title: day.title,
+                        order_index: day.order_index,
+                        materials: day.materials || []
                     })),
-                    weekMaterials: []
+                    materials: week.materials || []
                 }));
-                setWeeks(transformedWeeks);
+                setWeeks(sortedWeeks);
             }
         } catch (error) {
             console.error('Error fetching weeks:', error);
@@ -46,132 +77,146 @@ export default function CourseEditor() {
         }
     }
 
+    useEffect(() => {
+        fetchWeeks();
+    }, []);
+
+    const toggleWeek = (id: string) => {
+        setExpandedWeeks(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    // ... Add/Delete Week/Day handlers (keep existing) ...
     const handleAddWeek = async () => {
-        const title = window.prompt('Введите название новой недели:');
+        const title = window.prompt('Название недели:');
         if (!title) return;
-
-        try {
-            const { error } = await supabase.from('weeks').insert([{
-                title,
-                description: 'Новая неделя',
-                order_index: weeks.length + 1
-            }]);
-
-            if (error) throw error;
-            fetchWeeks();
-        } catch (error) {
-            alert('Ошибка при создании недели');
-            console.error(error);
-        }
+        const { error } = await supabase.from('weeks').insert([{ title, order_index: weeks.length + 1 }]);
+        if (!error) fetchWeeks();
     };
 
     const handleDeleteWeek = async (id: string) => {
-        if (!window.confirm('Вы уверены, что хотите удалить эту неделю?')) return;
-
-        try {
-            const { error } = await supabase.from('weeks').delete().eq('id', id);
-            if (error) throw error;
-            fetchWeeks();
-        } catch (error) {
-            alert('Ошибка при удалении');
-            console.error(error);
-        }
+        if (!window.confirm('Удалить неделю?')) return;
+        const { error } = await supabase.from('weeks').delete().eq('id', id);
+        if (!error) fetchWeeks();
     };
 
     const handleAddDay = async (weekId: string) => {
-        const title = window.prompt('Введите название урока:');
+        const title = window.prompt('Название урока:');
         if (!title) return;
-
-        try {
-            const { error } = await supabase.from('days').insert([{
-                week_id: weekId,
-                title,
-                description: 'Описание урока',
-                order_index: 0 // Logic to put at end could be added
-            }]);
-
-            if (error) throw error;
-            fetchWeeks();
-        } catch (error) {
-            alert('Ошибка при создании урока');
-            console.error(error);
-        }
+        const { error } = await supabase.from('days').insert([{ week_id: weekId, title, order_index: 99 }]);
+        if (!error) fetchWeeks();
     };
 
     const handleDeleteDay = async (id: string) => {
-        if (!window.confirm('Удалить этот урок?')) return;
-        try {
-            const { error } = await supabase.from('days').delete().eq('id', id);
-            if (error) throw error;
-            fetchWeeks();
-        } catch (error) {
-            alert('Ошибка при удалении урока');
+        if (!window.confirm('Удалить урок?')) return;
+        const { error } = await supabase.from('days').delete().eq('id', id);
+        if (!error) fetchWeeks();
+    };
+
+
+    // --- MATERIAL HANDLERS ---
+
+    const handleAddMaterial = async (url: string, type: string, name: string, weekId?: string, dayId?: string) => {
+        const { error } = await supabase.from('materials').insert([{
+            title: name,
+            type,
+            url,
+            week_id: weekId,
+            day_id: dayId
+        }]);
+
+        if (error) {
+            alert('Ошибка сохранения материала');
             console.error(error);
+        } else {
+            fetchWeeks();
         }
     };
 
-    if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
+    const handleDeleteMaterial = async (id: string) => {
+        if (!window.confirm('Удалить материал?')) return;
+        const { error } = await supabase.from('materials').delete().eq('id', id);
+        if (!error) fetchWeeks();
+    };
+
+    if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
 
     return (
-        <div className="max-w-5xl mx-auto animate-fade-in">
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="text-3xl font-serif text-vastu-dark mb-2">Структура курса</h1>
-                    <p className="text-gray-500">Управление неделями и уроками</p>
-                </div>
-                <button
-                    onClick={handleAddWeek}
-                    className="bg-vastu-dark text-vastu-gold px-4 py-2 rounded-lg font-medium hover:bg-vastu-dark/90 transition-colors flex items-center gap-2"
-                >
-                    <Plus size={18} />
-                    Добавить неделю
+        <div className="max-w-4xl mx-auto space-y-8 pb-20">
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-serif text-vastu-dark">Редактор Курса</h1>
+                <button onClick={handleAddWeek} className="flex items-center gap-2 bg-vastu-dark text-white px-4 py-2 rounded-lg hover:bg-vastu-dark/90">
+                    <Plus size={18} /> Добавить неделю
                 </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
                 {weeks.map((week) => (
-                    <div key={week.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div key={week.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                         {/* Week Header */}
-                        <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <button className="text-gray-400 hover:text-gray-600 cursor-move">
-                                    <GripVertical size={20} />
-                                </button>
-                                <div>
-                                    <h3 className="font-medium text-lg text-vastu-dark">{week.title}</h3>
-                                    <p className="text-sm text-gray-500">{week.days.length} уроков • {week.isLocked ? 'Скрыта' : 'Опубликована'}</p>
-                                </div>
+                        <div className="p-4 bg-gray-50 flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleWeek(week.id)}>
+                                {expandedWeeks[week.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                                <h3 className="font-serif text-lg font-medium">{week.title}</h3>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        const newTitle = window.prompt('Новое название:', week.title);
-                                        if (newTitle) {
-                                            supabase.from('weeks').update({ title: newTitle }).eq('id', week.id).then(() => fetchWeeks());
-                                        }
-                                    }}
-                                    className="p-2 text-gray-500 hover:text-vastu-dark hover:bg-white rounded-lg transition-colors"
-                                >
-                                    <Edit2 size={18} />
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteWeek(week.id)}
-                                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
+                                <button onClick={() => handleDeleteWeek(week.id)} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
                             </div>
                         </div>
 
-                        {/* Days List */}
-                        <div className="p-4 space-y-2">
-                            {week.days.map((day) => (
-                                <div key={day.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-vastu-gold/30 bg-white group">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded bg-vastu-light flex items-center justify-center text-vastu-gold">
-                                            <Video size={16} />
+                        {/* Week Content */}
+                        {expandedWeeks[week.id] && (
+                            <div className="p-4 space-y-6">
+                                {/* Week Materials Section */}
+                                <div className="bg-vastu-gold/10 p-4 rounded-lg border border-vastu-gold/20">
+                                    <h4 className="text-sm font-bold text-vastu-dark mb-3 uppercase tracking-wider">Материалы недели (Общие)</h4>
+                                    <div className="space-y-2 mb-3">
+                                        {week.materials?.map(m => (
+                                            <div key={m.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100 text-sm">
+                                                <div className="flex items-center gap-2 overflow-hidden">
+                                                    {m.type === 'video' ? <Video size={14} className="text-blue-500" /> : <FileText size={14} className="text-orange-500" />}
+                                                    <span className="truncate">{m.title}</span>
+                                                </div>
+                                                <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <FileUploader 
+                                        folder={`weeks / ${ week.id } `}
+                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, week.id, undefined)} 
+                                    />
+                                </div>
+
+                                {/* Days List */}
+                                <div className="space-y-4 pl-4 border-l-2 border-gray-100">
+                                    {week.days.map((day) => (
+                                        <div key={day.id} className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <h4 className="font-medium text-vastu-dark">{day.title}</h4>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleDeleteDay(day.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={14} /></button>
+                                                </div>
+                                            </div>
+
+                                            {/* Day Materials */}
+                                            <div className="space-y-2">
+                                                {day.materials?.map(m => (
+                                                    <div key={m.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-200 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            {m.type === 'video' ? <Video size={14} className="text-blue-500" /> : <FileText size={14} className="text-orange-500" />}
+                                                            <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline text-blue-600">{m.title}</a>
+                                                        </div>
+                                                        <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
+                                                    </div>
+                                                ))}
+                                                
+                                                <div className="mt-2">
+                                                    <FileUploader 
+                                                        folder={`days / ${ day.id } `}
+                                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, undefined, day.id)} 
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
-                                        <span className="font-medium text-gray-700">{day.title}</span>
                                     </div>
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
