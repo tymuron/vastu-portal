@@ -9,7 +9,6 @@ export default function StudentLayout() {
     const location = useLocation();
     const { user } = useAuth();
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
-    const initials = displayName.charAt(0).toUpperCase();
 
     return (
         <div className="min-h-screen bg-vastu-light flex flex-col">
