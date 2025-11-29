@@ -80,7 +80,14 @@ export default function WeekView() {
                                             <Play size={18} fill="currentColor" />
                                         </div>
                                         <div>
-                                            <h3 className="font-medium text-lg text-vastu-dark">{day.title}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-medium text-lg text-vastu-dark">{day.title}</h3>
+                                                {day.date && (
+                                                    <span className="text-xs font-medium text-vastu-gold bg-vastu-gold/10 px-2 py-0.5 rounded-full">
+                                                        {new Date(day.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-vastu-text-light line-clamp-1">{day.description}</p>
                                         </div>
                                     </div>

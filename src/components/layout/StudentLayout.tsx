@@ -18,9 +18,9 @@ export default function StudentLayout() {
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <Link to="/student" className="flex items-center gap-3 group">
                         <div className="w-8 h-8 bg-vastu-gold rounded-full flex items-center justify-center text-vastu-dark font-serif font-bold text-lg group-hover:scale-110 transition-transform">
-                            {initials}
+                            S
                         </div>
-                        <span className="font-serif text-xl tracking-wide text-vastu-gold uppercase">{displayName}</span>
+                        <span className="font-serif text-xl tracking-wide text-vastu-gold uppercase">STUDENT</span>
                     </Link>
 
                     {/* Desktop Nav */}

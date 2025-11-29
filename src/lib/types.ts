@@ -24,6 +24,7 @@ export interface Day {
     description?: string;
     materials: Material[];
     videoUrl?: string; // Main lesson video
+    date?: string; // ISO Date
 }
 
 export interface Week {
