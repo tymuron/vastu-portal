@@ -1,11 +1,9 @@
-```javascript
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Trash2, Edit2, ChevronDown, ChevronRight, Save, Upload, FileText, Video, X } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Upload, FileText, Video, X } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 
-// ... interfaces ...
 interface Material {
     id: string;
     title: string;
@@ -29,7 +27,7 @@ interface Week {
     order_index: number;
     available_from?: string;
     days: Day[];
-    materials?: Material[]; // Week-level materials
+    materials?: Material[];
 }
 
 export default function CourseEditor() {
@@ -37,30 +35,29 @@ export default function CourseEditor() {
     const [loading, setLoading] = useState(true);
     const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
 
-    // ... fetchWeeks ...
     async function fetchWeeks() {
         try {
             const { data, error } = await supabase
                 .from('weeks')
                 .select(`
-    *,
-    days(
+                    *,
+                    days (
                         *,
-        materials(*)
-    ),
-    materials(*)
-        `)
+                        materials (*)
+                    ),
+                    materials (*)
+                `)
                 .order('order_index', { ascending: true });
 
             if (error) throw error;
 
             if (data) {
-                // Sort days and materials
                 const sortedWeeks: Week[] = data.map((week: any) => ({
                     id: week.id,
                     title: week.title,
                     description: week.description,
                     order_index: week.order_index,
+                    available_from: week.available_from,
                     days: week.days.sort((a: any, b: any) => a.order_index - b.order_index).map((day: any) => ({
                         id: day.id,
                         title: day.title,
@@ -86,7 +83,6 @@ export default function CourseEditor() {
         setExpandedWeeks(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    // ... Add/Delete Week/Day handlers (keep existing) ...
     const handleAddWeek = async () => {
         const title = window.prompt('Название недели:');
         if (!title) return;
@@ -112,9 +108,6 @@ export default function CourseEditor() {
         const { error } = await supabase.from('days').delete().eq('id', id);
         if (!error) fetchWeeks();
     };
-
-
-    // --- MATERIAL HANDLERS ---
 
     const handleAddMaterial = async (url: string, type: string, name: string, weekId?: string, dayId?: string) => {
         const { error } = await supabase.from('materials').insert([{
@@ -167,8 +160,8 @@ export default function CourseEditor() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     className="text-sm border rounded px-2 py-1 bg-white"
                                     value={week.available_from ? new Date(week.available_from).toISOString().split('T')[0] : ''}
                                     onChange={async (e) => {
@@ -199,9 +192,9 @@ export default function CourseEditor() {
                                             </div>
                                         ))}
                                     </div>
-                                    <FileUploader 
-                                        folder={`weeks / ${ week.id } `}
-                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, week.id, undefined)} 
+                                    <FileUploader
+                                        folder={`weeks/${week.id}`}
+                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, week.id, undefined)}
                                     />
                                 </div>
 
@@ -227,47 +220,23 @@ export default function CourseEditor() {
                                                         <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
                                                     </div>
                                                 ))}
-                                                
+
                                                 <div className="mt-2">
-                                                    <FileUploader 
-                                                        folder={`days / ${ day.id } `}
-                                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, undefined, day.id)} 
+                                                    <FileUploader
+                                                        folder={`days/${day.id}`}
+                                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, undefined, day.id)}
                                                     />
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => {
-                                                const newTitle = window.prompt('Новое название урока:', day.title);
-                                                if (newTitle) {
-                                                    supabase.from('days').update({ title: newTitle }).eq('id', day.id).then(() => fetchWeeks());
-                                                }
-                                            }}
-                                            className="text-xs text-vastu-gold hover:underline"
-                                        >
-                                            Редактировать
-                                        </button>
-                                        <div className="w-px h-3 bg-gray-300" />
-                                        <button
-                                            onClick={() => handleDeleteDay(day.id)}
-                                            className="text-xs text-red-400 hover:underline"
-                                        >
-                                            Удалить
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                    ))}
 
-                            <button
-                                onClick={() => handleAddDay(week.id)}
-                                className="w-full py-3 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 hover:border-vastu-gold/50 hover:text-vastu-gold transition-all flex items-center justify-center gap-2 text-sm font-medium mt-2"
-                            >
-                                <Plus size={16} />
-                                Добавить урок
-                            </button>
-                        </div>
+                                    <button onClick={() => handleAddDay(week.id)} className="flex items-center gap-2 text-sm text-vastu-dark/60 hover:text-vastu-dark mt-2">
+                                        <Plus size={16} /> Добавить урок
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
