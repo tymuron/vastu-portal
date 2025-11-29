@@ -37,13 +37,41 @@ export default function Students() {
 
     if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
 
+    const inviteLink = `${window.location.origin}/register`;
+
+    const copyLink = () => {
+        navigator.clipboard.writeText(inviteLink);
+        alert('Ссылка скопирована!');
+    };
+
     return (
         <div className="max-w-5xl mx-auto animate-fade-in">
             <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="text-3xl font-serif text-vastu-dark mb-2">Студенты</h1>
-                    <p className="text-gray-500">Управление списком студентов ({students.length})</p>
+                <h1 className="text-3xl font-serif text-vastu-dark">Студенты</h1>
+                <div className="flex gap-2">
+                    <button
+                        onClick={copyLink}
+                        className="flex items-center gap-2 bg-vastu-gold/10 text-vastu-dark border border-vastu-gold/30 px-4 py-2 rounded-lg hover:bg-vastu-gold/20 transition-colors"
+                    >
+                        <Mail size={18} />
+                        Скопировать ссылку для приглашения
+                    </button>
                 </div>
+            </div>
+
+            {/* Invite Card */}
+            <div className="bg-white p-6 rounded-xl border border-vastu-gold/20 shadow-sm mb-8 flex items-center justify-between">
+                <div>
+                    <h3 className="font-medium text-vastu-dark mb-1">Ссылка для регистрации студентов</h3>
+                    <p className="text-sm text-gray-500">Отправьте эту ссылку студенту, чтобы он создал аккаунт</p>
+                </div>
+                <code className="bg-gray-100 px-4 py-2 rounded text-sm text-gray-600 select-all">
+                    {inviteLink}
+                </code>
+            </div>
+
+            <div className="flex items-center justify-between mb-8">
+                <p className="text-gray-500">Управление списком студентов ({students.length})</p>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input

@@ -11,12 +11,15 @@ import CourseEditor from './pages/teacher/CourseEditor';
 import Students from './pages/teacher/Students';
 import { AuthProvider } from './contexts/AuthContext';
 
+import RegisterPage from './pages/RegisterPage';
+
 function App() {
     return (
         <AuthProvider>
             <Router>
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
 
                     {/* Student Routes */}
                     <Route path="/student" element={<StudentLayout />}>
