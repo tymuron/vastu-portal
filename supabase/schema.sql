@@ -2,7 +2,7 @@
 create extension if not exists "uuid-ossp";
 
 -- 1. PROFILES (Users)
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid references auth.users not null primary key,
   email text,
   role text check (role in ('student', 'teacher')) default 'student',
@@ -11,24 +11,31 @@ create table public.profiles (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Enable RLS
 alter table public.profiles enable row level security;
 
--- Policies for Profiles
-create policy "Public profiles are viewable by everyone."
-  on profiles for select
-  using ( true );
+-- Drop old policies to ensure clean slate
+drop policy if exists "Public profiles are viewable by everyone." on profiles;
+drop policy if exists "Users can insert their own profile." on profiles;
+drop policy if exists "Users can update own profile." on profiles;
+drop policy if exists "Users can view own profile" on profiles;
+drop policy if exists "Teachers can view all profiles" on profiles;
+
+-- Create Secure Policies
+create policy "Users can view own profile" 
+  on profiles for select using ( auth.uid() = id );
+
+create policy "Teachers can view all profiles" 
+  on profiles for select using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
 
 create policy "Users can insert their own profile."
-  on profiles for insert
-  with check ( auth.uid() = id );
+  on profiles for insert with check ( auth.uid() = id );
 
 create policy "Users can update own profile."
-  on profiles for update
-  using ( auth.uid() = id );
+  on profiles for update using ( auth.uid() = id );
+
 
 -- 2. WEEKS
-create table public.weeks (
+create table if not exists public.weeks (
   id uuid default uuid_generate_v4() primary key,
   title text not null,
   description text,
@@ -40,26 +47,27 @@ create table public.weeks (
 
 alter table public.weeks enable row level security;
 
--- Everyone can read weeks (logic for locking is in frontend or edge function, but for now simple read)
-create policy "Weeks are viewable by everyone."
-  on weeks for select
-  using ( true );
+drop policy if exists "Weeks are viewable by everyone." on weeks;
+drop policy if exists "Authenticated users can view weeks" on weeks;
+drop policy if exists "Teachers can insert weeks." on weeks;
+drop policy if exists "Teachers can update weeks." on weeks;
+drop policy if exists "Teachers can delete weeks." on weeks;
 
--- Only teachers can edit weeks
+create policy "Authenticated users can view weeks"
+  on weeks for select using ( auth.role() = 'authenticated' );
+
 create policy "Teachers can insert weeks."
-  on weeks for insert
-  with check ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+  on weeks for insert with check ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
 
 create policy "Teachers can update weeks."
-  on weeks for update
-  using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+  on weeks for update using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
 
 create policy "Teachers can delete weeks."
-  on weeks for delete
-  using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+  on weeks for delete using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+
 
 -- 3. DAYS (Lessons)
-create table public.days (
+create table if not exists public.days (
   id uuid default uuid_generate_v4() primary key,
   week_id uuid references public.weeks(id) on delete cascade not null,
   title text not null,
@@ -71,19 +79,22 @@ create table public.days (
 
 alter table public.days enable row level security;
 
-create policy "Days are viewable by everyone."
-  on days for select
-  using ( true );
+drop policy if exists "Days are viewable by everyone." on days;
+drop policy if exists "Authenticated users can view days" on days;
+drop policy if exists "Teachers can edit days." on days;
+
+create policy "Authenticated users can view days"
+  on days for select using ( auth.role() = 'authenticated' );
 
 create policy "Teachers can edit days."
-  on days for all
-  using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+  on days for all using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+
 
 -- 4. MATERIALS
-create table public.materials (
+create table if not exists public.materials (
   id uuid default uuid_generate_v4() primary key,
-  week_id uuid references public.weeks(id) on delete cascade, -- Can belong to a week
-  day_id uuid references public.days(id) on delete cascade,   -- OR belong to a day
+  week_id uuid references public.weeks(id) on delete cascade,
+  day_id uuid references public.days(id) on delete cascade,
   title text not null,
   type text check (type in ('video', 'pdf', 'pptx', 'doc', 'link', 'zip')) not null,
   url text not null,
@@ -96,23 +107,22 @@ create table public.materials (
 
 alter table public.materials enable row level security;
 
-create policy "Materials are viewable by everyone."
-  on materials for select
-  using ( true );
+drop policy if exists "Materials are viewable by everyone." on materials;
+drop policy if exists "Authenticated users can view materials" on materials;
+drop policy if exists "Teachers can edit materials." on materials;
+
+create policy "Authenticated users can view materials"
+  on materials for select using ( auth.role() = 'authenticated' );
 
 create policy "Teachers can edit materials."
-  on materials for all
-  using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
+  on materials for all using ( exists ( select 1 from profiles where id = auth.uid() and role = 'teacher' ) );
 
--- 5. STORAGE BUCKETS
--- Note: You usually create buckets in the dashboard, but here is the policy logic
--- Bucket name: 'course-content'
 
--- Policy: Public Read
--- Policy: Teachers Upload
-
--- SEED DATA (Optional - to have something to start with)
+-- SEED DATA (Only insert if empty)
 insert into public.weeks (title, description, order_index)
-values 
-('Неделя 1. Введение в Васту', 'Погружение в философию и базовые принципы организации пространства.', 1),
-('Неделя 2. Зонирование', 'Распределение функциональных зон согласно энергиям.', 2);
+select 'Неделя 1. Введение в Васту', 'Погружение в философию и базовые принципы организации пространства.', 1
+where not exists (select 1 from public.weeks);
+
+insert into public.weeks (title, description, order_index)
+select 'Неделя 2. Зонирование', 'Распределение функциональных зон согласно энергиям.', 2
+where not exists (select 1 from public.weeks where title = 'Неделя 2. Зонирование');

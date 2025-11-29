@@ -16,24 +16,36 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            // If no keys, just mock it
             if (!import.meta.env.VITE_SUPABASE_URL) {
-                console.log('Mock Login');
+                // Mock fallback
                 if (role === 'student') navigate('/student');
                 else navigate('/teacher');
                 return;
             }
 
-            const { error } = await supabase.auth.signInWithPassword({
+            const { data: { user }, error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
             });
 
             if (error) throw error;
 
-            // Navigation will be handled by AuthContext or we can force it here
-            if (role === 'student') navigate('/student');
-            else navigate('/teacher');
+            if (user) {
+                // Fetch real role
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+
+                const realRole = profile?.role || 'student';
+
+                if (realRole === 'teacher') {
+                    navigate('/teacher');
+                } else {
+                    navigate('/student');
+                }
+            }
 
         } catch (err: any) {
             setError(err.message || 'Ошибка входа');
