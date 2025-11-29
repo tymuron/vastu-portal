@@ -1,13 +1,9 @@
 services:
   - type: web
     name: vastu-portal
-    env: static
+    env: node
     buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    startCommand: npm start
     envVars:
       - key: VITE_SUPABASE_URL
         sync: false
