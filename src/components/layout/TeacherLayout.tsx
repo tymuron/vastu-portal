@@ -17,7 +17,6 @@ export default function TeacherLayout() {
     const navItems = [
         { path: '/teacher', label: 'Курс', icon: Layout },
         { path: '/teacher/students', label: 'Студенты', icon: Users },
-        { path: '/teacher/settings', label: 'Настройки', icon: Settings },
     ];
 
     return (

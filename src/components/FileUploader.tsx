@@ -51,17 +51,26 @@ export default function FileUploader({ onUploadComplete, folder = 'general' }: F
         <div className="relative">
             <input
                 type="file"
-                id="file-upload"
+                id={`file-upload-${folder}`}
                 className="hidden"
                 onChange={handleFileChange}
                 disabled={uploading}
             />
             <label
-                htmlFor="file-upload"
-                className="flex items-center gap-2 px-4 py-2 bg-vastu-light/10 hover:bg-vastu-light/20 border border-vastu-gold/30 rounded-lg cursor-pointer transition-colors text-sm text-vastu-dark"
+                htmlFor={`file-upload-${folder}`} // Unique ID
+                className="flex flex-col items-center justify-center gap-3 px-6 py-8 bg-gray-50 hover:bg-vastu-gold/5 border-2 border-dashed border-gray-300 hover:border-vastu-gold/50 rounded-xl cursor-pointer transition-all group w-full"
             >
-                {uploading ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />}
-                {uploading ? 'Загрузка...' : 'Загрузить файл'}
+                <div className="p-3 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                    {uploading ? <Loader2 className="animate-spin text-vastu-gold" size={24} /> : <Upload className="text-vastu-gold" size={24} />}
+                </div>
+                <div className="text-center">
+                    <span className="font-medium text-vastu-dark block mb-1">
+                        {uploading ? 'Загрузка...' : 'Нажмите для загрузки файла'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                        PDF, Video, Images, Zip (Max 50MB)
+                    </span>
+                </div>
             </label>
         </div>
     );
