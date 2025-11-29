@@ -60,16 +60,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('*')
                 .eq('id', userId)
                 .single();
 
             if (error) {
                 console.error('Error fetching role:', error);
-                // Default to student if error or no profile yet
                 setRole('student');
             } else {
                 setRole(data?.role as UserRole || 'student');
+                // Update user metadata locally if needed, or just rely on the profile data being available elsewhere
+                // For now, we'll attach it to the user object or state if we expanded the context
+                if (user) {
+                    user.user_metadata = { ...user.user_metadata, ...data };
+                    setUser({ ...user }); // Trigger re-render
+                }
             }
         } catch (err) {
             console.error(err);

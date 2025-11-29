@@ -19,6 +19,7 @@ interface Day {
     order_index: number;
     description?: string;
     video_url?: string;
+    date?: string;
     materials?: Material[];
 }
 
@@ -65,6 +66,7 @@ export default function CourseEditor() {
                         title: day.title,
                         description: day.description,
                         video_url: day.video_url,
+                        date: day.date,
                         order_index: day.order_index,
                         materials: day.materials || []
                     })),
@@ -268,6 +270,20 @@ export default function CourseEditor() {
                                                                     }}
                                                                 />
                                                             </div>
+                                                        </div>
+
+                                                        {/* Day Date */}
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Дата урока (Календарь)</label>
+                                                            <input
+                                                                type="date"
+                                                                defaultValue={day.date ? new Date(day.date).toISOString().split('T')[0] : ''}
+                                                                className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold focus:outline-none"
+                                                                onChange={(e) => {
+                                                                    const date = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                                                    supabase.from('days').update({ date }).eq('id', day.id).then(() => fetchWeeks());
+                                                                }}
+                                                            />
                                                         </div>
                                                     </div>
                                                     <button onClick={() => handleDeleteDay(day.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors" title="Удалить урок"><Trash2 size={18} /></button>

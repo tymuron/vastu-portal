@@ -1,7 +1,8 @@
 -- 1. Add missing columns to 'days' table (if they don't exist)
 alter table public.days 
 add column if not exists description text,
-add column if not exists video_url text;
+add column if not exists video_url text,
+add column if not exists date timestamp with time zone;
 
 -- 2. Add missing columns to 'weeks' table (if they don't exist)
 alter table public.weeks
