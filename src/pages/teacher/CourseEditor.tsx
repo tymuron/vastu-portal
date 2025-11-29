@@ -207,76 +207,105 @@ export default function CourseEditor() {
                                     />
                                 </div>
 
-                                {/* Days List */}
-                                <div className="space-y-4 pl-4 border-l-2 border-gray-100">
-                                    {week.days.map((day) => (
-                                        <div key={day.id} className="bg-gray-50 p-6 rounded-xl border border-gray-100 transition-all hover:border-vastu-gold/30 hover:shadow-sm">
-                                            <div className="flex justify-between items-start mb-6">
-                                                <div className="flex-1 mr-4">
-                                                    <input
-                                                        type="text"
-                                                        defaultValue={day.title}
-                                                        className="text-lg font-medium text-vastu-dark bg-transparent border-b border-transparent hover:border-gray-300 focus:border-vastu-gold focus:outline-none w-full transition-colors mb-2"
-                                                        onBlur={(e) => {
-                                                            if (e.target.value !== day.title) {
-                                                                supabase.from('days').update({ title: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
-                                                            }
-                                                        }}
-                                                    />
-                                                    <div className="space-y-3">
-                                                        <textarea
-                                                            placeholder="Описание урока..."
-                                                            defaultValue={day.description || ''}
-                                                            className="w-full text-sm text-gray-600 bg-white border border-gray-200 rounded-lg p-3 focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold focus:outline-none resize-y min-h-[80px]"
-                                                            onBlur={(e) => {
-                                                                supabase.from('days').update({ description: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
-                                                            }}
-                                                        />
-                                                        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold">
-                                                            <Video size={16} className="text-gray-400" />
+                                {/* Days List Section */}
+                                <div className="mt-8">
+                                    <h4 className="text-sm font-bold text-vastu-dark mb-4 uppercase tracking-wider flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-vastu-dark"></span>
+                                        Программа недели (Уроки)
+                                    </h4>
+
+                                    <div className="space-y-4 pl-4 border-l-2 border-gray-100">
+                                        {week.days.length === 0 && (
+                                            <div className="text-sm text-gray-400 italic mb-4">
+                                                В этой неделе пока нет уроков. Добавьте первый урок ниже.
+                                            </div>
+                                        )}
+
+                                        {week.days.map((day) => (
+                                            <div key={day.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm transition-all hover:border-vastu-gold/50 hover:shadow-md">
+                                                <div className="flex justify-between items-start mb-6">
+                                                    <div className="flex-1 mr-4 space-y-4">
+                                                        {/* Day Title */}
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Название урока</label>
                                                             <input
                                                                 type="text"
-                                                                placeholder="Ссылка на основное видео (Vimeo/YouTube)"
-                                                                defaultValue={day.video_url || ''}
-                                                                className="flex-1 text-sm text-gray-700 focus:outline-none"
+                                                                defaultValue={day.title}
+                                                                className="text-lg font-medium text-vastu-dark bg-transparent border-b border-gray-200 hover:border-vastu-gold focus:border-vastu-gold focus:outline-none w-full transition-colors py-1"
                                                                 onBlur={(e) => {
-                                                                    supabase.from('days').update({ video_url: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
+                                                                    if (e.target.value !== day.title) {
+                                                                        supabase.from('days').update({ title: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
+                                                                    }
                                                                 }}
                                                             />
                                                         </div>
-                                                    </div>
-                                                </div>
-                                                <button onClick={() => handleDeleteDay(day.id)} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors"><Trash2 size={18} /></button>
-                                            </div>
 
-                                            {/* Day Materials */}
-                                            <div className="space-y-3">
-                                                <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Дополнительные материалы</h5>
-                                                {day.materials?.map(m => (
-                                                    <div key={m.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200 text-sm hover:border-vastu-gold/30 transition-colors">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`p-2 rounded-md ${m.type === 'video' ? 'bg-blue-50 text-blue-500' : 'bg-orange-50 text-orange-500'}`}>
-                                                                {m.type === 'video' ? <Video size={16} /> : <FileText size={16} />}
-                                                            </div>
-                                                            <a href={m.url} target="_blank" rel="noreferrer" className="font-medium text-gray-700 hover:text-vastu-gold transition-colors">{m.title}</a>
+                                                        {/* Day Description */}
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Описание</label>
+                                                            <textarea
+                                                                placeholder="Краткое описание урока..."
+                                                                defaultValue={day.description || ''}
+                                                                className="w-full text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3 focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold focus:outline-none resize-y min-h-[80px]"
+                                                                onBlur={(e) => {
+                                                                    supabase.from('days').update({ description: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
+                                                                }}
+                                                            />
                                                         </div>
-                                                        <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500 p-1"><X size={16} /></button>
-                                                    </div>
-                                                ))}
 
-                                                <div className="mt-4">
+                                                        {/* Video URL */}
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Основное Видео</label>
+                                                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold">
+                                                                <Video size={16} className="text-gray-400" />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Ссылка на видео (Vimeo/YouTube)"
+                                                                    defaultValue={day.video_url || ''}
+                                                                    className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none"
+                                                                    onBlur={(e) => {
+                                                                        supabase.from('days').update({ video_url: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => handleDeleteDay(day.id)} className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors" title="Удалить урок"><Trash2 size={18} /></button>
+                                                </div>
+
+                                                {/* Day Materials */}
+                                                <div className="mt-6 pt-6 border-t border-gray-100">
+                                                    <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Материалы урока (Файлы)</h5>
+                                                    <div className="space-y-3 mb-4">
+                                                        {day.materials?.map(m => (
+                                                            <div key={m.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm hover:border-vastu-gold/30 transition-colors">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`p-2 rounded-md ${m.type === 'video' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                                        {m.type === 'video' ? <Video size={16} /> : <FileText size={16} />}
+                                                                    </div>
+                                                                    <a href={m.url} target="_blank" rel="noreferrer" className="font-medium text-gray-700 hover:text-vastu-gold transition-colors">{m.title}</a>
+                                                                </div>
+                                                                <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500 p-1"><X size={16} /></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
                                                     <FileUploader
                                                         folder={`days/${day.id}`}
                                                         onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, undefined, day.id)}
                                                     />
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
 
-                                    <button onClick={() => handleAddDay(week.id)} className="flex items-center gap-2 text-sm text-vastu-dark/60 hover:text-vastu-dark mt-2">
-                                        <Plus size={16} /> Добавить урок
-                                    </button>
+                                        <button
+                                            onClick={() => handleAddDay(week.id)}
+                                            className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:text-vastu-dark hover:border-vastu-gold hover:bg-vastu-gold/5 transition-all font-medium"
+                                        >
+                                            <Plus size={20} />
+                                            Добавить новый урок
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
