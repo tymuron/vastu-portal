@@ -36,7 +36,7 @@ export function useWeeks() {
                         id: w.id,
                         title: w.title,
                         description: w.description,
-                        isLocked: w.is_locked,
+                        isLocked: w.is_locked || (w.available_from ? new Date(w.available_from) > new Date() : false),
                         availableFrom: w.available_from,
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         days: w.days.sort((a: any, b: any) => a.order_index - b.order_index).map((d: any) => ({

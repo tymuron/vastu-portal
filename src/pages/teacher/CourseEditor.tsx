@@ -27,6 +27,7 @@ interface Week {
     title: string;
     description: string;
     order_index: number;
+    available_from?: string;
     days: Day[];
     materials?: Material[]; // Week-level materials
 }
@@ -156,9 +157,27 @@ export default function CourseEditor() {
                         <div className="p-4 bg-gray-50 flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleWeek(week.id)}>
                                 {expandedWeeks[week.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-                                <h3 className="font-serif text-lg font-medium">{week.title}</h3>
+                                <div>
+                                    <h3 className="font-serif text-lg font-medium">{week.title}</h3>
+                                    {week.available_from && (
+                                        <p className="text-xs text-gray-500">
+                                            Доступно с: {new Date(week.available_from).toLocaleDateString()}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex items-center gap-2">
+                                <input 
+                                    type="date" 
+                                    className="text-sm border rounded px-2 py-1 bg-white"
+                                    value={week.available_from ? new Date(week.available_from).toISOString().split('T')[0] : ''}
+                                    onChange={async (e) => {
+                                        const date = e.target.value ? new Date(e.target.value).toISOString() : null;
+                                        const { error } = await supabase.from('weeks').update({ available_from: date }).eq('id', week.id);
+                                        if (!error) fetchWeeks();
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
                                 <button onClick={() => handleDeleteWeek(week.id)} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
                             </div>
                         </div>
