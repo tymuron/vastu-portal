@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Trash2, ChevronDown, ChevronRight, Upload, FileText, Video, X } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, FileText, Video, X } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
 

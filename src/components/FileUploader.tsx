@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Loader2, X, FileText, Video, Link as LinkIcon } from 'lucide-react';
+import { Upload, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface FileUploaderProps {

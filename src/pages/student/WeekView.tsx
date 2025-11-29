@@ -58,7 +58,7 @@ export default function WeekView() {
                     >
                         Материалы недели
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
-                            {week.materials?.length || 0}
+                            {week.weekMaterials?.length || 0}
                         </span>
                         {activeTab === 'materials' && (
                             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-vastu-gold" />
@@ -90,8 +90,8 @@ export default function WeekView() {
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 gap-4">
-                            {week.materials && week.materials.length > 0 ? (
-                                week.materials.map((material) => (
+                            {week.weekMaterials && week.weekMaterials.length > 0 ? (
+                                week.weekMaterials.map((material) => (
                                     <div key={material.id} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50">
                                         <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-vastu-dark shrink-0">
                                             <FileText size={20} />
