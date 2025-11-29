@@ -58,7 +58,7 @@ export default function WeekView() {
                     >
                         Материалы недели
                         <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
-                            {week.weekMaterials.length}
+                            {week.materials?.length || 0}
                         </span>
                         {activeTab === 'materials' && (
                             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-vastu-gold" />
@@ -90,8 +90,8 @@ export default function WeekView() {
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 gap-4">
-                            {week.weekMaterials.length > 0 ? (
-                                week.weekMaterials.map((material) => (
+                            {week.materials && week.materials.length > 0 ? (
+                                week.materials.map((material) => (
                                     <div key={material.id} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50">
                                         <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-vastu-dark shrink-0">
                                             <FileText size={20} />
@@ -99,10 +99,15 @@ export default function WeekView() {
                                         <div className="flex-1 min-w-0">
                                             <h4 className="font-medium text-vastu-dark truncate">{material.title}</h4>
                                             <p className="text-xs text-vastu-text-light uppercase tracking-wider mb-2">{material.type}</p>
-                                            <button className="text-sm text-vastu-gold hover:text-vastu-dark font-medium flex items-center gap-1 transition-colors">
+                                            <a
+                                                href={material.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-sm text-vastu-gold hover:text-vastu-dark font-medium flex items-center gap-1 transition-colors"
+                                            >
                                                 <Download size={14} />
                                                 Скачать
-                                            </button>
+                                            </a>
                                         </div>
                                     </div>
                                 ))

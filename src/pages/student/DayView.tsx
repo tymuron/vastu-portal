@@ -138,7 +138,10 @@ export default function DayView() {
                         </div>
 
                         {day.materials.length > 1 && (
-                            <button className="w-full mt-4 py-2 text-sm text-vastu-gold hover:text-vastu-dark border border-vastu-gold/30 hover:border-vastu-dark rounded-lg transition-all">
+                            <button
+                                onClick={() => alert('Функция "Скачать всё архивом" будет доступна позже. Пожалуйста, скачивайте файлы по одному.')}
+                                className="w-full mt-4 py-2 text-sm text-vastu-gold hover:text-vastu-dark border border-vastu-gold/30 hover:border-vastu-dark rounded-lg transition-all"
+                            >
                                 Скачать всё (ZIP)
                             </button>
                         )}
