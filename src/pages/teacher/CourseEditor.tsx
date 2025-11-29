@@ -128,7 +128,7 @@ export default function CourseEditor() {
         }]);
 
         if (error) {
-            alert('Ошибка сохранения материала');
+            alert('Ошибка сохранения материала: ' + error.message);
             console.error(error);
         } else {
             fetchWeeks();

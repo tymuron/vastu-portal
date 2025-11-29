@@ -32,11 +32,17 @@ export default function FileUploader({ onUploadComplete, folder = 'general' }: F
                 .getPublicUrl(filePath);
 
             // Determine type
+            // Determine type based on DB constraints: 'video', 'pdf', 'pptx', 'doc', 'link', 'zip'
             let type = 'doc';
-            if (['mp4', 'mov', 'avi'].includes(fileExt?.toLowerCase() || '')) type = 'video';
-            else if (['pdf'].includes(fileExt?.toLowerCase() || '')) type = 'pdf';
-            else if (['zip', 'rar'].includes(fileExt?.toLowerCase() || '')) type = 'zip';
-            else if (['jpg', 'png', 'jpeg'].includes(fileExt?.toLowerCase() || '')) type = 'image';
+            const ext = fileExt?.toLowerCase() || '';
+
+            if (['mp4', 'mov', 'avi', 'mkv'].includes(ext)) type = 'video';
+            else if (['pdf'].includes(ext)) type = 'pdf';
+            else if (['zip', 'rar', '7z'].includes(ext)) type = 'zip';
+            else if (['pptx', 'ppt'].includes(ext)) type = 'pptx';
+            else if (['doc', 'docx'].includes(ext)) type = 'doc';
+            // Map images and others to 'doc' to satisfy DB constraint for now
+            else if (['jpg', 'png', 'jpeg', 'webp'].includes(ext)) type = 'doc';
 
             onUploadComplete(publicUrl, type, file.name);
 
