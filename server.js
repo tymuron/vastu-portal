@@ -12,6 +12,27 @@ const distPath = path.join(__dirname, 'dist');
 const server = http.createServer((req, res) => {
     console.log(`Request: ${req.url}`);
 
+    // Health Check
+    if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('OK');
+        return;
+    }
+
+    // Debug: List files in dist
+    if (req.url === '/debug-files') {
+        fs.readdir(distPath, (err, files) => {
+            if (err) {
+                res.writeHead(500);
+                res.end(`Error listing files: ${err.message}`);
+            } else {
+                res.writeHead(200, { 'Content-Type': 'text/plain' });
+                res.end(`Files in ${distPath}:\n${files.join('\n')}`);
+            }
+        });
+        return;
+    }
+
     // Default to index.html for root
     let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url);
 
