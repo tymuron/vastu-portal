@@ -10,6 +10,8 @@ import Library from './pages/student/Library';
 import TeacherLayout from './components/layout/TeacherLayout';
 import CourseEditor from './pages/teacher/CourseEditor';
 import Students from './pages/teacher/Students';
+import ManageStreams from './pages/teacher/ManageStreams';
+import ManageLibrary from './pages/teacher/ManageLibrary';
 
 import { AuthProvider } from './contexts/AuthContext';
 import RegisterPage from './pages/RegisterPage';
@@ -62,6 +64,8 @@ function App() {
                         <Route index element={<CourseEditor />} />
                         <Route path="course-editor" element={<CourseEditor />} />
                         <Route path="students" element={<Students />} />
+                        <Route path="streams" element={<ManageStreams />} />
+                        <Route path="library" element={<ManageLibrary />} />
                         <Route path="settings" element={<div className="text-center p-10">Настройки (В разработке)</div>} />
                     </Route>
 
