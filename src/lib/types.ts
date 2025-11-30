@@ -42,3 +42,34 @@ export interface Course {
     title: string;
     weeks: Week[];
 }
+
+export interface LiveStream {
+    id: string;
+    title: string;
+    date: string; // ISO Date
+    videoUrl?: string;
+    audioUrl?: string;
+    description?: string;
+    topics?: string;
+    bestQuestions?: string;
+}
+
+export interface StreamComment {
+    id: string;
+    streamId: string;
+    userId: string;
+    userName?: string; // Joined from profile
+    userAvatar?: string; // Joined from profile
+    content: string;
+    createdAt: string;
+}
+
+export type LibraryCategory = 'checklist' | 'table' | 'guide' | 'pdf';
+
+export interface LibraryItem {
+    id: string;
+    title: string;
+    category: LibraryCategory;
+    fileUrl: string;
+    description?: string;
+}

@@ -4,13 +4,14 @@ import StudentLayout from './components/layout/StudentLayout';
 import StudentDashboard from './pages/student/Dashboard';
 import WeekView from './pages/student/WeekView';
 import DayView from './pages/student/DayView';
+import LiveStreams from './pages/student/LiveStreams';
+import Library from './pages/student/Library';
 
 import TeacherLayout from './components/layout/TeacherLayout';
 import CourseEditor from './pages/teacher/CourseEditor';
-
 import Students from './pages/teacher/Students';
-import { AuthProvider } from './contexts/AuthContext';
 
+import { AuthProvider } from './contexts/AuthContext';
 import RegisterPage from './pages/RegisterPage';
 
 function App() {
@@ -52,6 +53,8 @@ function App() {
                         <Route index element={<StudentDashboard />} />
                         <Route path="week/:weekId" element={<WeekView />} />
                         <Route path="week/:weekId/day/:dayId" element={<DayView />} />
+                        <Route path="streams" element={<LiveStreams />} />
+                        <Route path="library" element={<Library />} />
                     </Route>
 
                     {/* Teacher Routes */}

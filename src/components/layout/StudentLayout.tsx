@@ -33,6 +33,24 @@ export default function StudentLayout() {
                         >
                             Мой Курс
                         </Link>
+                        <Link
+                            to="/student/streams"
+                            className={cn(
+                                "text-sm uppercase tracking-widest hover:text-vastu-gold transition-colors",
+                                location.pathname.includes('/streams') ? "text-vastu-gold" : "text-vastu-light/80"
+                            )}
+                        >
+                            Эфиры
+                        </Link>
+                        <Link
+                            to="/student/library"
+                            className={cn(
+                                "text-sm uppercase tracking-widest hover:text-vastu-gold transition-colors",
+                                location.pathname.includes('/library') ? "text-vastu-gold" : "text-vastu-light/80"
+                            )}
+                        >
+                            Библиотека
+                        </Link>
                         <div className="flex items-center gap-4 pl-8 border-l border-white/10">
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
@@ -66,6 +84,20 @@ export default function StudentLayout() {
                             onClick={() => setIsMobileMenuOpen(false)}
                         >
                             Мой Курс
+                        </Link>
+                        <Link
+                            to="/student/streams"
+                            className="text-vastu-gold py-2 border-b border-white/5"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                            Эфиры
+                        </Link>
+                        <Link
+                            to="/student/library"
+                            className="text-vastu-gold py-2 border-b border-white/5"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                            Библиотека
                         </Link>
                         <div className="flex items-center justify-between py-2 text-vastu-light/80">
                             <span>{displayName}</span>
