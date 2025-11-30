@@ -147,6 +147,9 @@ export default function ManageStreams() {
                                         placeholder="https://youtube.com/..."
                                     />
                                 </div>
+                                <p className="text-xs text-gray-500 mt-1 ml-1">
+                                    Можно использовать обычную ссылку или ссылку "Поделиться"
+                                </p>
                             </div>
 
                             <div>

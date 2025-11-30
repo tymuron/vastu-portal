@@ -93,6 +93,28 @@ export default function LiveStreams() {
         }
     }
 
+    function getEmbedUrl(url: string) {
+        if (!url) return '';
+
+        // Handle standard watch URLs (youtube.com/watch?v=ID)
+        if (url.includes('watch?v=')) {
+            return url.replace('watch?v=', 'embed/');
+        }
+
+        // Handle short URLs (youtu.be/ID)
+        if (url.includes('youtu.be/')) {
+            const id = url.split('youtu.be/')[1]?.split('?')[0];
+            return `https://www.youtube.com/embed/${id}`;
+        }
+
+        // Handle existing embed URLs
+        if (url.includes('/embed/')) {
+            return url;
+        }
+
+        return url;
+    }
+
     if (loading) return <div className="p-8 text-center">Загрузка эфиров...</div>;
 
     return (
@@ -111,8 +133,8 @@ export default function LiveStreams() {
                             key={stream.id}
                             onClick={() => setSelectedStream(stream)}
                             className={`w-full text-left p-4 rounded-xl border transition-all ${selectedStream?.id === stream.id
-                                    ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
-                                    : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
+                                ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
+                                : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
                                 }`}
                         >
                             <div className={`text-xs font-medium mb-1 ${selectedStream?.id === stream.id ? 'text-white/70' : 'text-gray-500'
@@ -136,7 +158,7 @@ export default function LiveStreams() {
                             <div className="bg-black rounded-xl overflow-hidden aspect-video shadow-2xl">
                                 {selectedStream.video_url ? (
                                     <iframe
-                                        src={selectedStream.video_url.replace('watch?v=', 'embed/')}
+                                        src={getEmbedUrl(selectedStream.video_url)}
                                         title={selectedStream.title}
                                         className="w-full h-full"
                                         allowFullScreen
