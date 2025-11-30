@@ -140,18 +140,93 @@ export default function ManageLibrary() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Ссылка на файл (PDF/Google Drive) *</label>
-                                <div className="relative">
-                                    <LinkIcon className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                                    <input
-                                        type="url"
-                                        required
-                                        value={formData.file_url}
-                                        onChange={e => setFormData({ ...formData, file_url: e.target.value })}
-                                        className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
-                                        placeholder="https://..."
-                                    />
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Файл Материала *</label>
+
+                                {/* Toggle Upload Type */}
+                                <div className="flex gap-4 mb-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="uploadType"
+                                            checked={!formData.file_url?.startsWith('http')}
+                                            onChange={() => setFormData({ ...formData, file_url: '' })}
+                                            className="text-[#422326] focus:ring-[#422326]"
+                                        />
+                                        <span className="text-sm">Загрузить файл</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="uploadType"
+                                            checked={formData.file_url?.startsWith('http') || false}
+                                            onChange={() => setFormData({ ...formData, file_url: 'https://' })}
+                                            className="text-[#422326] focus:ring-[#422326]"
+                                        />
+                                        <span className="text-sm">Внешняя ссылка</span>
+                                    </label>
                                 </div>
+
+                                {formData.file_url?.startsWith('http') ? (
+                                    <div className="relative">
+                                        <LinkIcon className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                                        <input
+                                            type="url"
+                                            required
+                                            value={formData.file_url}
+                                            onChange={e => setFormData({ ...formData, file_url: e.target.value })}
+                                            className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-[#422326] transition-colors relative">
+                                        <input
+                                            type="file"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+
+                                                try {
+                                                    setLoading(true);
+                                                    const fileExt = file.name.split('.').pop();
+                                                    const fileName = `${Math.random()}.${fileExt}`;
+                                                    const filePath = `${fileName}`;
+
+                                                    const { error: uploadError } = await supabase.storage
+                                                        .from('library_files')
+                                                        .upload(filePath, file);
+
+                                                    if (uploadError) throw uploadError;
+
+                                                    const { data: { publicUrl } } = supabase.storage
+                                                        .from('library_files')
+                                                        .getPublicUrl(filePath);
+
+                                                    setFormData({ ...formData, file_url: publicUrl });
+                                                } catch (error) {
+                                                    console.error('Error uploading file:', error);
+                                                    alert('Ошибка при загрузке файла');
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        />
+                                        <div className="space-y-2 pointer-events-none">
+                                            <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
+                                                <Plus className="w-6 h-6" />
+                                            </div>
+                                            <div className="text-sm text-gray-600">
+                                                {formData.file_url ? (
+                                                    <span className="text-green-600 font-medium">Файл загружен!</span>
+                                                ) : (
+                                                    <span>Нажмите для выбора файла</span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-400">PDF, DOCX, XLSX до 10MB</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div>

@@ -1,34 +1,70 @@
--- 1. Create the Storage Bucket
+-- Enable Storage
+-- Note: Storage is enabled by default in Supabase, but we need to create buckets.
+
+-- 1. Create 'library_files' bucket
 insert into storage.buckets (id, name, public)
-values ('course-content', 'course-content', true)
+values ('library_files', 'library_files', true)
 on conflict (id) do nothing;
 
--- 2. Security Policies for Storage
+-- 2. Create 'stream_audio' bucket
+insert into storage.buckets (id, name, public)
+values ('stream_audio', 'stream_audio', true)
+on conflict (id) do nothing;
 
--- Allow Public Read (Students need to download files)
+-- POLICIES FOR library_files
+
+-- Allow public read access to library files
 create policy "Public Access"
-on storage.objects for select
-using ( bucket_id = 'course-content' );
+  on storage.objects for select
+  using ( bucket_id = 'library_files' );
 
--- Allow Teachers to Upload
-create policy "Teachers Upload"
-on storage.objects for insert
-with check (
-  bucket_id = 'course-content' 
-  and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
-);
+-- Allow teachers to upload/update/delete library files
+create policy "Teachers can upload library files"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'library_files' 
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );
 
--- Allow Teachers to Update/Delete
-create policy "Teachers Delete"
-on storage.objects for delete
-using (
-  bucket_id = 'course-content'
-  and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
-);
+create policy "Teachers can update library files"
+  on storage.objects for update
+  using (
+    bucket_id = 'library_files'
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );
 
-create policy "Teachers Update"
-on storage.objects for update
-using (
-  bucket_id = 'course-content'
-  and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
-);
+create policy "Teachers can delete library files"
+  on storage.objects for delete
+  using (
+    bucket_id = 'library_files'
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );
+
+-- POLICIES FOR stream_audio
+
+-- Allow public read access to stream audio
+create policy "Public Audio Access"
+  on storage.objects for select
+  using ( bucket_id = 'stream_audio' );
+
+-- Allow teachers to upload/update/delete stream audio
+create policy "Teachers can upload stream audio"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'stream_audio'
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );
+
+create policy "Teachers can update stream audio"
+  on storage.objects for update
+  using (
+    bucket_id = 'stream_audio'
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );
+
+create policy "Teachers can delete stream audio"
+  on storage.objects for delete
+  using (
+    bucket_id = 'stream_audio'
+    and exists ( select 1 from public.profiles where id = auth.uid() and role = 'teacher' )
+  );

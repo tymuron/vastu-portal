@@ -153,6 +153,92 @@ export default function ManageStreams() {
                             </div>
 
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Аудиозапись (для скачивания)</label>
+
+                                <div className="flex gap-4 mb-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="audioUploadType"
+                                            checked={!formData.audio_url?.startsWith('http')}
+                                            onChange={() => setFormData({ ...formData, audio_url: '' })}
+                                            className="text-[#422326] focus:ring-[#422326]"
+                                        />
+                                        <span className="text-sm">Загрузить файл</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="audioUploadType"
+                                            checked={formData.audio_url?.startsWith('http') || false}
+                                            onChange={() => setFormData({ ...formData, audio_url: 'https://' })}
+                                            className="text-[#422326] focus:ring-[#422326]"
+                                        />
+                                        <span className="text-sm">Внешняя ссылка</span>
+                                    </label>
+                                </div>
+
+                                {formData.audio_url?.startsWith('http') ? (
+                                    <input
+                                        type="url"
+                                        value={formData.audio_url}
+                                        onChange={e => setFormData({ ...formData, audio_url: e.target.value })}
+                                        className="w-full rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
+                                        placeholder="https://..."
+                                    />
+                                ) : (
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-[#422326] transition-colors relative">
+                                        <input
+                                            type="file"
+                                            accept="audio/*"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+
+                                                try {
+                                                    setLoading(true);
+                                                    const fileExt = file.name.split('.').pop();
+                                                    const fileName = `${Math.random()}.${fileExt}`;
+                                                    const filePath = `${fileName}`;
+
+                                                    const { error: uploadError } = await supabase.storage
+                                                        .from('stream_audio')
+                                                        .upload(filePath, file);
+
+                                                    if (uploadError) throw uploadError;
+
+                                                    const { data: { publicUrl } } = supabase.storage
+                                                        .from('stream_audio')
+                                                        .getPublicUrl(filePath);
+
+                                                    setFormData({ ...formData, audio_url: publicUrl });
+                                                } catch (error) {
+                                                    console.error('Error uploading audio:', error);
+                                                    alert('Ошибка при загрузке аудио');
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                        />
+                                        <div className="space-y-2 pointer-events-none">
+                                            <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400">
+                                                <Plus className="w-6 h-6" />
+                                            </div>
+                                            <div className="text-sm text-gray-600">
+                                                {formData.audio_url ? (
+                                                    <span className="text-green-600 font-medium">Аудио загружено!</span>
+                                                ) : (
+                                                    <span>Нажмите для выбора аудио</span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-400">MP3, M4A до 50MB</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Описание</label>
                                 <textarea
                                     rows={3}
