@@ -86,6 +86,13 @@ export default function StudentLayout() {
                             Мой Курс
                         </Link>
                         <Link
+                            to="/student/streams"
+                            className="text-vastu-gold py-2 border-b border-white/5"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                            Эфиры
+                        </Link>
+                        <Link
                             to="/student/library"
                             className="text-vastu-gold py-2 border-b border-white/5"
                             onClick={() => setIsMobileMenuOpen(false)}
