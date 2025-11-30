@@ -12,7 +12,7 @@ export default function ManageLibrary() {
     const [formData, setFormData] = useState<Partial<LibraryItem>>({
         title: '',
         category: 'checklist',
-        fileUrl: '',
+        file_url: '',
         description: ''
     });
 
@@ -39,7 +39,7 @@ export default function ManageLibrary() {
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!formData.title || !formData.fileUrl) return;
+        if (!formData.title || !formData.file_url) return;
 
         try {
             const { error } = await supabase
@@ -53,7 +53,7 @@ export default function ManageLibrary() {
             setFormData({
                 title: '',
                 category: 'checklist',
-                fileUrl: '',
+                file_url: '',
                 description: ''
             });
             fetchLibrary();
@@ -146,8 +146,8 @@ export default function ManageLibrary() {
                                     <input
                                         type="url"
                                         required
-                                        value={formData.fileUrl}
-                                        onChange={e => setFormData({ ...formData, fileUrl: e.target.value })}
+                                        value={formData.file_url}
+                                        onChange={e => setFormData({ ...formData, file_url: e.target.value })}
                                         className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
                                         placeholder="https://..."
                                     />

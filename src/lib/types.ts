@@ -47,21 +47,21 @@ export interface LiveStream {
     id: string;
     title: string;
     date: string; // ISO Date
-    videoUrl?: string;
-    audioUrl?: string;
+    video_url?: string;
+    audio_url?: string;
     description?: string;
     topics?: string;
-    bestQuestions?: string;
+    best_questions?: string;
 }
 
 export interface StreamComment {
     id: string;
-    streamId: string;
-    userId: string;
+    stream_id: string;
+    user_id: string;
     userName?: string; // Joined from profile
     userAvatar?: string; // Joined from profile
     content: string;
-    createdAt: string;
+    created_at: string;
 }
 
 export type LibraryCategory = 'checklist' | 'table' | 'guide' | 'pdf';
@@ -70,6 +70,6 @@ export interface LibraryItem {
     id: string;
     title: string;
     category: LibraryCategory;
-    fileUrl: string;
+    file_url: string;
     description?: string;
 }

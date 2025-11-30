@@ -12,10 +12,10 @@ export default function ManageStreams() {
     const [formData, setFormData] = useState<Partial<LiveStream>>({
         title: '',
         date: new Date().toISOString().split('T')[0],
-        videoUrl: '',
+        video_url: '',
         description: '',
         topics: '',
-        bestQuestions: ''
+        best_questions: ''
     });
 
     useEffect(() => {
@@ -31,7 +31,7 @@ export default function ManageStreams() {
 
             if (error) throw error;
             setStreams(data || []);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching streams:', error);
             alert('Ошибка при загрузке эфиров');
         } finally {
@@ -55,10 +55,10 @@ export default function ManageStreams() {
             setFormData({
                 title: '',
                 date: new Date().toISOString().split('T')[0],
-                videoUrl: '',
+                video_url: '',
                 description: '',
                 topics: '',
-                bestQuestions: ''
+                best_questions: ''
             });
             fetchStreams();
         } catch (error: any) {
@@ -141,8 +141,8 @@ export default function ManageStreams() {
                                     <Video className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                                     <input
                                         type="url"
-                                        value={formData.videoUrl}
-                                        onChange={e => setFormData({ ...formData, videoUrl: e.target.value })}
+                                        value={formData.video_url}
+                                        onChange={e => setFormData({ ...formData, video_url: e.target.value })}
                                         className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
                                         placeholder="https://youtube.com/..."
                                     />
@@ -175,8 +175,8 @@ export default function ManageStreams() {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Лучшие вопросы</label>
                                     <textarea
                                         rows={4}
-                                        value={formData.bestQuestions}
-                                        onChange={e => setFormData({ ...formData, bestQuestions: e.target.value })}
+                                        value={formData.best_questions}
+                                        onChange={e => setFormData({ ...formData, best_questions: e.target.value })}
                                         className="w-full rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
                                         placeholder="Вопрос 1?&#10;Вопрос 2?"
                                     />
