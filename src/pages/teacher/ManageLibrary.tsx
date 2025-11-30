@@ -57,9 +57,9 @@ export default function ManageLibrary() {
                 description: ''
             });
             fetchLibrary();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error adding item:', error);
-            alert('Ошибка при сохранении');
+            alert(`Ошибка при сохранении: ${error.message || 'Неизвестная ошибка'}`);
         }
     }
 

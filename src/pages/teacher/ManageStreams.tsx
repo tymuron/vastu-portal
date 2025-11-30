@@ -61,9 +61,9 @@ export default function ManageStreams() {
                 bestQuestions: ''
             });
             fetchStreams();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error adding stream:', error);
-            alert('Ошибка при сохранении');
+            alert(`Ошибка при сохранении: ${error.message || 'Неизвестная ошибка'}`);
         }
     }
 
