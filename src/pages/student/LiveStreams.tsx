@@ -96,6 +96,12 @@ export default function LiveStreams() {
     function getEmbedUrl(url: string) {
         if (!url) return '';
 
+        // Handle iframe code paste
+        if (url.includes('<iframe')) {
+            const srcMatch = url.match(/src="([^"]+)"/);
+            return srcMatch ? srcMatch[1] : '';
+        }
+
         // Handle standard watch URLs (youtube.com/watch?v=ID)
         if (url.includes('watch?v=')) {
             return url.replace('watch?v=', 'embed/');

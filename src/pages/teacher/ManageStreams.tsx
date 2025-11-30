@@ -140,15 +140,15 @@ export default function ManageStreams() {
                                 <div className="relative">
                                     <Video className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                                     <input
-                                        type="url"
+                                        type="text"
                                         value={formData.video_url}
                                         onChange={e => setFormData({ ...formData, video_url: e.target.value })}
                                         className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
-                                        placeholder="https://youtube.com/..."
+                                        placeholder="Ссылка или код вставки..."
                                     />
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1 ml-1">
-                                    Можно использовать обычную ссылку или ссылку "Поделиться"
+                                    Поддерживается: обычная ссылка, YouTube Shorts, код вставки (iframe)
                                 </p>
                             </div>
 
