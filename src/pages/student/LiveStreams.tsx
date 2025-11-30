@@ -121,7 +121,18 @@ export default function LiveStreams() {
         return url;
     }
 
-    if (loading) return <div className="p-8 text-center">Загрузка эфиров...</div>;
+    if (loading) return (
+        <div className="space-y-8 animate-pulse">
+            <div className="h-20 bg-gray-200 rounded-xl w-1/3"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="h-[600px] bg-gray-200 rounded-xl"></div>
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="aspect-video bg-gray-200 rounded-xl"></div>
+                    <div className="h-32 bg-gray-200 rounded-xl"></div>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="space-y-8">
@@ -136,6 +147,14 @@ export default function LiveStreams() {
                 <div className="lg:col-span-2 lg:order-2 space-y-6">
                     {selectedStream ? (
                         <>
+                            {/* Header Info */}
+                            <div className="mb-4">
+                                <div className="text-sm text-gray-500 mb-1">
+                                    {new Date(selectedStream.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </div>
+                                <h2 className="text-2xl font-serif text-[#422326]">{selectedStream.title}</h2>
+                            </div>
+
                             {/* Video Player */}
                             <div className="bg-black rounded-xl overflow-hidden aspect-video shadow-2xl">
                                 {selectedStream.video_url ? (
@@ -229,7 +248,7 @@ export default function LiveStreams() {
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="font-medium text-gray-900">{comment.userName || 'Пользователь'}</span>
                                                     <span className="text-xs text-gray-500">
-                                                        {new Date(comment.created_at).toLocaleDateString()}
+                                                        {new Date(comment.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
                                                 <p className="text-gray-600 text-sm leading-relaxed">
@@ -263,13 +282,13 @@ export default function LiveStreams() {
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                             className={`w-full text-left p-4 rounded-xl border transition-all ${selectedStream?.id === stream.id
-                                    ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
-                                    : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
+                                ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
+                                : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
                                 }`}
                         >
                             <div className={`text-xs font-medium mb-1 ${selectedStream?.id === stream.id ? 'text-white/70' : 'text-gray-500'
                                 }`}>
-                                {new Date(stream.date).toLocaleDateString()}
+                                {new Date(stream.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                             </div>
                             <h3 className="font-serif text-lg leading-tight mb-2">{stream.title}</h3>
                             <div className={`text-sm line-clamp-2 ${selectedStream?.id === stream.id ? 'text-white/80' : 'text-gray-600'
