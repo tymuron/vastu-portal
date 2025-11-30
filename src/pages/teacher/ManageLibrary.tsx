@@ -193,43 +193,76 @@ export default function ManageLibrary() {
                         Пока нет материалов. Нажмите "Добавить Материал".
                     </div>
                 ) : (
-                    <table className="w-full">
-                        <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Категория</th>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#E5E7EB]">
-                            {items.map((item) => (
-                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                        <div className="flex items-center">
-                                            <FileText className="w-4 h-4 mr-2 text-gray-400" />
-                                            {item.title}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium uppercase tracking-wide">
-                                            {categories.find(c => c.id === item.category)?.label}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <button
-                                            onClick={() => handleDelete(item.id)}
-                                            className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                                            title="Удалить"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </td>
+                    <>
+                        {/* Desktop Table */}
+                        <table className="w-full hidden md:table">
+                            <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Категория</th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
                                 </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E5E7EB]">
+                                {items.map((item) => (
+                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                            <div className="flex items-center">
+                                                <FileText className="w-4 h-4 mr-2 text-gray-400" />
+                                                {item.title}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium uppercase tracking-wide">
+                                                {categories.find(c => c.id === item.category)?.label}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <button
+                                                onClick={() => handleDelete(item.id)}
+                                                className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                                title="Удалить"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        {/* Mobile Cards */}
+                        <div className="md:hidden divide-y divide-[#E5E7EB]">
+                            {items.map((item) => (
+                                <div key={item.id} className="p-4 flex items-center justify-between">
+                                    <div className="flex-1 pr-4">
+                                        <div className="flex items-center mb-1">
+                                            <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-medium uppercase tracking-wide text-gray-500 mr-2">
+                                                {categories.find(c => c.id === item.category)?.label}
+                                            </span>
+                                        </div>
+                                        <div className="font-medium text-gray-900 leading-tight">{item.title}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleDelete(item.id)}
+                                        className="text-red-400 hover:text-red-600 p-2 flex-shrink-0"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                    </>
                 )}
             </div>
+
+            {/* Mobile FAB */}
+            <button
+                onClick={() => setIsEditing(true)}
+                className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-[#422326] text-white rounded-full shadow-xl flex items-center justify-center z-40 hover:scale-110 transition-transform"
+            >
+                <Plus className="w-8 h-8" />
+            </button>
         </div>
     );
 }

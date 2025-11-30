@@ -86,22 +86,23 @@ export default function StudentLayout() {
                             Мой Курс
                         </Link>
                         <Link
-                            to="/student/streams"
-                            className="text-vastu-gold py-2 border-b border-white/5"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                            Эфиры
-                        </Link>
-                        <Link
                             to="/student/library"
                             className="text-vastu-gold py-2 border-b border-white/5"
                             onClick={() => setIsMobileMenuOpen(false)}
                         >
                             Библиотека
                         </Link>
-                        <div className="flex items-center justify-between py-2 text-vastu-light/80">
-                            <span>{displayName}</span>
-                            <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                        <div className="flex items-center justify-between pt-4 text-white/70">
+                            <div className="flex items-center gap-2">
+                                <UserIcon size={16} />
+                                <span className="text-sm">{displayName}</span>
+                            </div>
+                            <Link
+                                to="/login"
+                                className="flex items-center gap-2 text-vastu-light/50 hover:text-white"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                                <span>Выйти</span>
                                 <LogOut size={18} />
                             </Link>
                         </div>

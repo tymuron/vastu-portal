@@ -131,33 +131,9 @@ export default function LiveStreams() {
                 <p className="text-gray-600">Записи всех прошедших разборов и встреч.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* List */}
-                <div className="lg:col-span-1 space-y-4 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {streams.map((stream) => (
-                        <button
-                            key={stream.id}
-                            onClick={() => setSelectedStream(stream)}
-                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedStream?.id === stream.id
-                                ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
-                                : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
-                                }`}
-                        >
-                            <div className={`text-xs font-medium mb-1 ${selectedStream?.id === stream.id ? 'text-white/70' : 'text-gray-500'
-                                }`}>
-                                {new Date(stream.date).toLocaleDateString()}
-                            </div>
-                            <h3 className="font-serif text-lg leading-tight mb-2">{stream.title}</h3>
-                            <div className={`text-sm line-clamp-2 ${selectedStream?.id === stream.id ? 'text-white/80' : 'text-gray-600'
-                                }`}>
-                                {stream.description}
-                            </div>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Player & Details */}
-                <div className="lg:col-span-2 space-y-6">
+            <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8">
+                {/* Player & Details (Order 1 on Mobile, Order 2 on Desktop) */}
+                <div className="lg:col-span-2 lg:order-2 space-y-6">
                     {selectedStream ? (
                         <>
                             {/* Video Player */}
@@ -272,9 +248,36 @@ export default function LiveStreams() {
                         </>
                     ) : (
                         <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200 min-h-[400px]">
-                            Выберите эфир из списка слева
+                            Выберите эфир из списка
                         </div>
                     )}
+                </div>
+
+                {/* List (Order 2 on Mobile, Order 1 on Desktop) */}
+                <div className="lg:col-span-1 lg:order-1 space-y-4 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                    {streams.map((stream) => (
+                        <button
+                            key={stream.id}
+                            onClick={() => {
+                                setSelectedStream(stream);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedStream?.id === stream.id
+                                    ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
+                                    : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
+                                }`}
+                        >
+                            <div className={`text-xs font-medium mb-1 ${selectedStream?.id === stream.id ? 'text-white/70' : 'text-gray-500'
+                                }`}>
+                                {new Date(stream.date).toLocaleDateString()}
+                            </div>
+                            <h3 className="font-serif text-lg leading-tight mb-2">{stream.title}</h3>
+                            <div className={`text-sm line-clamp-2 ${selectedStream?.id === stream.id ? 'text-white/80' : 'text-gray-600'
+                                }`}>
+                                {stream.description}
+                            </div>
+                        </button>
+                    ))}
                 </div>
             </div>
         </div>

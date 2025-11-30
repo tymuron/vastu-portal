@@ -214,38 +214,67 @@ export default function ManageStreams() {
                         Пока нет добавленных эфиров. Нажмите "Добавить Эфир", чтобы создать первый.
                     </div>
                 ) : (
-                    <table className="w-full">
-                        <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата</th>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
-                                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#E5E7EB]">
-                            {streams.map((stream) => (
-                                <tr key={stream.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(stream.date).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                        {stream.title}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <button
-                                            onClick={() => handleDelete(stream.id)}
-                                            className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                                            title="Удалить"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
-                                    </td>
+                    <>
+                        {/* Desktop Table */}
+                        <table className="w-full hidden md:table">
+                            <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата</th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
+                                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
                                 </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#E5E7EB]">
+                                {streams.map((stream) => (
+                                    <tr key={stream.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {new Date(stream.date).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                            {stream.title}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <button
+                                                onClick={() => handleDelete(stream.id)}
+                                                className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                                title="Удалить"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        {/* Mobile Cards */}
+                        <div className="md:hidden divide-y divide-[#E5E7EB]">
+                            {streams.map((stream) => (
+                                <div key={stream.id} className="p-4 flex items-center justify-between">
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-1">{new Date(stream.date).toLocaleDateString()}</div>
+                                        <div className="font-medium text-gray-900">{stream.title}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleDelete(stream.id)}
+                                        className="text-red-400 hover:text-red-600 p-2"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                    </>
                 )}
             </div>
+
+            {/* Mobile FAB */}
+            <button
+                onClick={() => setIsEditing(true)}
+                className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-[#422326] text-white rounded-full shadow-xl flex items-center justify-center z-40 hover:scale-110 transition-transform"
+            >
+                <Plus className="w-8 h-8" />
+            </button>
         </div>
     );
 }

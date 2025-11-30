@@ -58,12 +58,12 @@ export default function Library() {
             </div>
 
             {/* Tabs */}
-            <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
+            <div className="flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap gap-2 border-b border-gray-200 no-scrollbar">
                 {categories.map((cat) => (
                     <button
                         key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
-                        className={`px-6 py-3 rounded-t-lg font-medium transition-all flex items-center gap-2 ${activeCategory === cat.id
+                        className={`px-6 py-3 rounded-t-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${activeCategory === cat.id
                                 ? 'bg-[#422326] text-white shadow-sm'
                                 : 'bg-transparent text-gray-500 hover:text-[#422326] hover:bg-[#F4F2ED]'
                             }`}
