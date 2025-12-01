@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function TeacherLayout() {
     const location = useLocation();
-    const { role, loading } = useAuth();
+    const { role, loading, signOut } = useAuth();
 
     if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
 
@@ -53,13 +53,13 @@ export default function TeacherLayout() {
                 </nav>
 
                 <div className="p-4 border-t border-white/10">
-                    <Link
-                        to="/login"
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-vastu-light/70 hover:text-vastu-light hover:bg-white/5 transition-colors"
+                    <button
+                        onClick={() => signOut()}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-vastu-light/70 hover:text-vastu-light hover:bg-white/5 transition-colors"
                     >
                         <LogOut size={18} />
                         Выйти
-                    </Link>
+                    </button>
                 </div>
             </aside>
 

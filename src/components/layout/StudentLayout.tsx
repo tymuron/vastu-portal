@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 export default function StudentLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
-    const { user } = useAuth();
+    const { user, signOut } = useAuth();
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
 
     return (
@@ -58,9 +58,12 @@ export default function StudentLayout() {
                                 </div>
                                 <span className="text-sm font-light">{displayName}</span>
                             </div>
-                            <Link to="/login" className="text-vastu-light/50 hover:text-white transition-colors">
+                            <button
+                                onClick={() => signOut()}
+                                className="text-vastu-light/50 hover:text-white transition-colors"
+                            >
                                 <LogOut size={18} />
-                            </Link>
+                            </button>
                         </div>
                     </nav>
 
@@ -104,14 +107,16 @@ export default function StudentLayout() {
                                 <UserIcon size={16} />
                                 <span className="text-sm">{displayName}</span>
                             </div>
-                            <Link
-                                to="/login"
+                            <button
+                                onClick={() => {
+                                    signOut();
+                                    setIsMobileMenuOpen(false);
+                                }}
                                 className="flex items-center gap-2 text-vastu-light/50 hover:text-white"
-                                onClick={() => setIsMobileMenuOpen(false)}
                             >
                                 <span>Выйти</span>
                                 <LogOut size={18} />
-                            </Link>
+                            </button>
                         </div>
                     </nav>
                 </div>
