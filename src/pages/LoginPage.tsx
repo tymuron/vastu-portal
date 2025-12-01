@@ -3,27 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
+import { LogOut, ArrowRight, User } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const { user, role: authRole } = useAuth();
+    const { user, role: authRole, signOut } = useAuth();
     const [role, setRole] = useState<UserRole>('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
-
-    // Auto-redirect if already logged in
-    React.useEffect(() => {
-        if (user) {
-            if (authRole === 'teacher') {
-                navigate('/teacher');
-            } else {
-                navigate('/student');
-            }
-        }
-    }, [user, authRole, navigate]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -69,6 +59,49 @@ export default function LoginPage() {
             setError(err.message || 'Ошибка входа');
         }
     };
+
+    // If already logged in, show Welcome Back screen
+    if (user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-vastu-dark relative overflow-hidden">
+                {/* Background decorative elements */}
+                <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                    <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
+                    <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
+                </div>
+
+                <div className="w-full max-w-md p-8 bg-vastu-light/5 backdrop-blur-sm border border-vastu-gold/20 rounded-2xl shadow-2xl relative z-10 text-center">
+                    <div className="w-20 h-20 bg-vastu-gold rounded-full flex items-center justify-center mx-auto mb-6 text-vastu-dark">
+                        <User size={40} />
+                    </div>
+
+                    <h2 className="text-2xl font-serif text-vastu-gold mb-2">С возвращением!</h2>
+                    <p className="text-vastu-light/70 mb-8">
+                        Вы уже вошли как<br />
+                        <span className="text-white font-medium">{user.email}</span>
+                    </p>
+
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => authRole === 'teacher' ? navigate('/teacher') : navigate('/student')}
+                            className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 flex items-center justify-center gap-2"
+                        >
+                            Продолжить
+                            <ArrowRight size={20} />
+                        </button>
+
+                        <button
+                            onClick={() => signOut()}
+                            className="w-full bg-transparent border border-vastu-gold/30 text-vastu-light font-medium py-3 rounded-lg hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <LogOut size={18} />
+                            Выйти из аккаунта
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-vastu-dark relative overflow-hidden">
