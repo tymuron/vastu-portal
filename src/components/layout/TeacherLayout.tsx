@@ -5,11 +5,15 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export default function TeacherLayout() {
     const location = useLocation();
-    const { role, loading, signOut } = useAuth();
+    const { user, role, loading, signOut } = useAuth();
 
     if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
 
     // Protect the route
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
     if (role !== 'teacher') {
         return <Navigate to="/student" replace />;
     }

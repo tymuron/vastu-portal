@@ -1,5 +1,5 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LogOut, User as UserIcon, Menu, X } from 'lucide-react';
+import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
+import { LogOut, User as UserIcon, Menu, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,8 +7,14 @@ import { useAuth } from '../../contexts/AuthContext';
 export default function StudentLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const location = useLocation();
-    const { user, signOut } = useAuth();
+    const { user, signOut, loading } = useAuth();
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
+
+    if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
+
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
 
     return (
         <div className="min-h-screen bg-vastu-light flex flex-col">
