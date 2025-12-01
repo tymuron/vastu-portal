@@ -159,15 +159,35 @@ export default function CourseEditor() {
                     <div key={week.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                         {/* Week Header */}
                         <div className="p-4 bg-gray-50 flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleWeek(week.id)}>
-                                {expandedWeeks[week.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-                                <div>
-                                    <h3 className="font-serif text-lg font-medium">{week.title}</h3>
-                                    {week.available_from && (
-                                        <p className="text-xs text-gray-500">
-                                            Доступно с: {new Date(week.available_from).toLocaleDateString()}
-                                        </p>
-                                    )}
+                            <div className="flex items-center gap-3 flex-1">
+                                <button onClick={() => toggleWeek(week.id)} className="p-1 -ml-1">
+                                    {expandedWeeks[week.id] ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                                </button>
+                                <div className="flex items-center justify-between flex-1">
+                                    <input
+                                        defaultValue={week.title}
+                                        className="text-xl font-bold text-[#422326] bg-transparent border-b border-transparent hover:border-gray-300 focus:border-[#422326] focus:outline-none px-1 py-0.5 w-full mr-4"
+                                        onBlur={(e) => {
+                                            if (e.target.value !== week.title) {
+                                                supabase
+                                                    .from('weeks')
+                                                    .update({ title: e.target.value })
+                                                    .eq('id', week.id)
+                                                    .then(() => fetchWeeks());
+                                            }
+                                        }}
+                                        onClick={(e) => e.stopPropagation()} // Prevent toggling week when editing title
+                                    />
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent toggling week when adding day
+                                            handleAddDay(week.id);
+                                        }}
+                                        className="flex items-center text-sm text-[#422326] hover:text-[#2b1618] whitespace-nowrap"
+                                    >
+                                        <Plus className="w-4 h-4 mr-1" />
+                                        Урок
+                                    </button>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -197,7 +217,15 @@ export default function CourseEditor() {
                                             <div key={m.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100 text-sm">
                                                 <div className="flex items-center gap-2 overflow-hidden">
                                                     {m.type === 'video' ? <Video size={14} className="text-blue-500" /> : <FileText size={14} className="text-orange-500" />}
-                                                    <span className="truncate">{m.title}</span>
+                                                    <input
+                                                        defaultValue={m.title}
+                                                        className="truncate bg-transparent border-b border-transparent hover:border-gray-300 focus:border-vastu-gold focus:outline-none px-1 w-full"
+                                                        onBlur={(e) => {
+                                                            if (e.target.value !== m.title) {
+                                                                supabase.from('materials').update({ title: e.target.value }).eq('id', m.id).then(() => fetchWeeks());
+                                                            }
+                                                        }}
+                                                    />
                                                 </div>
                                                 <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
                                             </div>
@@ -299,7 +327,20 @@ export default function CourseEditor() {
                                                                     <div className={`p-2 rounded-md ${m.type === 'video' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
                                                                         {m.type === 'video' ? <Video size={16} /> : <FileText size={16} />}
                                                                     </div>
-                                                                    <a href={m.url} target="_blank" rel="noreferrer" className="font-medium text-gray-700 hover:text-vastu-gold transition-colors">{m.title}</a>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <input
+                                                                            defaultValue={m.title}
+                                                                            className="font-medium text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-vastu-gold focus:outline-none px-1 w-full"
+                                                                            onBlur={(e) => {
+                                                                                if (e.target.value !== m.title) {
+                                                                                    supabase.from('materials').update({ title: e.target.value }).eq('id', m.id).then(() => fetchWeeks());
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                        <a href={m.url} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:text-vastu-gold truncate block mt-0.5">
+                                                                            {m.url}
+                                                                        </a>
+                                                                    </div>
                                                                 </div>
                                                                 <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500 p-1"><X size={16} /></button>
                                                             </div>

@@ -7,6 +7,7 @@ export default function ManageStreams() {
     const [streams, setStreams] = useState<LiveStream[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<Partial<LiveStream>>({
@@ -15,7 +16,8 @@ export default function ManageStreams() {
         video_url: '',
         description: '',
         topics: '',
-        best_questions: ''
+        best_questions: '',
+        audio_url: ''
     });
 
     useEffect(() => {
@@ -39,30 +41,72 @@ export default function ManageStreams() {
         }
     }
 
+    function handleEdit(stream: LiveStream) {
+        setFormData({
+            title: stream.title,
+            date: new Date(stream.date).toISOString().split('T')[0],
+            video_url: stream.video_url,
+            description: stream.description,
+            topics: stream.topics,
+            best_questions: stream.best_questions,
+            audio_url: stream.audio_url
+        });
+        setEditingId(stream.id);
+        setIsEditing(true);
+    }
+
+    function handleAddNew() {
+        setFormData({
+            title: '',
+            date: new Date().toISOString().split('T')[0],
+            video_url: '',
+            description: '',
+            topics: '',
+            best_questions: '',
+            audio_url: ''
+        });
+        setEditingId(null);
+        setIsEditing(true);
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!formData.title || !formData.date) return;
 
         try {
-            const { error } = await supabase
-                .from('live_streams')
-                .insert([formData]);
+            let error;
+            if (editingId) {
+                // Update existing
+                const { error: updateError } = await supabase
+                    .from('live_streams')
+                    .update(formData)
+                    .eq('id', editingId);
+                error = updateError;
+            } else {
+                // Insert new
+                const { error: insertError } = await supabase
+                    .from('live_streams')
+                    .insert([formData]);
+                error = insertError;
+            }
 
             if (error) throw error;
 
-            alert('Эфир успешно добавлен!');
+            alert(editingId ? 'Эфир успешно обновлен!' : 'Эфир успешно добавлен!');
             setIsEditing(false);
+            setEditingId(null);
             setFormData({
                 title: '',
                 date: new Date().toISOString().split('T')[0],
                 video_url: '',
                 description: '',
                 topics: '',
-                best_questions: ''
+                best_questions: '',
+                audio_url: ''
             });
             fetchStreams();
         } catch (error: any) {
-            console.error('Error adding stream:', error);
+            console.error('Error saving stream:', error);
             alert(`Ошибка при сохранении: ${error.message || 'Неизвестная ошибка'}`);
         }
     }
@@ -91,7 +135,7 @@ export default function ManageStreams() {
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-serif text-[#422326]">Управление Эфирами</h1>
                 <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={handleAddNew}
                     className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors"
                 >
                     <Plus className="w-5 h-5 mr-2" />
@@ -104,7 +148,9 @@ export default function ManageStreams() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F4F2ED]">
-                            <h2 className="text-xl font-bold text-[#422326]">Новый Эфир</h2>
+                            <h2 className="text-xl font-bold text-[#422326]">
+                                {editingId ? 'Редактировать Эфир' : 'Новый Эфир'}
+                            </h2>
                             <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-red-500">
                                 <X className="w-6 h-6" />
                             </button>
@@ -285,7 +331,7 @@ export default function ManageStreams() {
                                     className="px-6 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors flex items-center"
                                 >
                                     <Save className="w-4 h-4 mr-2" />
-                                    Сохранить Эфир
+                                    {editingId ? 'Сохранить Изменения' : 'Сохранить Эфир'}
                                 </button>
                             </div>
                         </form>
@@ -320,13 +366,22 @@ export default function ManageStreams() {
                                             {stream.title}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <button
-                                                onClick={() => handleDelete(stream.id)}
-                                                className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                                                title="Удалить"
-                                            >
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEdit(stream)}
+                                                    className="text-blue-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg"
+                                                    title="Редактировать"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(stream.id)}
+                                                    className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                                    title="Удалить"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -341,12 +396,20 @@ export default function ManageStreams() {
                                         <div className="text-xs text-gray-500 mb-1">{new Date(stream.date).toLocaleDateString()}</div>
                                         <div className="font-medium text-gray-900">{stream.title}</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleDelete(stream.id)}
-                                        className="text-red-400 hover:text-red-600 p-2"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handleEdit(stream)}
+                                            className="text-blue-400 hover:text-blue-600 p-2"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(stream.id)}
+                                            className="text-red-400 hover:text-red-600 p-2"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -356,7 +419,7 @@ export default function ManageStreams() {
 
             {/* Mobile FAB */}
             <button
-                onClick={() => setIsEditing(true)}
+                onClick={handleAddNew}
                 className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-[#422326] text-white rounded-full shadow-xl flex items-center justify-center z-40 hover:scale-110 transition-transform"
             >
                 <Plus className="w-8 h-8" />

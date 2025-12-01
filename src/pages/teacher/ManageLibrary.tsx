@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem, LibraryCategory } from '../../lib/types';
-import { Plus, Trash2, FileText, Save, X, Link as LinkIcon } from 'lucide-react';
+import { Plus, Trash2, FileText, Save, X, Link as LinkIcon, Upload } from 'lucide-react';
 
 export default function ManageLibrary() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+
+    // Drag & Drop State
+    const [isDragging, setIsDragging] = useState(false);
+    const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
     // Form State
     const [formData, setFormData] = useState<Partial<LibraryItem>>({
@@ -37,19 +42,54 @@ export default function ManageLibrary() {
         }
     }
 
+    function handleEdit(item: LibraryItem) {
+        setFormData({
+            title: item.title,
+            category: item.category,
+            file_url: item.file_url,
+            description: item.description
+        });
+        setEditingId(item.id);
+        setIsEditing(true);
+    }
+
+    function handleAddNew() {
+        setFormData({
+            title: '',
+            category: 'checklist',
+            file_url: '',
+            description: ''
+        });
+        setEditingId(null);
+        setIsEditing(true);
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!formData.title || !formData.file_url) return;
 
         try {
-            const { error } = await supabase
-                .from('library_items')
-                .insert([formData]);
+            let error;
+            if (editingId) {
+                // Update existing
+                const { error: updateError } = await supabase
+                    .from('library_items')
+                    .update(formData)
+                    .eq('id', editingId);
+                error = updateError;
+            } else {
+                // Insert new
+                const { error: insertError } = await supabase
+                    .from('library_items')
+                    .insert([formData]);
+                error = insertError;
+            }
 
             if (error) throw error;
 
-            alert('Материал успешно добавлен!');
+            alert(editingId ? 'Материал успешно обновлен!' : 'Материал успешно добавлен!');
             setIsEditing(false);
+            setEditingId(null);
             setFormData({
                 title: '',
                 category: 'checklist',
@@ -58,7 +98,7 @@ export default function ManageLibrary() {
             });
             fetchLibrary();
         } catch (error: any) {
-            console.error('Error adding item:', error);
+            console.error('Error saving item:', error);
             alert(`Ошибка при сохранении: ${error.message || 'Неизвестная ошибка'}`);
         }
     }
@@ -80,6 +120,75 @@ export default function ManageLibrary() {
         }
     }
 
+    // Drag & Drop Handlers
+    const onDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const onDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const onDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+
+        const newUploadingFiles = files.map(f => f.name);
+        setUploadingFiles(prev => [...prev, ...newUploadingFiles]);
+
+        let successCount = 0;
+
+        for (const file of files) {
+            try {
+                // 1. Upload File
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${Math.random()}.${fileExt}`;
+                const filePath = `${fileName}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('library_files')
+                    .upload(filePath, file);
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('library_files')
+                    .getPublicUrl(filePath);
+
+                // 2. Create Library Item
+                // Remove extension for title
+                const title = file.name.replace(/\.[^/.]+$/, "");
+
+                const { error: dbError } = await supabase
+                    .from('library_items')
+                    .insert([{
+                        title: title,
+                        category: 'checklist', // Default category
+                        file_url: publicUrl,
+                        description: 'Загружено перетаскиванием'
+                    }]);
+
+                if (dbError) throw dbError;
+                successCount++;
+
+            } catch (error) {
+                console.error(`Error uploading ${file.name}:`, error);
+                alert(`Ошибка при загрузке ${file.name}`);
+            } finally {
+                setUploadingFiles(prev => prev.filter(name => name !== file.name));
+            }
+        }
+
+        if (successCount > 0) {
+            fetchLibrary();
+        }
+    };
+
     const categories: { id: LibraryCategory; label: string }[] = [
         { id: 'checklist', label: 'Чек-лист' },
         { id: 'table', label: 'Таблица' },
@@ -94,7 +203,7 @@ export default function ManageLibrary() {
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-serif text-[#422326]">Управление Библиотекой</h1>
                 <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={handleAddNew}
                     className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors"
                 >
                     <Plus className="w-5 h-5 mr-2" />
@@ -102,12 +211,53 @@ export default function ManageLibrary() {
                 </button>
             </div>
 
+            {/* Drag & Drop Zone */}
+            <div
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className={`mb-8 border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${isDragging
+                        ? 'border-[#422326] bg-[#422326]/5 scale-[1.02]'
+                        : 'border-gray-300 hover:border-[#422326] hover:bg-gray-50'
+                    }`}
+            >
+                <div className="flex flex-col items-center justify-center pointer-events-none">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors ${isDragging ? 'bg-[#422326] text-white' : 'bg-gray-100 text-gray-400'
+                        }`}>
+                        <Upload className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">
+                        {isDragging ? 'Отпустите файлы для загрузки' : 'Перетащите файлы сюда'}
+                    </h3>
+                    <p className="text-sm text-gray-500 max-w-sm">
+                        Загрузите сразу несколько файлов. Они автоматически добавятся в библиотеку как "Чек-листы".
+                    </p>
+                </div>
+            </div>
+
+            {/* Upload Progress */}
+            {uploadingFiles.length > 0 && (
+                <div className="mb-8 bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <h4 className="text-sm font-bold text-blue-800 mb-2 flex items-center">
+                        <div className="animate-spin mr-2 h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                        Загрузка файлов ({uploadingFiles.length})...
+                    </h4>
+                    <ul className="space-y-1">
+                        {uploadingFiles.map((name, idx) => (
+                            <li key={idx} className="text-xs text-blue-600 truncate">{name}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
             {/* Add Form Modal/Panel */}
             {isEditing && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F4F2ED]">
-                            <h2 className="text-xl font-bold text-[#422326]">Новый Материал</h2>
+                            <h2 className="text-xl font-bold text-[#422326]">
+                                {editingId ? 'Редактировать Материал' : 'Новый Материал'}
+                            </h2>
                             <button onClick={() => setIsEditing(false)} className="text-gray-500 hover:text-red-500">
                                 <X className="w-6 h-6" />
                             </button>
@@ -253,7 +403,7 @@ export default function ManageLibrary() {
                                     className="px-6 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors flex items-center"
                                 >
                                     <Save className="w-4 h-4 mr-2" />
-                                    Сохранить
+                                    {editingId ? 'Сохранить Изменения' : 'Сохранить'}
                                 </button>
                             </div>
                         </form>
@@ -293,13 +443,22 @@ export default function ManageLibrary() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <button
-                                                onClick={() => handleDelete(item.id)}
-                                                className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
-                                                title="Удалить"
-                                            >
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEdit(item)}
+                                                    className="text-blue-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-lg"
+                                                    title="Редактировать"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(item.id)}
+                                                    className="text-red-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg"
+                                                    title="Удалить"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -318,12 +477,20 @@ export default function ManageLibrary() {
                                         </div>
                                         <div className="font-medium text-gray-900 leading-tight">{item.title}</div>
                                     </div>
-                                    <button
-                                        onClick={() => handleDelete(item.id)}
-                                        className="text-red-400 hover:text-red-600 p-2 flex-shrink-0"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <button
+                                            onClick={() => handleEdit(item)}
+                                            className="text-blue-400 hover:text-blue-600 p-2"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></svg>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(item.id)}
+                                            className="text-red-400 hover:text-red-600 p-2"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -333,7 +500,7 @@ export default function ManageLibrary() {
 
             {/* Mobile FAB */}
             <button
-                onClick={() => setIsEditing(true)}
+                onClick={handleAddNew}
                 className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-[#422326] text-white rounded-full shadow-xl flex items-center justify-center z-40 hover:scale-110 transition-transform"
             >
                 <Plus className="w-8 h-8" />
