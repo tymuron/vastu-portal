@@ -4,12 +4,26 @@ import { cn } from '../lib/utils';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
 
+import { useAuth } from '../contexts/AuthContext';
+
 export default function LoginPage() {
     const navigate = useNavigate();
+    const { user, role: authRole } = useAuth();
     const [role, setRole] = useState<UserRole>('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+
+    // Auto-redirect if already logged in
+    React.useEffect(() => {
+        if (user) {
+            if (authRole === 'teacher') {
+                navigate('/teacher');
+            } else {
+                navigate('/student');
+            }
+        }
+    }, [user, authRole, navigate]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
