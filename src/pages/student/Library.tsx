@@ -48,18 +48,7 @@ export default function Library() {
         }
     };
 
-    const handlePreview = (item: LibraryItem) => {
-        // Check if file is previewable (PDF or Image)
-        const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
-        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
 
-        if (isPdf || isImage) {
-            setPreviewFile(item);
-        } else {
-            // Fallback to download/new tab
-            window.open(item.file_url, '_blank', 'noopener,noreferrer');
-        }
-    };
 
     if (loading) return <div className="p-8 text-center">Загрузка библиотеки...</div>;
 
@@ -96,13 +85,35 @@ export default function Library() {
                             <div className="w-12 h-12 rounded-lg bg-[#F4F2ED] flex items-center justify-center text-[#422326] group-hover:bg-[#422326] group-hover:text-white transition-colors">
                                 {getIcon(item.category)}
                             </div>
-                            <button
-                                onClick={() => handlePreview(item)}
-                                className="text-gray-400 hover:text-[#422326] transition-colors"
-                                title="Просмотр"
-                            >
-                                <Eye className="w-5 h-5" />
-                            </button>
+                            {(() => {
+                                const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
+                                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
+                                const isPreviewable = isPdf || isImage;
+
+                                if (isPreviewable) {
+                                    return (
+                                        <button
+                                            onClick={() => setPreviewFile(item)}
+                                            className="text-gray-400 hover:text-[#422326] transition-colors"
+                                            title="Просмотр"
+                                        >
+                                            <Eye className="w-5 h-5" />
+                                        </button>
+                                    );
+                                } else {
+                                    return (
+                                        <a
+                                            href={item.file_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-gray-400 hover:text-[#422326] transition-colors"
+                                            title="Открыть"
+                                        >
+                                            <Eye className="w-5 h-5" />
+                                        </a>
+                                    );
+                                }
+                            })()}
                         </div>
 
                         <h3 className="font-serif text-lg text-[#422326] mb-2 leading-tight">
@@ -116,22 +127,45 @@ export default function Library() {
                         )}
 
                         <div className="flex gap-2 mt-4">
-                            <button
-                                onClick={() => handlePreview(item)}
-                                className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg text-sm font-medium hover:bg-[#E5E0D8] transition-colors"
-                            >
-                                <Eye className="w-4 h-4 mr-2" />
-                                Просмотр
-                            </button>
-                            <a
-                                href={item.file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center justify-center px-4 py-2 border border-[#E5E7EB] text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                                title="Скачать"
-                            >
-                                <Download className="w-4 h-4" />
-                            </a>
+                            {(() => {
+                                const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
+                                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
+                                const isPreviewable = isPdf || isImage;
+
+                                if (isPreviewable) {
+                                    return (
+                                        <>
+                                            <button
+                                                onClick={() => setPreviewFile(item)}
+                                                className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg text-sm font-medium hover:bg-[#E5E0D8] transition-colors"
+                                            >
+                                                <Eye className="w-4 h-4 mr-2" />
+                                                Просмотр
+                                            </button>
+                                            <a
+                                                href={item.file_url}
+                                                download
+                                                className="inline-flex items-center justify-center px-4 py-2 border border-[#E5E7EB] text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                                                title="Скачать"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                            </a>
+                                        </>
+                                    );
+                                } else {
+                                    return (
+                                        <a
+                                            href={item.file_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg text-sm font-medium hover:bg-[#E5E0D8] transition-colors"
+                                        >
+                                            <Eye className="w-4 h-4 mr-2" />
+                                            Открыть
+                                        </a>
+                                    );
+                                }
+                            })()}
                         </div>
                     </div>
                 ))}
