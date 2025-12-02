@@ -3,7 +3,7 @@ create extension if not exists "uuid-ossp";
 
 -- 1. PROFILES (Users)
 create table if not exists public.profiles (
-  id uuid references auth.users not null primary key,
+  id uuid references auth.users on delete cascade not null primary key,
   email text,
   role text check (role in ('student', 'teacher')) default 'student',
   full_name text,

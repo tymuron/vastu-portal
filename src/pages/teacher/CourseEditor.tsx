@@ -235,6 +235,18 @@ export default function CourseEditor() {
                                         folder={`weeks/${week.id}`}
                                         onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, week.id, undefined)}
                                     />
+                                    <button
+                                        onClick={() => {
+                                            const url = window.prompt('Введите ссылку (URL):');
+                                            if (!url) return;
+                                            const name = window.prompt('Название ссылки:', 'Дополнительный материал');
+                                            if (!name) return;
+                                            handleAddMaterial(url, 'link', name, week.id, undefined);
+                                        }}
+                                        className="w-full mt-2 py-3 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:text-vastu-dark hover:border-vastu-gold hover:bg-vastu-gold/5 transition-all font-medium text-sm"
+                                    >
+                                        <Plus size={16} /> Добавить ссылку на сайт
+                                    </button>
                                 </div>
 
                                 {/* Days List Section */}
@@ -351,6 +363,18 @@ export default function CourseEditor() {
                                                         folder={`days/${day.id}`}
                                                         onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, undefined, day.id)}
                                                     />
+                                                    <button
+                                                        onClick={() => {
+                                                            const url = window.prompt('Введите ссылку (URL):');
+                                                            if (!url) return;
+                                                            const name = window.prompt('Название ссылки:', 'Дополнительный материал');
+                                                            if (!name) return;
+                                                            handleAddMaterial(url, 'link', name, undefined, day.id);
+                                                        }}
+                                                        className="w-full mt-2 py-3 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:text-vastu-dark hover:border-vastu-gold hover:bg-vastu-gold/5 transition-all font-medium text-sm"
+                                                    >
+                                                        <Plus size={16} /> Добавить ссылку на сайт
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}

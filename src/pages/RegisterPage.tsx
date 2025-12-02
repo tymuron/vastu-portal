@@ -28,8 +28,12 @@ export default function RegisterPage() {
 
             if (error) throw error;
 
-            if (data.user) {
-                alert('Регистрация успешна! Теперь вы можете войти.');
+            if (data.session) {
+                // Email confirmation disabled, user is logged in immediately
+                navigate('/student');
+            } else if (data.user) {
+                // Email confirmation enabled
+                alert('Регистрация успешна! Пожалуйста, подтвердите email перед входом.');
                 navigate('/login');
             }
         } catch (err: any) {
