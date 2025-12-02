@@ -57,7 +57,7 @@ export default function Library() {
             setPreviewFile(item);
         } else {
             // Fallback to download/new tab
-            window.open(item.file_url, '_blank');
+            window.open(item.file_url, '_blank', 'noopener,noreferrer');
         }
     };
 

@@ -118,6 +118,8 @@ export default function DayView() {
                                     <a
                                         key={material.id}
                                         href={material.url}
+                                        target="_blank"
+                                        rel="noreferrer"
                                         className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                     >
                                         <div className="w-8 h-8 rounded bg-vastu-light flex items-center justify-center text-vastu-text-light group-hover:text-vastu-gold transition-colors">
