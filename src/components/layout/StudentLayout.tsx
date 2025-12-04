@@ -154,7 +154,7 @@ export default function StudentLayout() {
                     <div className="w-8 h-8 bg-vastu-gold rounded-full flex items-center justify-center text-vastu-dark font-serif font-bold text-lg">
                         V
                     </div>
-                    <span className="font-serif text-lg text-vastu-gold">Васту-Дизайн</span>
+                    <span className="font-serif text-lg text-vastu-gold">ВАСТУ-ДИЗАЙН</span>
                 </Link>
                 <button
                     className="text-vastu-gold"
