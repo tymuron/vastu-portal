@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 2: Как пространство влияет на человека</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Manrope:wght@300;400;500&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#2A1B1D', // Deep Burgundy/Brown
+                            gold: '#CABC90', // Muted Gold
+                            light: '#F4F2ED', // Cream
+                            text: '#EAE0D5', // Light Text
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['"Cormorant Garamond"', 'serif'],
+                        sans: ['"Manrope"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #2A1B1D;
+            color: #F4F2ED;
+        }
+
+        .text-gold {
+            color: #CABC90;
+        }
+
+        .bg-gold {
+            background-color: #CABC90;
+        }
+
+        .border-gold {
+            border-color: #CABC90;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased selection:bg-brand-gold selection:text-brand-dark">
+
+    <!-- Hero Section -->
+    <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+        </div>
+        <div class="relative z-10 max-w-4xl mx-auto">
+            <p class="text-brand-gold uppercase tracking-[0.3em] text-sm mb-6 font-medium">Урок 2</p>
+            <h1 class="font-serif text-5xl md:text-7xl lg:text-8xl leading-tight mb-8 text-brand-light">
+                Как Пространство <br>
+                <span class="italic text-brand-gold">Влияет на Человека</span>
+            </h1>
+            <div class="w-24 h-[1px] bg-brand-gold mx-auto mb-8"></div>
+            <p class="text-xl md:text-2xl font-light tracking-wide text-brand-text/90 max-w-2xl mx-auto">
+                Физический, Эмоциональный и Энергетический Уровни.<br>
+                Дом как Зеркало Человека.
+            </p>
+        </div>
+    </section>
+
+    <!-- Intro Section -->
+    <section class="py-24 px-6 bg-brand-light text-brand-dark">
+        <div class="max-w-3xl mx-auto">
+            <div class="flex items-center gap-4 mb-12">
+                <span class="text-brand-gold text-4xl">🔷</span>
+                <h2 class="font-serif text-4xl md:text-5xl">Вступление</h2>
+            </div>
+            <div class="prose prose-lg prose-stone text-brand-dark/80 font-light leading-relaxed">
+                <p class="mb-6">
+                    Сегодня мы продолжаем формировать основу, через которую вы будете видеть пространство.
+                    После того как вы узнали, как устроена энергия мира и дома, сейчас мы разберём:
+                </p>
+                <ul class="list-none space-y-4 pl-0">
+                    <li class="flex items-start gap-3">
+                        <span class="text-brand-gold mt-1.5">✦</span>
+                        <span>Что именно пространство делает с человеком</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-brand-gold mt-1.5">✦</span>
+                        <span>Как оно влияет на тело, эмоции и внутреннюю энергию</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-brand-gold mt-1.5">✦</span>
+                        <span>Почему разные комнаты ощущаются по-разному</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-brand-gold mt-1.5">✦</span>
+                        <span>И почему дом всегда показывает правду о человеке</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Mirror Section -->
+    <section class="py-24 px-6 bg-brand-dark relative">
+        <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+            <div>
+                <div class="flex items-center gap-4 mb-8">
+                    <span class="text-brand-gold text-3xl">🔷</span>
+                    <h2 class="font-serif text-4xl text-brand-light">Дом — Зеркало Человека</h2>
+                </div>
+                <blockquote class="border-l-2 border-brand-gold pl-6 mb-8 italic text-brand-gold text-xl">
+                    «Пространство влияет на нас каждый день. Ваш дом отражает ваши состояния.»
+                </blockquote>
+                <p class="text-brand-text/90 mb-6 font-light">
+                    Это фундаментальная истина Васту:
+                </p>
+                <ul class="space-y-3 text-brand-text/80 mb-8">
+                    <li class="flex items-center gap-3"><span class="text-brand-gold">✔</span> Дом никогда не бывает
+                        “случайным”.</li>
+                    <li class="flex items-center gap-3"><span class="text-brand-gold">✔</span> Дом — это всегда
+                        отражение того, что происходит внутри человека.</li>
+                    <li class="flex items-center gap-3"><span class="text-brand-gold">✔</span> То, с чем человек живёт
+                        во внешнем, показывает его внутренние процессы.</li>
+                </ul>
+            </div>
+            <div class="bg-white/5 p-8 border border-brand-gold/20 rounded-sm">
+                <h3 class="font-serif text-2xl text-brand-gold mb-6 text-center">Дом отражает:</h3>
+                <div class="grid grid-cols-1 gap-3 text-center font-light text-brand-text/90">
+                    <div class="py-2 border-b border-brand-gold/10">Привычки</div>
+                    <div class="py-2 border-b border-brand-gold/10">Эмоциональный фон</div>
+                    <div class="py-2 border-b border-brand-gold/10">Сценарии</div>
+                    <div class="py-2 border-b border-brand-gold/10">Зоны силы и избегания</div>
+                    <div class="py-2 border-b border-brand-gold/10">Внутренний порядок или хаос</div>
+                    <div class="py-2 text-brand-gold italic">То, что человек ОЧЕНЬ старается не замечать</div>
+                </div>
+            </div>
+        </div>
+        <div class="max-w-3xl mx-auto mt-12 text-center">
+            <p class="text-lg font-light text-brand-text/80">
+                Поэтому работа с пространством всегда ведёт к изменению жизни. <br>
+                Но чтобы увидеть дом честно, нужно понять, как именно он влияет.
+            </p>
+        </div>
+    </section>
+
+    <!-- Three Levels Section -->
+    <section class="py-24 px-6 bg-[#25181A]">
+        <div class="max-w-5xl mx-auto">
+            <div class="flex items-center justify-center gap-4 mb-16">
+                <span class="text-brand-gold text-3xl">🔷</span>
+                <h2 class="font-serif text-4xl md:text-5xl text-center text-brand-light">Три Уровня Влияния</h2>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Level 1 -->
+                <div
+                    class="bg-brand-dark p-8 border border-brand-gold/10 hover:border-brand-gold/40 transition-colors duration-500 group">
+                    <div
+                        class="text-brand-gold text-6xl font-serif opacity-20 mb-4 group-hover:opacity-100 transition-opacity">
+                        01</div>
+                    <h3 class="font-serif text-2xl text-brand-light mb-2">Физический</h3>
+                    <p class="text-xs uppercase tracking-widest text-brand-gold/60 mb-6">“Нулевой уровень”</p>
+
+                    <div class="text-brand-text/70 font-light text-sm mb-6 italic border-l border-brand-gold/30 pl-3">
+                        «Кресло удобное или неудобное — это физический уровень.»
+                    </div>
+
+                    <ul class="space-y-2 text-brand-text/80 text-sm font-light mb-6">
+                        <li>• Свет, воздух, температура</li>
+                        <li>• Мебель, комфорт</li>
+                        <li>• Запахи, шум</li>
+                        <li>• Тесно/просторно</li>
+                    </ul>
+
+                    <p class="text-brand-text/60 text-sm">
+                        Это уровень, который ощущается телом. Никакой мистики — чистая физиология.
+                    </p>
+                </div>
+
+                <!-- Level 2 -->
+                <div
+                    class="bg-brand-dark p-8 border border-brand-gold/10 hover:border-brand-gold/40 transition-colors duration-500 group relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-brand-gold/50"></div>
+                    <div
+                        class="text-brand-gold text-6xl font-serif opacity-20 mb-4 group-hover:opacity-100 transition-opacity">
+                        02</div>
+                    <h3 class="font-serif text-2xl text-brand-light mb-2">Эмоциональный</h3>
+                    <p class="text-xs uppercase tracking-widest text-brand-gold/60 mb-6">Реакция на атмосферу</p>
+
+                    <div class="text-brand-text/70 font-light text-sm mb-6 italic border-l border-brand-gold/30 pl-3">
+                        «Когда светит солнце — появляется радость.»
+                    </div>
+
+                    <ul class="space-y-2 text-brand-text/80 text-sm font-light mb-6">
+                        <li>• Раздражение или спокойствие</li>
+                        <li>• Желание уйти или остаться</li>
+                        <li>• Мягкость или напряжение</li>
+                    </ul>
+
+                    <p class="text-brand-text/60 text-sm">
+                        Неконтролируемая реакция эмоционального центра. Показывает, какие эмоции усиливает дом.
+                    </p>
+                </div>
+
+                <!-- Level 3 -->
+                <div
+                    class="bg-brand-gold/10 p-8 border border-brand-gold/30 hover:border-brand-gold/60 transition-colors duration-500 group">
+                    <div
+                        class="text-brand-gold text-6xl font-serif opacity-40 mb-4 group-hover:opacity-100 transition-opacity">
+                        03</div>
+                    <h3 class="font-serif text-2xl text-brand-gold mb-2">Энергетический</h3>
+                    <p class="text-xs uppercase tracking-widest text-brand-gold/60 mb-6">Глубинный уровень</p>
+
+                    <div class="text-brand-text/70 font-light text-sm mb-6 italic border-l border-brand-gold/30 pl-3">
+                        «Пространство живое. Оно реагирует. Это энергетический обмен.»
+                    </div>
+
+                    <ul class="space-y-2 text-brand-text/80 text-sm font-light mb-6">
+                        <li>• Тяжесть (Земля), Пустота (Эфир)</li>
+                        <li>• Суета (Воздух), Жар (Огонь)</li>
+                        <li>• Давление или Поток</li>
+                    </ul>
+
+                    <p class="text-brand-text/60 text-sm">
+                        То, что человек чувствует до мысли. Здесь работает карта Васту и планеты.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Image Section -->
+    <section class="py-12 bg-brand-dark flex justify-center">
+        <div class="max-w-4xl w-full px-6">
+            <div class="border border-brand-gold/30 p-2">
+                <img src="/Users/annaromeo/.gemini/antigravity/brain/98a4e07a-279d-43e0-b71e-01cda7ac400d/uploaded_image_0_1764789867306.jpg"
+                    alt="Vastu Map" class="w-full h-auto opacity-90 hover:opacity-100 transition-opacity duration-700">
+            </div>
+            <p class="text-center text-brand-gold/60 text-sm mt-4 tracking-widest uppercase">Карта Первоэлементов</p>
+        </div>
+    </section>
+
+    <!-- Importance Section -->
+    <section class="py-24 px-6 bg-brand-light text-brand-dark">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-16">
+                <span class="text-brand-gold text-5xl block mb-4">🌟</span>
+                <h2 class="font-serif text-4xl md:text-5xl mb-6">Почему важно различать уровни?</h2>
+                <p class="text-lg font-light max-w-2xl mx-auto">Потому что, если их путать, можно начать "лечить" не то,
+                    что болит.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-12 mb-16">
+                <div class="space-y-6">
+                    <div class="flex gap-4">
+                        <span class="text-red-800 font-bold text-xl">❌</span>
+                        <p class="font-light">Можно перепутать своё настроение с энергетикой комнаты <br><span
+                                class="text-sm text-brand-dark/50 font-medium">(эмоциональный ≠ энергетический)</span>
+                        </p>
+                    </div>
+                    <div class="flex gap-4">
+                        <span class="text-red-800 font-bold text-xl">❌</span>
+                        <p class="font-light">Можно думать, что “сектор плохой”, хотя просто бардак <br><span
+                                class="text-sm text-brand-dark/50 font-medium">(физический ≠ энергетический)</span></p>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    <div class="flex gap-4">
+                        <span class="text-red-800 font-bold text-xl">❌</span>
+                        <p class="font-light">Можно пытаться менять мебель там, где нужно менять поток энергии <br><span
+                                class="text-sm text-brand-dark/50 font-medium">(физический ≠ Васту)</span></p>
+                    </div>
+                    <div class="flex gap-4">
+                        <span class="text-red-800 font-bold text-xl">❌</span>
+                        <p class="font-light">Можно думать, что “отношения плохие”, а на самом деле спальня стоит в
+                            разрушительной зоне.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-brand-dark text-brand-light p-10 md:p-16 text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-2 bg-brand-gold"></div>
+                <h3 class="font-serif text-3xl text-brand-gold mb-8">Простая формула для понимания</h3>
+                <div class="grid md:grid-cols-3 gap-8 text-lg font-light">
+                    <div class="space-y-2">
+                        <div class="text-brand-gold text-sm uppercase tracking-widest mb-2">Физика</div>
+                        <div>“Что здесь стоит”</div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="text-brand-gold text-sm uppercase tracking-widest mb-2">Эмоции</div>
+                        <div>“Как я здесь себя чувствую”</div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="text-brand-gold text-sm uppercase tracking-widest mb-2">Энергия</div>
+                        <div>“Почему я себя так чувствую”</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</body>
+
+</html>

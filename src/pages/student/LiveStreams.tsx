@@ -1,26 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { LiveStream, StreamComment } from '../../lib/types';
-import { Download, MessageCircle, Calendar } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { LiveStream } from '../../lib/types';
+import { Download, Calendar } from 'lucide-react';
 
 export default function LiveStreams() {
     const [streams, setStreams] = useState<LiveStream[]>([]);
     const [selectedStream, setSelectedStream] = useState<LiveStream | null>(null);
-    const [comments, setComments] = useState<StreamComment[]>([]);
-    const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(true);
-    const { user } = useAuth();
 
     useEffect(() => {
         fetchStreams();
     }, []);
-
-    useEffect(() => {
-        if (selectedStream) {
-            fetchComments(selectedStream.id);
-        }
-    }, [selectedStream]);
 
     async function fetchStreams() {
         try {
@@ -30,68 +20,68 @@ export default function LiveStreams() {
                 .order('date', { ascending: false });
 
             if (error) throw error;
-            setStreams(data || []);
+
             if (data && data.length > 0) {
+                setStreams(data);
                 setSelectedStream(data[0]);
+            } else {
+                // Fallback to mock data
+                setStreams(MOCK_STREAMS);
+                setSelectedStream(MOCK_STREAMS[0]);
             }
         } catch (error) {
             console.error('Error fetching streams:', error);
+            // Fallback to mock data on error
+            setStreams(MOCK_STREAMS);
+            setSelectedStream(MOCK_STREAMS[0]);
         } finally {
             setLoading(false);
         }
     }
 
-    async function fetchComments(streamId: string) {
-        try {
-            const { data, error } = await supabase
-                .from('stream_comments')
-                .select(`
-                    *,
-                    user:user_id (
-                        email,
-                        raw_user_meta_data
-                    )
-                `)
-                .eq('stream_id', streamId)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
-
-            // Map user data to comment
-            const mappedComments = data.map((c: any) => ({
-                ...c,
-                userName: c.user?.raw_user_meta_data?.full_name || c.user?.email || 'Студент',
-                userAvatar: c.user?.raw_user_meta_data?.avatar_url
-            }));
-
-            setComments(mappedComments);
-        } catch (error) {
-            console.error('Error fetching comments:', error);
+    const MOCK_STREAMS: LiveStream[] = [
+        {
+            id: '1',
+            title: 'Вебинар "Деньги и дом"',
+            description: 'Разбор влияния пространства на финансовый поток.',
+            date: '2025-11-30T10:00:00Z',
+            video_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Placeholder
+            audio_url: '#',
+            created_at: '2025-11-30T10:00:00Z'
+        },
+        {
+            id: '2',
+            title: 'Эфир_Ранний Круг_ «Ответы на вопросы»',
+            description: 'Сессия вопросов и ответов для участников раннего круга.',
+            date: '2025-11-20T10:00:00Z',
+            video_url: '',
+            created_at: '2025-11-20T10:00:00Z'
+        },
+        {
+            id: '3',
+            title: 'Эфир-разбор Васту карт',
+            description: 'Практический разбор карт участников.',
+            date: '2025-11-13T10:00:00Z',
+            video_url: '',
+            created_at: '2025-11-13T10:00:00Z'
+        },
+        {
+            id: '4',
+            title: 'Эфир-урок. Построение Васту-карты. Ранний Круг.',
+            description: 'Базовый урок по построению карты.',
+            date: '2025-11-06T10:00:00Z',
+            video_url: '',
+            created_at: '2025-11-06T10:00:00Z'
+        },
+        {
+            id: '5',
+            title: 'Вводный эфир. Октябрь.',
+            description: 'Знакомство с курсом и программой.',
+            date: '2025-10-25T10:00:00Z',
+            video_url: '',
+            created_at: '2025-10-25T10:00:00Z'
         }
-    }
-
-    async function handleCommentSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        if (!selectedStream || !user || !newComment.trim()) return;
-
-        try {
-            const { error } = await supabase
-                .from('stream_comments')
-                .insert([{
-                    stream_id: selectedStream.id,
-                    user_id: user.id,
-                    content: newComment.trim()
-                }]);
-
-            if (error) throw error;
-
-            setNewComment('');
-            fetchComments(selectedStream.id);
-        } catch (error) {
-            console.error('Error posting comment:', error);
-            alert('Не удалось отправить комментарий');
-        }
-    }
+    ];
 
     function getEmbedUrl(url: string) {
         if (!url) return '';
@@ -121,12 +111,34 @@ export default function LiveStreams() {
         return url;
     }
 
+    // Group streams by month
+    const groupedStreams = streams.reduce((acc, stream) => {
+        const date = new Date(stream.date);
+        const monthYear = date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+        const key = monthYear.charAt(0).toUpperCase() + monthYear.slice(1);
+
+        if (!acc[key]) {
+            acc[key] = [];
+        }
+        acc[key].push(stream);
+        return acc;
+    }, {} as Record<string, LiveStream[]>);
+
+    const months = Object.keys(groupedStreams);
+    const [selectedMonth, setSelectedMonth] = useState<string>('');
+
+    useEffect(() => {
+        if (months.length > 0 && !selectedMonth) {
+            setSelectedMonth(months[0]);
+        }
+    }, [months, selectedMonth]);
+
     if (loading) return (
         <div className="space-y-8 animate-pulse">
             <div className="h-20 bg-gray-200 rounded-xl w-1/3"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="h-[600px] bg-gray-200 rounded-xl"></div>
-                <div className="lg:col-span-2 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                <div className="h-[400px] bg-gray-200 rounded-xl"></div>
+                <div className="lg:col-span-3 space-y-6">
                     <div className="aspect-video bg-gray-200 rounded-xl"></div>
                     <div className="h-32 bg-gray-200 rounded-xl"></div>
                 </div>
@@ -134,28 +146,57 @@ export default function LiveStreams() {
         </div>
     );
 
+    const currentMonthStreams = selectedMonth ? groupedStreams[selectedMonth] : [];
+
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-fade-in">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-serif text-[#422326] mb-2">Живые Эфиры</h1>
                 <p className="text-gray-600">Записи всех прошедших разборов и встреч.</p>
             </div>
 
-            <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8">
-                {/* Player & Details (Order 1 on Mobile, Order 2 on Desktop) */}
-                <div className="lg:col-span-2 lg:order-2 space-y-6">
-                    {selectedStream ? (
-                        <>
-                            {/* Header Info */}
+            <div className="flex flex-col lg:grid lg:grid-cols-4 gap-8">
+                {/* Left Sidebar: Month Navigation */}
+                <div className="lg:col-span-1 space-y-2">
+                    <h3 className="font-serif text-lg text-vastu-dark mb-4 px-2">Архив по месяцам</h3>
+                    <div className="space-y-1">
+                        {months.map((month) => (
+                            <button
+                                key={month}
+                                onClick={() => {
+                                    setSelectedMonth(month);
+                                    setSelectedStream(null); // Reset selected stream when changing month
+                                }}
+                                className={`w-full text-left px-4 py-3 rounded-lg transition-all text-sm font-medium ${selectedMonth === month
+                                    ? 'bg-vastu-dark text-vastu-light shadow-md'
+                                    : 'text-gray-600 hover:bg-vastu-light/50 hover:text-vastu-dark'
+                                    }`}
+                            >
+                                {month}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Main Content: Player & Stream List */}
+                <div className="lg:col-span-3 space-y-8">
+                    {/* Video Player (if stream selected) */}
+                    {selectedStream && (
+                        <div className="space-y-6 animate-fade-in">
                             <div className="mb-4">
+                                <button
+                                    onClick={() => setSelectedStream(null)}
+                                    className="text-sm text-vastu-gold hover:text-vastu-dark mb-2 flex items-center gap-1"
+                                >
+                                    ← Вернуться к списку
+                                </button>
                                 <div className="text-sm text-gray-500 mb-1">
                                     {new Date(selectedStream.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
                                 <h2 className="text-2xl font-serif text-[#422326]">{selectedStream.title}</h2>
                             </div>
 
-                            {/* Video Player */}
                             <div className="bg-black rounded-xl overflow-hidden aspect-video shadow-2xl">
                                 {selectedStream.video_url ? (
                                     <iframe
@@ -171,7 +212,6 @@ export default function LiveStreams() {
                                 )}
                             </div>
 
-                            {/* Actions */}
                             <div className="flex flex-wrap gap-4">
                                 {selectedStream.audio_url && (
                                     <a
@@ -184,119 +224,55 @@ export default function LiveStreams() {
                                         Скачать Аудио
                                     </a>
                                 )}
-                                <button className="flex items-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg hover:bg-[#EAE6DE] transition-colors font-medium">
-                                    <Calendar className="w-4 h-4 mr-2" />
-                                    Добавить в календарь
-                                </button>
                             </div>
 
-                            {/* Info Tabs */}
-                            <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm">
-                                <div className="space-y-6">
-                                    <div>
-                                        <h3 className="font-serif text-xl text-[#422326] mb-3">Темы Эфира</h3>
-                                        <div className="prose prose-sm text-gray-600 whitespace-pre-line">
-                                            {selectedStream.topics || 'Темы не указаны'}
-                                        </div>
-                                    </div>
-
-                                    {selectedStream.best_questions && (
-                                        <div className="bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
-                                            <h3 className="font-serif text-lg text-[#422326] mb-2 flex items-center">
-                                                <MessageCircle className="w-4 h-4 mr-2" />
-                                                Лучшие вопросы
-                                            </h3>
-                                            <div className="text-sm text-gray-600 whitespace-pre-line italic">
-                                                {selectedStream.best_questions}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Comments Section */}
-                            <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm">
-                                <h3 className="font-serif text-xl text-[#422326] mb-6">Обсуждение</h3>
-
-                                {/* Comment Form */}
-                                <form onSubmit={handleCommentSubmit} className="mb-8">
-                                    <textarea
-                                        value={newComment}
-                                        onChange={(e) => setNewComment(e.target.value)}
-                                        placeholder="Задайте вопрос или поделитесь мнением..."
-                                        className="w-full p-4 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#422326]/20 focus:border-[#422326] transition-all resize-none min-h-[100px]"
-                                    />
-                                    <div className="mt-2 flex justify-end">
-                                        <button
-                                            type="submit"
-                                            disabled={!newComment.trim()}
-                                            className="px-6 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            Отправить
-                                        </button>
-                                    </div>
-                                </form>
-
-                                {/* Comments List */}
-                                <div className="space-y-6">
-                                    {comments.map((comment) => (
-                                        <div key={comment.id} className="flex gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-[#422326] font-bold">
-                                                {comment.userName?.[0] || 'U'}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="font-medium text-gray-900">{comment.userName || 'Пользователь'}</span>
-                                                    <span className="text-xs text-gray-500">
-                                                        {new Date(comment.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
-                                                    </span>
-                                                </div>
-                                                <p className="text-gray-600 text-sm leading-relaxed">
-                                                    {comment.content}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {comments.length === 0 && (
-                                        <div className="text-center text-gray-500 py-8">
-                                            Пока нет комментариев. Будьте первым!
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200 min-h-[400px]">
-                            Выберите эфир из списка
+                            <hr className="border-gray-100" />
                         </div>
                     )}
-                </div>
 
-                {/* List (Order 2 on Mobile, Order 1 on Desktop) */}
-                <div className="lg:col-span-1 lg:order-1 space-y-4 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {streams.map((stream) => (
-                        <button
-                            key={stream.id}
-                            onClick={() => {
-                                setSelectedStream(stream);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedStream?.id === stream.id
-                                ? 'bg-[#422326] text-white border-[#422326] shadow-lg'
-                                : 'bg-white border-[#E5E7EB] hover:border-[#422326]/30 hover:shadow-md'
-                                }`}
-                        >
-                            <div className={`text-xs font-medium mb-1 ${selectedStream?.id === stream.id ? 'text-white/70' : 'text-gray-500'
-                                }`}>
-                                {new Date(stream.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {/* Stream List for Selected Month */}
+                    {!selectedStream && (
+                        <div>
+                            <h2 className="font-serif text-2xl text-vastu-dark mb-6">{selectedMonth}</h2>
+                            <div className="space-y-4">
+                                {currentMonthStreams && currentMonthStreams.length > 0 ? (
+                                    currentMonthStreams.map((stream) => (
+                                        <button
+                                            key={stream.id}
+                                            onClick={() => {
+                                                setSelectedStream(stream);
+                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                            }}
+                                            className="w-full text-left p-6 rounded-xl bg-white border border-gray-100 hover:border-vastu-gold/50 hover:shadow-md transition-all group"
+                                        >
+                                            <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                                <div className="flex-1">
+                                                    <div className="text-xs font-medium text-gray-500 mb-2">
+                                                        {new Date(stream.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                    </div>
+                                                    <h3 className="font-serif text-xl text-vastu-dark group-hover:text-vastu-gold transition-colors mb-2">
+                                                        {stream.title}
+                                                    </h3>
+                                                    <p className="text-sm text-gray-500 line-clamp-2">
+                                                        {stream.description || 'Нет описания'}
+                                                    </p>
+                                                </div>
+                                                <div className="shrink-0">
+                                                    <div className="w-10 h-10 rounded-full bg-vastu-light flex items-center justify-center text-vastu-dark group-hover:bg-vastu-gold group-hover:text-white transition-colors">
+                                                        <Calendar size={18} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                        В этом месяце эфиров не найдено
+                                    </div>
+                                )}
                             </div>
-                            <h3 className="font-serif text-lg leading-tight mb-2">{stream.title}</h3>
-                            <div className={`text-sm line-clamp-2 ${selectedStream?.id === stream.id ? 'text-white/80' : 'text-gray-600'
-                                }`}>
-                                {stream.description}
-                            </div>
-                        </button>
-                    ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

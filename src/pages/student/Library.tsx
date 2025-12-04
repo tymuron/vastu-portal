@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem, LibraryCategory } from '../../lib/types';
-import { Download, CheckSquare, Table, BookOpen, FileText, Eye, X } from 'lucide-react';
+import { Download, CheckSquare, BookOpen, FileText, Eye, X } from 'lucide-react';
 
 export default function Library() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeCategory, setActiveCategory] = useState<LibraryCategory>('checklist');
     const [previewFile, setPreviewFile] = useState<LibraryItem | null>(null);
 
     useEffect(() => {
@@ -21,60 +20,75 @@ export default function Library() {
                 .order('title');
 
             if (error) throw error;
-            setItems(data || []);
+
+            if (data && data.length > 0) {
+                setItems(data);
+            } else {
+                setItems(MOCK_LIBRARY_ITEMS);
+            }
         } catch (error) {
             console.error('Error fetching library:', error);
+            setItems(MOCK_LIBRARY_ITEMS);
         } finally {
             setLoading(false);
         }
     }
 
-    const categories: { id: LibraryCategory; label: string; icon: any }[] = [
-        { id: 'checklist', label: 'Чек-листы', icon: CheckSquare },
-        { id: 'table', label: 'Таблицы', icon: Table },
-        { id: 'guide', label: 'Гайды', icon: BookOpen },
-        { id: 'pdf', label: 'Материалы уроков', icon: FileText },
+    const MOCK_LIBRARY_ITEMS: LibraryItem[] = [
+        {
+            id: '1',
+            title: 'Чек-лист "Васту для дома"',
+            description: 'Основные правила гармонизации пространства.',
+            category: 'checklist',
+            file_url: '#',
+            created_at: new Date().toISOString()
+        },
+        {
+            id: '2',
+            title: 'Гайд по цветам в интерьере',
+            description: 'Как подбирать цвета согласно сторонам света.',
+            category: 'guide',
+            file_url: '#',
+            created_at: new Date().toISOString()
+        },
+        {
+            id: '3',
+            title: 'Чек-лист "Утренняя рутина"',
+            description: 'Практики для начала дня.',
+            category: 'checklist',
+            file_url: '#',
+            created_at: new Date().toISOString()
+        },
+        {
+            id: '4',
+            title: 'Гайд "5 элементов"',
+            description: 'Подробное описание первоэлементов.',
+            category: 'guide',
+            file_url: '#',
+            created_at: new Date().toISOString()
+        }
     ];
 
-    const filteredItems = items.filter(item => item.category === activeCategory);
+    const filteredItems = items.filter(item =>
+        item.category === 'checklist' || item.category === 'guide'
+    );
 
     const getIcon = (category: LibraryCategory) => {
         switch (category) {
             case 'checklist': return <CheckSquare className="w-6 h-6" />;
-            case 'table': return <Table className="w-6 h-6" />;
             case 'guide': return <BookOpen className="w-6 h-6" />;
-            case 'pdf': return <FileText className="w-6 h-6" />;
             default: return <FileText className="w-6 h-6" />;
         }
     };
 
-
-
     if (loading) return <div className="p-8 text-center">Загрузка библиотеки...</div>;
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-fade-in">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-serif text-[#422326] mb-2">Библиотека Материалов</h1>
-                <p className="text-gray-600">Полезные чек-листы, таблицы и гайды для обучения.</p>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap gap-2 border-b border-gray-200 no-scrollbar">
-                {categories.map((cat) => (
-                    <button
-                        key={cat.id}
-                        onClick={() => setActiveCategory(cat.id)}
-                        className={`px-6 py-3 rounded-t-lg font-medium transition-all flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${activeCategory === cat.id
-                            ? 'bg-[#422326] text-white shadow-sm'
-                            : 'bg-transparent text-gray-500 hover:text-[#422326] hover:bg-[#F4F2ED]'
-                            }`}
-                    >
-                        <cat.icon className={`w-4 h-4 ${activeCategory === cat.id ? 'text-[#CABC90]' : ''}`} />
-                        {cat.label}
-                    </button>
-                ))}
+                <p className="text-gray-600">Полезные чек-листы и гайды для обучения.</p>
             </div>
 
             {/* Content Grid */}
@@ -173,7 +187,7 @@ export default function Library() {
 
             {filteredItems.length === 0 && (
                 <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                    <p className="text-gray-500">В этой категории пока нет материалов.</p>
+                    <p className="text-gray-500">В библиотеке пока нет материалов.</p>
                 </div>
             )}
 

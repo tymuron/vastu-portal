@@ -96,8 +96,44 @@ export default function DayView() {
                                     <ChevronRight size={16} className="text-vastu-gold" />
                                 </Link>
                             ) : (
-                                <div className="p-3 text-center text-sm text-vastu-text-light">
-                                    Это последний урок недели
+                                <div className="space-y-3">
+                                    <div className="p-3 text-center text-sm text-vastu-text-light bg-gray-50 rounded-lg">
+                                        Это последний урок недели
+                                    </div>
+
+                                    {/* Next Week Button */}
+                                    {weeks[weeks.findIndex(w => w.id === week.id) + 1] ? (
+                                        (() => {
+                                            const nextWeek = weeks[weeks.findIndex(w => w.id === week.id) + 1];
+                                            return (
+                                                <Link
+                                                    to={nextWeek.isLocked ? '#' : `/student?week=${nextWeek.id}`}
+                                                    className={`flex items-center justify-between gap-3 p-3 rounded-lg text-sm w-full transition-colors ${nextWeek.isLocked
+                                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                            : 'bg-vastu-gold text-vastu-dark hover:bg-vastu-gold/90'
+                                                        }`}
+                                                    onClick={(e) => nextWeek.isLocked && e.preventDefault()}
+                                                >
+                                                    <div className="text-left">
+                                                        <div className={`text-xs ${nextWeek.isLocked ? 'text-gray-400' : 'text-vastu-dark/70'}`}>Следующая неделя</div>
+                                                        <div className="font-medium line-clamp-1">Перейти к Неделе {weeks.findIndex(w => w.id === week.id) + 2}</div>
+                                                    </div>
+                                                    <ChevronRight size={16} />
+                                                </Link>
+                                            );
+                                        })()
+                                    ) : (
+                                        <Link
+                                            to="/student"
+                                            className="flex items-center justify-between gap-3 p-3 rounded-lg border border-vastu-gold/30 text-vastu-dark hover:bg-vastu-gold/10 transition-colors text-sm"
+                                        >
+                                            <div className="text-left">
+                                                <div className="text-xs text-vastu-text-light">Курс завершен</div>
+                                                <div className="font-medium">Вернуться к программе</div>
+                                            </div>
+                                            <ChevronRight size={16} className="text-vastu-gold" />
+                                        </Link>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -147,6 +183,23 @@ export default function DayView() {
                                 Скачать всё (ZIP)
                             </button>
                         )}
+                    </div>
+
+                    {/* Homework Card */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h3 className="font-serif text-lg text-vastu-dark mb-4 flex items-center gap-2">
+                            <FileText size={20} className="text-vastu-gold" />
+                            Домашнее задание
+                        </h3>
+                        <p className="text-sm text-vastu-text-light mb-4">
+                            Выполните задание к этому уроку, чтобы закрепить материал.
+                        </p>
+                        <button
+                            className="w-full py-2 bg-vastu-light text-vastu-dark hover:bg-vastu-gold hover:text-white rounded-lg transition-colors text-sm font-medium"
+                            onClick={() => alert('Раздел домашних заданий находится в разработке.')}
+                        >
+                            Перейти к заданию
+                        </button>
                     </div>
                 </div>
             </div>

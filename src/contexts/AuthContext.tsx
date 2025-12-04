@@ -28,6 +28,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Check if we are using placeholder Supabase (dev mode without env vars)
+        const isPlaceholder = (supabase as any).supabaseUrl?.includes('placeholder') ||
+            (supabase as any).supabaseKey === 'placeholder';
+
+        if (isPlaceholder) {
+            console.log('Using mock auth for development');
+            const mockUser: User = {
+                id: 'mock-user-id',
+                app_metadata: {},
+                user_metadata: {
+                    full_name: 'Анна Ромео',
+                    avatar_url: null,
+                },
+                aud: 'authenticated',
+                created_at: new Date().toISOString(),
+            } as User;
+
+            const mockSession: Session = {
+                access_token: 'mock-token',
+                refresh_token: 'mock-refresh-token',
+                expires_in: 3600,
+                token_type: 'bearer',
+                user: mockUser,
+            };
+
+            setSession(mockSession);
+            setUser(mockUser);
+            setRole('student');
+            setLoading(false);
+            return;
+        }
+
         // 1. Check active session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);

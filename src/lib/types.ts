@@ -52,6 +52,7 @@ export interface LiveStream {
     description?: string;
     topics?: string;
     best_questions?: string;
+    created_at?: string;
 }
 
 export interface StreamComment {
@@ -64,7 +65,7 @@ export interface StreamComment {
     created_at: string;
 }
 
-export type LibraryCategory = 'checklist' | 'table' | 'guide' | 'pdf';
+export type LibraryCategory = 'checklist' | 'guide';
 
 export interface LibraryItem {
     id: string;
@@ -72,4 +73,5 @@ export interface LibraryItem {
     category: LibraryCategory;
     file_url: string;
     description?: string;
+    created_at?: string;
 }

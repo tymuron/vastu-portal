@@ -191,9 +191,7 @@ export default function ManageLibrary() {
 
     const categories: { id: LibraryCategory; label: string }[] = [
         { id: 'checklist', label: 'Чек-лист' },
-        { id: 'table', label: 'Таблица' },
         { id: 'guide', label: 'Гайд' },
-        { id: 'pdf', label: 'PDF Урока' },
     ];
 
     if (loading) return <div className="p-8">Загрузка...</div>;
@@ -217,8 +215,8 @@ export default function ManageLibrary() {
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
                 className={`mb-8 border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${isDragging
-                        ? 'border-[#422326] bg-[#422326]/5 scale-[1.02]'
-                        : 'border-gray-300 hover:border-[#422326] hover:bg-gray-50'
+                    ? 'border-[#422326] bg-[#422326]/5 scale-[1.02]'
+                    : 'border-gray-300 hover:border-[#422326] hover:bg-gray-50'
                     }`}
             >
                 <div className="flex flex-col items-center justify-center pointer-events-none">

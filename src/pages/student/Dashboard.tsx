@@ -1,101 +1,139 @@
-import { Link } from 'react-router-dom';
-import { Lock, PlayCircle, ChevronRight, FileText, Loader2 } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { PlayCircle, ChevronRight, FileText, Loader2, Play } from 'lucide-react';
+import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
-import { cn } from '../../lib/utils';
 
 export default function StudentDashboard() {
     const { weeks, loading } = useWeeks();
-    const title = "Васту-Дизайн: Основы и Практика"; // Could also be fetched
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Get week from URL
+    const searchParams = new URLSearchParams(location.search);
+    const activeWeekId = searchParams.get('week');
+
+    useEffect(() => {
+        if (!loading && weeks.length > 0) {
+            // If no week selected or invalid week, redirect to first unlocked week
+            const isValidWeek = weeks.some(w => w.id === activeWeekId);
+
+            if (!activeWeekId || !isValidWeek) {
+                const firstUnlocked = weeks.find(w => !w.isLocked);
+                const targetWeekId = firstUnlocked?.id || weeks[0].id;
+                navigate(`/student?week=${targetWeekId}`, { replace: true });
+            }
+        }
+    }, [weeks, loading, activeWeekId, navigate]);
 
     if (loading) {
         return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
     }
 
+    const activeWeek = weeks.find(w => w.id === activeWeekId);
+
+    if (!activeWeek) return null;
+
     return (
-        <div className="max-w-4xl mx-auto animate-fade-in">
-            <div className="mb-12 text-center">
-                <h1 className="text-4xl md:text-5xl font-serif text-vastu-dark mb-4">{title}</h1>
-                <div className="h-1 w-24 bg-vastu-gold mx-auto rounded-full" />
-            </div>
+        <div className="animate-fade-in">
+            {/* Active Week Content */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
+                <div className="bg-vastu-dark p-8 md:p-12 text-vastu-light relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-vastu-gold opacity-10 rounded-full blur-[100px] translate-x-1/3 -translate-y-1/3" />
 
-            <div className="space-y-6">
-                {weeks.map((week, index) => (
-                    <div
-                        key={week.id}
-                        className={cn(
-                            "group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 border border-transparent",
-                            week.isLocked ? "opacity-75 grayscale-[0.5]" : "hover:border-vastu-gold/30"
-                        )}
-                    >
-                        {/* Week Status Strip */}
-                        <div className={cn(
-                            "absolute left-0 top-0 bottom-0 w-1.5",
-                            week.isLocked ? "bg-gray-300" : "bg-vastu-gold"
-                        )} />
+                    <div className="relative z-10">
+                        <span className="text-vastu-gold text-sm font-bold tracking-widest uppercase mb-2 block">
+                            Неделя {weeks.findIndex(w => w.id === activeWeek.id) + 1}
+                        </span>
+                        <h2 className="text-3xl md:text-5xl font-serif mb-6">{activeWeek.title}</h2>
+                        <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed text-lg">
+                            {activeWeek.description}
+                        </p>
+                    </div>
+                </div>
 
-                        <div className="p-6 md:p-8 pl-8 md:pl-10">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                                <div>
-                                    <span className="text-xs font-bold tracking-widest text-vastu-gold uppercase mb-1 block">
-                                        Неделя {index + 1}
-                                    </span>
-                                    <h2 className="text-2xl font-serif text-vastu-dark group-hover:text-vastu-dark/80 transition-colors">
-                                        {week.title}
-                                    </h2>
+                <div className="p-6 md:p-8">
+                    <div className="grid md:grid-cols-3 gap-8">
+                        {/* Lessons List */}
+                        <div className="md:col-span-2 space-y-4">
+                            <h3 className="font-serif text-xl text-vastu-dark mb-4 flex items-center gap-2">
+                                <PlayCircle className="text-vastu-gold" />
+                                Уроки
+                            </h3>
+                            <div className="space-y-3">
+                                {activeWeek.days.map((day) => (
+                                    <Link
+                                        key={day.id}
+                                        to={`/student/week/${activeWeek.id}/day/${day.id}`}
+                                        className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold group-hover:bg-vastu-gold group-hover:text-vastu-dark transition-colors shrink-0">
+                                                <Play size={14} fill="currentColor" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-medium text-vastu-dark group-hover:text-vastu-gold transition-colors">
+                                                    {day.title}
+                                                </h4>
+                                                <p className="text-xs text-vastu-text-light line-clamp-1 mt-0.5">
+                                                    {day.description}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={18} className="text-gray-300 group-hover:text-vastu-gold transition-colors" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Materials Sidebar */}
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="font-serif text-xl text-vastu-dark mb-4 flex items-center gap-2">
+                                    <FileText className="text-vastu-gold" />
+                                    Материалы
+                                </h3>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
+                                    {activeWeek.weekMaterials && activeWeek.weekMaterials.length > 0 ? (
+                                        activeWeek.weekMaterials.map((material) => (
+                                            <a
+                                                key={material.id}
+                                                href={material.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-start gap-3 p-2 rounded-lg hover:bg-white transition-colors group"
+                                            >
+                                                <FileText size={16} className="text-vastu-text-light mt-0.5 group-hover:text-vastu-gold" />
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-medium text-vastu-dark truncate group-hover:text-vastu-gold transition-colors">
+                                                        {material.title}
+                                                    </div>
+                                                    <div className="text-[10px] text-vastu-text-light uppercase">
+                                                        {material.type}
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        ))
+                                    ) : (
+                                        <div className="text-sm text-vastu-text-light italic text-center py-4">
+                                            Нет общих материалов
+                                        </div>
+                                    )}
                                 </div>
-                                {week.isLocked && week.availableFrom && (
-                                    <div className="flex items-center gap-2 text-vastu-text-light text-sm bg-gray-100 px-3 py-1 rounded-full self-start md:self-auto">
-                                        <Lock size={14} />
-                                        <span>Откроется {new Date(week.availableFrom).toLocaleDateString('ru-RU')}</span>
-                                    </div>
-                                )}
                             </div>
 
-                            <p className="text-vastu-text-light mb-6 font-light leading-relaxed">
-                                {week.description}
-                            </p>
-
-                            {/* Days Preview */}
-                            {!week.isLocked && (
-                                <div className="space-y-3 mb-6">
-                                    {week.days.map((day) => (
-                                        <div key={day.id} className="flex items-center gap-3 text-sm text-vastu-text/80 pl-4 border-l border-gray-100">
-                                            <PlayCircle size={16} className="text-vastu-gold shrink-0" />
-                                            <span className="truncate">{day.title}</span>
-                                        </div>
-                                    ))}
+                            <div className="bg-vastu-gold/10 rounded-xl p-6 border border-vastu-gold/20">
+                                <h4 className="font-serif text-lg text-vastu-dark mb-2">Прогресс</h4>
+                                <div className="flex items-end gap-2 mb-2">
+                                    <span className="text-3xl font-bold text-vastu-gold">0%</span>
+                                    <span className="text-sm text-vastu-text-light mb-1.5">завершено</span>
                                 </div>
-                            )}
-
-                            <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                                <div className="flex gap-4 text-sm text-vastu-text-light">
-                                    <span className="flex items-center gap-1.5">
-                                        <PlayCircle size={16} />
-                                        {week.days.length} уроков
-                                    </span>
-                                    <span className="flex items-center gap-1.5">
-                                        <FileText size={16} />
-                                        {week.weekMaterials.length + week.days.reduce((acc, d) => acc + d.materials.length, 0)} материалов
-                                    </span>
+                                <div className="h-2 bg-white rounded-full overflow-hidden">
+                                    <div className="h-full bg-vastu-gold w-0" />
                                 </div>
-
-                                {!week.isLocked ? (
-                                    <Link
-                                        to={`/student/week/${week.id}`}
-                                        className="flex items-center gap-2 text-vastu-dark font-medium hover:text-vastu-gold transition-colors"
-                                    >
-                                        Открыть
-                                        <ChevronRight size={18} />
-                                    </Link>
-                                ) : (
-                                    <button disabled className="text-gray-400 cursor-not-allowed">
-                                        Недоступно
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </div>
-                ))}
+                </div>
             </div>
         </div>
     );

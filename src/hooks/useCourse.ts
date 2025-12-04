@@ -11,8 +11,8 @@ export function useWeeks() {
     useEffect(() => {
         async function fetchWeeks() {
             try {
-                // If no keys, fallback to mock
-                if (!import.meta.env.VITE_SUPABASE_URL) {
+                // If no keys or placeholder, fallback to mock
+                if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
                     console.log('Using Mock Data (No Supabase Keys)');
                     setWeeks(MOCK_COURSE.weeks);
                     setLoading(false);
@@ -81,7 +81,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
         async function fetchDay() {
             if (!weekId || !dayId) return;
 
-            if (!import.meta.env.VITE_SUPABASE_URL) {
+            if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
                 const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
                 const d = w?.days.find(d => d.id === dayId);
                 setDay(d || null);
