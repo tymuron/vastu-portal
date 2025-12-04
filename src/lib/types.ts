@@ -50,8 +50,6 @@ export interface LiveStream {
     video_url?: string;
     audio_url?: string;
     description?: string;
-    topics?: string;
-    best_questions?: string;
     created_at?: string;
 }
 

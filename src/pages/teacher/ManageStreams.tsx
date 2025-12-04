@@ -15,8 +15,6 @@ export default function ManageStreams() {
         date: new Date().toISOString().split('T')[0],
         video_url: '',
         description: '',
-        topics: '',
-        best_questions: '',
         audio_url: ''
     });
 
@@ -47,8 +45,6 @@ export default function ManageStreams() {
             date: new Date(stream.date).toISOString().split('T')[0],
             video_url: stream.video_url,
             description: stream.description,
-            topics: stream.topics,
-            best_questions: stream.best_questions,
             audio_url: stream.audio_url
         });
         setEditingId(stream.id);
@@ -61,8 +57,6 @@ export default function ManageStreams() {
             date: new Date().toISOString().split('T')[0],
             video_url: '',
             description: '',
-            topics: '',
-            best_questions: '',
             audio_url: ''
         });
         setEditingId(null);
@@ -100,8 +94,6 @@ export default function ManageStreams() {
                 date: new Date().toISOString().split('T')[0],
                 video_url: '',
                 description: '',
-                topics: '',
-                best_questions: '',
                 audio_url: ''
             });
             fetchStreams();
@@ -295,28 +287,7 @@ export default function ManageStreams() {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Темы (списком)</label>
-                                    <textarea
-                                        rows={4}
-                                        value={formData.topics}
-                                        onChange={e => setFormData({ ...formData, topics: e.target.value })}
-                                        className="w-full rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
-                                        placeholder="1. Тема один&#10;2. Тема два"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Лучшие вопросы</label>
-                                    <textarea
-                                        rows={4}
-                                        value={formData.best_questions}
-                                        onChange={e => setFormData({ ...formData, best_questions: e.target.value })}
-                                        className="w-full rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
-                                        placeholder="Вопрос 1?&#10;Вопрос 2?"
-                                    />
-                                </div>
-                            </div>
+
 
                             <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
                                 <button

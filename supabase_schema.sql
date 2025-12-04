@@ -9,21 +9,8 @@ create table if not exists live_streams (
   date timestamp with time zone not null,
   video_url text,
   audio_url text,
-  topics text,
-  best_questions text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
-
--- Add columns if they don't exist (for updates)
-do $$
-begin
-  if not exists (select 1 from information_schema.columns where table_name = 'live_streams' and column_name = 'topics') then
-    alter table live_streams add column topics text;
-  end if;
-  if not exists (select 1 from information_schema.columns where table_name = 'live_streams' and column_name = 'best_questions') then
-    alter table live_streams add column best_questions text;
-  end if;
-end $$;
 
 -- Create library_items table
 create table if not exists library_items (
