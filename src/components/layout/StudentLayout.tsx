@@ -50,7 +50,7 @@ export default function StudentLayout() {
                             V
                         </div>
                         <div className="flex flex-col">
-                            <span className="font-serif text-lg tracking-wide text-vastu-gold leading-none">Васту-Дизайн</span>
+                            <span className="font-serif text-lg tracking-wide text-vastu-gold leading-none">ВАСТУ-ДИЗАЙН</span>
                             <span className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Основы и Практика</span>
                         </div>
                     </Link>
