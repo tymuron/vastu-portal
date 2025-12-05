@@ -10,11 +10,18 @@ export function getVideoEmbedUrl(url: string): string {
 
     // Rutube
     // https://rutube.ru/video/c87.../
-    // https://rutube.ru/video/c87...?playlist=...
+    // https://rutube.ru/video/private/c87.../?p=...
     if (url.includes('rutube.ru/video/')) {
-        const idMatch = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
+        const idMatch = url.match(/rutube\.ru\/video\/(?:private\/)?([a-zA-Z0-9]+)/);
+        const urlObj = new URL(url);
+        const pParam = urlObj.searchParams.get('p');
+
         if (idMatch && idMatch[1]) {
-            return `https://rutube.ru/play/embed/${idMatch[1]}`;
+            let embedUrl = `https://rutube.ru/play/embed/${idMatch[1]}`;
+            if (pParam) {
+                embedUrl += `/?p=${pParam}`;
+            }
+            return embedUrl;
         }
     }
 
