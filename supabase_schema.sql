@@ -24,8 +24,8 @@ create table if not exists library_items (
 
 -- Create storage buckets if they don't exist
 insert into storage.buckets (id, name)
-values ('library', 'library'), ('avatars', 'avatars')
-on conflict do nothing;
+values ('library', 'library', false), ('avatars', 'avatars', true)
+on conflict (id) do update set public = excluded.public;
 
 -- Set up RLS (Row Level Security)
 alter table live_streams enable row level security;
