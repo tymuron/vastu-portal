@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem, LibraryCategory } from '../../lib/types';
-import { Download, CheckSquare, BookOpen, FileText, Eye, X } from 'lucide-react';
+import { Download, CheckSquare, BookOpen, FileText, Eye, X, Maximize2, Minimize2 } from 'lucide-react';
+import { cn, downloadFile } from '../../lib/utils';
 
 export default function Library() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [previewFile, setPreviewFile] = useState<LibraryItem | null>(null);
+    const [isZoomed, setIsZoomed] = useState(false);
 
     useEffect(() => {
         fetchLibrary();
@@ -43,6 +45,16 @@ export default function Library() {
         }
     };
 
+    const handleDownload = async (e: React.MouseEvent, item: LibraryItem) => {
+        e.stopPropagation();
+        await downloadFile(item.file_url, item.title);
+    };
+
+    const handleOpenInNewTab = (e: React.MouseEvent, url: string) => {
+        e.stopPropagation();
+        window.open(url, '_blank');
+    };
+
     if (loading) return <div className="p-8 text-center">Загрузка библиотеки...</div>;
 
     return (
@@ -55,96 +67,51 @@ export default function Library() {
 
             {/* Content Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredItems.map((item) => (
-                    <div key={item.id} className="bg-white rounded-xl p-6 shadow-sm border border-[#E5E7EB] hover:shadow-md transition-shadow group">
-                        <div className="flex items-start justify-between mb-4">
-                            <div className="w-12 h-12 rounded-lg bg-[#F4F2ED] flex items-center justify-center text-[#422326] group-hover:bg-[#422326] group-hover:text-white transition-colors">
-                                {getIcon(item.category)}
+                {filteredItems.map((item) => {
+                    const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
+                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
+                    const isPreviewable = isPdf || isImage;
+
+                    return (
+                        <div
+                            key={item.id}
+                            onClick={() => isPreviewable && setPreviewFile(item)}
+                            className={cn(
+                                "bg-white rounded-xl p-6 shadow-sm border border-[#E5E7EB] transition-all group relative",
+                                isPreviewable ? "cursor-pointer hover:shadow-md hover:border-[#422326]/30" : ""
+                            )}
+                        >
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="w-12 h-12 rounded-lg bg-[#F4F2ED] flex items-center justify-center text-[#422326] group-hover:bg-[#422326] group-hover:text-white transition-colors">
+                                    {getIcon(item.category)}
+                                </div>
+                                <button
+                                    onClick={(e) => handleOpenInNewTab(e, item.file_url)}
+                                    className="p-2 text-gray-400 hover:text-[#422326] hover:bg-gray-100 rounded-full transition-colors"
+                                    title="Открыть в новой вкладке"
+                                >
+                                    <Eye className="w-5 h-5" />
+                                </button>
                             </div>
-                            {(() => {
-                                const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
-                                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
-                                const isPreviewable = isPdf || isImage;
 
-                                if (isPreviewable) {
-                                    return (
-                                        <button
-                                            onClick={() => setPreviewFile(item)}
-                                            className="text-gray-400 hover:text-[#422326] transition-colors"
-                                            title="Просмотр"
-                                        >
-                                            <Eye className="w-5 h-5" />
-                                        </button>
-                                    );
-                                } else {
-                                    return (
-                                        <a
-                                            href={item.file_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-gray-400 hover:text-[#422326] transition-colors"
-                                            title="Открыть"
-                                        >
-                                            <Eye className="w-5 h-5" />
-                                        </a>
-                                    );
-                                }
-                            })()}
+                            <h3 className="font-serif text-lg text-[#422326] mb-2 leading-tight group-hover:text-[#422326] transition-colors">
+                                {item.title}
+                            </h3>
+
+                            {item.description && (
+                                <p className="text-sm text-gray-500 mb-4 line-clamp-2">
+                                    {item.description}
+                                </p>
+                            )}
+
+                            <div className="flex items-center text-xs text-gray-400 mt-auto pt-2">
+                                <span className="uppercase tracking-wider font-medium">{item.category === 'checklist' ? 'Чек-лист' : 'Гайд'}</span>
+                                {isPreviewable && <span className="mx-2">•</span>}
+                                {isPreviewable && <span>Нажмите для просмотра</span>}
+                            </div>
                         </div>
-
-                        <h3 className="font-serif text-lg text-[#422326] mb-2 leading-tight">
-                            {item.title}
-                        </h3>
-
-                        {item.description && (
-                            <p className="text-sm text-gray-500 mb-4 line-clamp-2">
-                                {item.description}
-                            </p>
-                        )}
-
-                        <div className="flex gap-2 mt-4">
-                            {(() => {
-                                const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
-                                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
-                                const isPreviewable = isPdf || isImage;
-
-                                if (isPreviewable) {
-                                    return (
-                                        <>
-                                            <button
-                                                onClick={() => setPreviewFile(item)}
-                                                className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg text-sm font-medium hover:bg-[#E5E0D8] transition-colors"
-                                            >
-                                                <Eye className="w-4 h-4 mr-2" />
-                                                Просмотр
-                                            </button>
-                                            <a
-                                                href={item.file_url}
-                                                download
-                                                className="inline-flex items-center justify-center px-4 py-2 border border-[#E5E7EB] text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                                                title="Скачать"
-                                            >
-                                                <Download className="w-4 h-4" />
-                                            </a>
-                                        </>
-                                    );
-                                } else {
-                                    return (
-                                        <a
-                                            href={item.file_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#F4F2ED] text-[#422326] rounded-lg text-sm font-medium hover:bg-[#E5E0D8] transition-colors"
-                                        >
-                                            <Eye className="w-4 h-4 mr-2" />
-                                            Открыть
-                                        </a>
-                                    );
-                                }
-                            })()}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {filteredItems.length === 0 && (
@@ -155,28 +122,44 @@ export default function Library() {
 
             {/* Preview Modal */}
             {previewFile && (
-                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 md:p-8">
-                    <div className="bg-white rounded-xl w-full h-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED]">
-                            <h3 className="font-serif text-lg text-[#422326] truncate pr-4">{previewFile.title}</h3>
+                <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 md:p-8 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-xl w-full h-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10">
+                            <h3 className="font-serif text-lg text-[#422326] truncate pr-4 max-w-[60%] md:max-w-none">{previewFile.title}</h3>
                             <div className="flex items-center gap-2">
-                                <a
-                                    href={previewFile.file_url}
-                                    download
-                                    className="p-2 text-gray-500 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
+                                {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
+                                    <button
+                                        onClick={() => setIsZoomed(!isZoomed)}
+                                        className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors hidden md:flex items-center gap-2"
+                                        title={isZoomed ? "Уменьшить" : "Увеличить"}
+                                    >
+                                        {isZoomed ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                                        <span className="text-sm font-medium">{isZoomed ? "Уменьшить" : "Увеличить"}</span>
+                                    </button>
+                                )}
+                                <button
+                                    onClick={(e) => handleDownload(e, previewFile)}
+                                    className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
                                     title="Скачать"
                                 >
                                     <Download className="w-5 h-5" />
-                                </a>
+                                </button>
                                 <button
-                                    onClick={() => setPreviewFile(null)}
-                                    className="p-2 text-gray-500 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
+                                    onClick={() => {
+                                        setPreviewFile(null);
+                                        setIsZoomed(false);
+                                    }}
+                                    className="p-2 text-gray-600 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
                                 >
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 bg-gray-100 overflow-hidden relative">
+
+                        {/* Modal Content */}
+                        <div className="flex-1 bg-gray-100 overflow-auto relative flex items-center justify-center">
                             {previewFile.file_url.toLowerCase().endsWith('.pdf') ? (
                                 <iframe
                                     src={previewFile.file_url}
@@ -184,15 +167,33 @@ export default function Library() {
                                     title={previewFile.title}
                                 />
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center overflow-auto p-4">
+                                <div className={cn(
+                                    "transition-all duration-300 ease-in-out",
+                                    isZoomed ? "w-full min-h-full p-0 block" : "w-full h-full flex items-center justify-center p-4"
+                                )}>
                                     <img
                                         src={previewFile.file_url}
                                         alt={previewFile.title}
-                                        className="max-w-full max-h-full object-contain shadow-lg"
+                                        className={cn(
+                                            "shadow-lg transition-all duration-300",
+                                            isZoomed ? "w-full h-auto" : "max-w-full max-h-full object-contain"
+                                        )}
+                                        onClick={() => setIsZoomed(!isZoomed)}
+                                        style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
                                     />
                                 </div>
                             )}
                         </div>
+
+                        {/* Mobile Zoom FAB (Floating Action Button) */}
+                        {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
+                            <button
+                                onClick={() => setIsZoomed(!isZoomed)}
+                                className="md:hidden absolute bottom-6 right-6 w-12 h-12 bg-[#422326] text-white rounded-full shadow-lg flex items-center justify-center z-20 hover:bg-[#2b1618] transition-colors"
+                            >
+                                {isZoomed ? <Minimize2 className="w-6 h-6" /> : <Maximize2 className="w-6 h-6" />}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
