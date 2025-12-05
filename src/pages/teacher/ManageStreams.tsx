@@ -174,7 +174,7 @@ export default function ManageStreams() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Ссылка на Видео (YouTube) *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Ссылка на Видео (YouTube / Rutube) *</label>
                                 <div className="relative">
                                     <Video className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
                                     <input
@@ -186,7 +186,7 @@ export default function ManageStreams() {
                                     />
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1 ml-1">
-                                    Поддерживается: обычная ссылка, YouTube Shorts, код вставки (iframe)
+                                    Поддерживается: YouTube, Rutube, код вставки (iframe)
                                 </p>
                             </div>
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LiveStream } from '../../lib/types';
 import { Download, Calendar } from 'lucide-react';
+import { getVideoEmbedUrl } from '../../lib/utils';
 
 export default function LiveStreams() {
     const [streams, setStreams] = useState<LiveStream[]>([]);
@@ -21,94 +22,17 @@ export default function LiveStreams() {
 
             if (error) throw error;
 
-            if (data && data.length > 0) {
+            if (data) {
                 setStreams(data);
-                setSelectedStream(data[0]);
-            } else {
-                // Fallback to mock data
-                setStreams(MOCK_STREAMS);
-                setSelectedStream(MOCK_STREAMS[0]);
+                if (data.length > 0) {
+                    setSelectedStream(data[0]);
+                }
             }
         } catch (error) {
             console.error('Error fetching streams:', error);
-            // Fallback to mock data on error
-            setStreams(MOCK_STREAMS);
-            setSelectedStream(MOCK_STREAMS[0]);
         } finally {
             setLoading(false);
         }
-    }
-
-    const MOCK_STREAMS: LiveStream[] = [
-        {
-            id: '1',
-            title: 'Вебинар "Деньги и дом"',
-            description: 'Разбор влияния пространства на финансовый поток.',
-            date: '2025-11-30T10:00:00Z',
-            video_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Placeholder
-            audio_url: '#',
-            created_at: '2025-11-30T10:00:00Z'
-        },
-        {
-            id: '2',
-            title: 'Эфир_Ранний Круг_ «Ответы на вопросы»',
-            description: 'Сессия вопросов и ответов для участников раннего круга.',
-            date: '2025-11-20T10:00:00Z',
-            video_url: '',
-            created_at: '2025-11-20T10:00:00Z'
-        },
-        {
-            id: '3',
-            title: 'Эфир-разбор Васту карт',
-            description: 'Практический разбор карт участников.',
-            date: '2025-11-13T10:00:00Z',
-            video_url: '',
-            created_at: '2025-11-13T10:00:00Z'
-        },
-        {
-            id: '4',
-            title: 'Эфир-урок. Построение Васту-карты. Ранний Круг.',
-            description: 'Базовый урок по построению карты.',
-            date: '2025-11-06T10:00:00Z',
-            video_url: '',
-            created_at: '2025-11-06T10:00:00Z'
-        },
-        {
-            id: '5',
-            title: 'Вводный эфир. Октябрь.',
-            description: 'Знакомство с курсом и программой.',
-            date: '2025-10-25T10:00:00Z',
-            video_url: '',
-            created_at: '2025-10-25T10:00:00Z'
-        }
-    ];
-
-    function getEmbedUrl(url: string) {
-        if (!url) return '';
-
-        // Handle iframe code paste
-        if (url.includes('<iframe')) {
-            const srcMatch = url.match(/src="([^"]+)"/);
-            return srcMatch ? srcMatch[1] : '';
-        }
-
-        // Handle standard watch URLs (youtube.com/watch?v=ID)
-        if (url.includes('watch?v=')) {
-            return url.replace('watch?v=', 'embed/');
-        }
-
-        // Handle short URLs (youtu.be/ID)
-        if (url.includes('youtu.be/')) {
-            const id = url.split('youtu.be/')[1]?.split('?')[0];
-            return `https://www.youtube.com/embed/${id}`;
-        }
-
-        // Handle existing embed URLs
-        if (url.includes('/embed/')) {
-            return url;
-        }
-
-        return url;
     }
 
     // Group streams by month
@@ -200,7 +124,7 @@ export default function LiveStreams() {
                             <div className="bg-black rounded-xl overflow-hidden aspect-video shadow-2xl">
                                 {selectedStream.video_url ? (
                                     <iframe
-                                        src={getEmbedUrl(selectedStream.video_url)}
+                                        src={getVideoEmbedUrl(selectedStream.video_url)}
                                         title={selectedStream.title}
                                         className="w-full h-full"
                                         allowFullScreen

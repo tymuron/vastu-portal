@@ -21,53 +21,15 @@ export default function Library() {
 
             if (error) throw error;
 
-            if (data && data.length > 0) {
+            if (data) {
                 setItems(data);
-            } else {
-                setItems(MOCK_LIBRARY_ITEMS);
             }
         } catch (error) {
             console.error('Error fetching library:', error);
-            setItems(MOCK_LIBRARY_ITEMS);
         } finally {
             setLoading(false);
         }
     }
-
-    const MOCK_LIBRARY_ITEMS: LibraryItem[] = [
-        {
-            id: '1',
-            title: 'Чек-лист "Васту для дома"',
-            description: 'Основные правила гармонизации пространства.',
-            category: 'checklist',
-            file_url: '#',
-            created_at: new Date().toISOString()
-        },
-        {
-            id: '2',
-            title: 'Гайд по цветам в интерьере',
-            description: 'Как подбирать цвета согласно сторонам света.',
-            category: 'guide',
-            file_url: '#',
-            created_at: new Date().toISOString()
-        },
-        {
-            id: '3',
-            title: 'Чек-лист "Утренняя рутина"',
-            description: 'Практики для начала дня.',
-            category: 'checklist',
-            file_url: '#',
-            created_at: new Date().toISOString()
-        },
-        {
-            id: '4',
-            title: 'Гайд "5 элементов"',
-            description: 'Подробное описание первоэлементов.',
-            category: 'guide',
-            file_url: '#',
-            created_at: new Date().toISOString()
-        }
-    ];
 
     const filteredItems = items.filter(item =>
         item.category === 'checklist' || item.category === 'guide'

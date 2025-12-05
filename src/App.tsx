@@ -6,6 +6,7 @@ import WeekView from './pages/student/WeekView';
 import DayView from './pages/student/DayView';
 import LiveStreams from './pages/student/LiveStreams';
 import Library from './pages/student/Library';
+import Profile from './pages/student/Profile';
 
 import TeacherLayout from './components/layout/TeacherLayout';
 import CourseEditor from './pages/teacher/CourseEditor';
@@ -57,6 +58,7 @@ function App() {
                         <Route path="week/:weekId/day/:dayId" element={<DayView />} />
                         <Route path="streams" element={<LiveStreams />} />
                         <Route path="library" element={<Library />} />
+                        <Route path="profile" element={<Profile />} />
                     </Route>
 
                     {/* Teacher Routes */}

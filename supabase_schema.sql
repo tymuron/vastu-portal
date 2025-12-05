@@ -24,7 +24,7 @@ create table if not exists library_items (
 
 -- Create storage buckets if they don't exist
 insert into storage.buckets (id, name)
-values ('library', 'library')
+values ('library', 'library'), ('avatars', 'avatars')
 on conflict do nothing;
 
 -- Set up RLS (Row Level Security)
@@ -34,6 +34,8 @@ alter table library_items enable row level security;
 -- Drop existing policies to avoid conflicts
 drop policy if exists "Public streams are viewable by everyone" on live_streams;
 drop policy if exists "Public library items are viewable by everyone" on library_items;
+drop policy if exists "Avatar images are publicly accessible" on storage.objects;
+drop policy if exists "Anyone can upload an avatar" on storage.objects;
 
 -- Create policies
 create policy "Public streams are viewable by everyone"
@@ -43,3 +45,11 @@ create policy "Public streams are viewable by everyone"
 create policy "Public library items are viewable by everyone"
   on library_items for select
   using ( true );
+
+create policy "Avatar images are publicly accessible"
+  on storage.objects for select
+  using ( bucket_id = 'avatars' );
+
+create policy "Anyone can upload an avatar"
+  on storage.objects for insert
+  with check ( bucket_id = 'avatars' );
