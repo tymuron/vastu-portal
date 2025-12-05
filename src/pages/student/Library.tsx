@@ -123,7 +123,7 @@ export default function Library() {
             {/* Preview Modal */}
             {previewFile && (
                 <div className="fixed inset-0 bg-black/90 z-50 md:flex md:items-center md:justify-center md:p-8 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white w-full h-full md:rounded-xl md:w-full md:h-full md:max-w-6xl md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+                    <div className="bg-white w-full h-full md:rounded-xl md:w-[90vw] md:h-[85vh] md:max-w-6xl flex flex-col overflow-hidden shadow-2xl relative">
 
                         {/* Modal Header */}
                         <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10">
