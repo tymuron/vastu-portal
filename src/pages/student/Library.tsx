@@ -122,8 +122,8 @@ export default function Library() {
 
             {/* Preview Modal */}
             {previewFile && (
-                <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center md:p-8 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white md:rounded-xl w-full h-full md:max-w-6xl md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+                <div className="fixed inset-0 bg-black/90 z-50 md:flex md:items-center md:justify-center md:p-8 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white w-full h-full md:rounded-xl md:w-full md:h-full md:max-w-6xl md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
 
                         {/* Modal Header */}
                         <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10">
@@ -149,7 +149,7 @@ export default function Library() {
                                 <button
                                     onClick={() => {
                                         setPreviewFile(null);
-                                        setIsZoomed(true); // Reset to true for next time
+                                        setIsZoomed(true);
                                     }}
                                     className="p-2 text-gray-600 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
                                 >
@@ -159,7 +159,7 @@ export default function Library() {
                         </div>
 
                         {/* Modal Content */}
-                        <div className="flex-1 bg-gray-100 overflow-auto relative flex items-center justify-center">
+                        <div className="flex-1 bg-gray-100 overflow-hidden relative flex flex-col">
                             {previewFile.file_url.toLowerCase().endsWith('.pdf') ? (
                                 <iframe
                                     src={previewFile.file_url}
@@ -168,15 +168,15 @@ export default function Library() {
                                 />
                             ) : (
                                 <div className={cn(
-                                    "transition-all duration-300 ease-in-out flex items-center justify-center",
-                                    isZoomed ? "min-w-full min-h-full p-0 overflow-auto" : "w-full h-full p-4"
+                                    "flex-1 overflow-auto",
+                                    isZoomed ? "block" : "flex items-center justify-center p-4"
                                 )}>
                                     <img
                                         src={previewFile.file_url}
                                         alt={previewFile.title}
                                         className={cn(
                                             "shadow-lg transition-all duration-300",
-                                            isZoomed ? "max-w-none h-auto min-w-full" : "max-w-full max-h-full object-contain"
+                                            isZoomed ? "w-full h-auto min-h-full object-contain" : "max-w-full max-h-full object-contain"
                                         )}
                                         onClick={() => setIsZoomed(!isZoomed)}
                                         style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
@@ -185,7 +185,7 @@ export default function Library() {
                             )}
                         </div>
 
-                        {/* Mobile Zoom FAB (Floating Action Button) */}
+                        {/* Mobile Zoom FAB */}
                         {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
                             <button
                                 onClick={() => setIsZoomed(!isZoomed)}
