@@ -13,12 +13,12 @@ export function useWeeks() {
             try {
                 // If no keys or placeholder, fallback to mock
                 if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
-                    console.log('Using Mock Data (No Supabase Keys)');
                     setWeeks(MOCK_COURSE.weeks);
                     setLoading(false);
                     return;
                 }
 
+                // Fetch Weeks
                 const { data, error } = await supabase
                     .from('weeks')
                     .select(`
@@ -29,6 +29,13 @@ export function useWeeks() {
                     .order('order_index', { ascending: true });
 
                 if (error) throw error;
+
+                // Fetch User Progress
+                const { data: progressData } = await supabase
+                    .from('user_progress')
+                    .select('day_id');
+
+                const completedDayIds = new Set(progressData?.map((p: any) => p.day_id));
 
                 if (data) {
                     // Transform data
@@ -46,7 +53,8 @@ export function useWeeks() {
                             videoUrl: d.video_url,
                             rutubeUrl: d.rutube_url,
                             date: d.date,
-                            materials: [] // Fetched separately if needed, or we can fetch all materials and filter
+                            isCompleted: completedDayIds.has(d.id),
+                            materials: []
                         })),
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         weekMaterials: w.materials.filter((m: any) => m.week_id === w.id && !m.day_id).map((m: any) => ({
@@ -61,7 +69,6 @@ export function useWeeks() {
             } catch (err) {
                 console.error(err);
                 setError('Failed to fetch weeks');
-                // Fallback to mock for demo purposes if DB fails (e.g. empty DB)
                 setWeeks(MOCK_COURSE.weeks);
             } finally {
                 setLoading(false);
@@ -78,64 +85,91 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
     const [day, setDay] = useState<Day | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        async function fetchDay() {
-            if (!weekId || !dayId) return;
+    const fetchDay = async () => {
+        if (!weekId || !dayId) return;
 
-            if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
-                const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
-                const d = w?.days.find(d => d.id === dayId);
-                setDay(d || null);
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const { data: dayData, error: dayError } = await supabase
-                    .from('days')
-                    .select('*')
-                    .eq('id', dayId)
-                    .single();
-
-                if (dayError) throw dayError;
-
-                const { data: matData, error: matError } = await supabase
-                    .from('materials')
-                    .select('*')
-                    .eq('day_id', dayId);
-
-                if (matError) throw matError;
-
-                if (dayData) {
-                    setDay({
-                        id: dayData.id,
-                        title: dayData.title,
-                        description: dayData.description,
-                        videoUrl: dayData.video_url,
-                        rutubeUrl: dayData.rutube_url,
-                        date: dayData.date,
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        materials: (matData || []).map((m: any) => ({
-                            id: m.id,
-                            title: m.title,
-                            type: m.type,
-                            url: m.url
-                        }))
-                    });
-                }
-            } catch (err) {
-                console.error(err);
-                // Fallback
-                const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
-                const d = w?.days.find(d => d.id === dayId);
-                setDay(d || null);
-            } finally {
-                setLoading(false);
-            }
+        if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
+            const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
+            const d = w?.days.find(d => d.id === dayId);
+            setDay(d || null);
+            setLoading(false);
+            return;
         }
 
+        try {
+            const { data: dayData, error: dayError } = await supabase
+                .from('days')
+                .select('*')
+                .eq('id', dayId)
+                .single();
+
+            if (dayError) throw dayError;
+
+            const { data: matData, error: matError } = await supabase
+                .from('materials')
+                .select('*')
+                .eq('day_id', dayId);
+
+            if (matError) throw matError;
+
+            // Check completion
+            const { data: progressData } = await supabase
+                .from('user_progress')
+                .select('id')
+                .eq('day_id', dayId)
+                .single();
+
+            const isCompleted = !!progressData;
+
+            if (dayData) {
+                setDay({
+                    id: dayData.id,
+                    title: dayData.title,
+                    description: dayData.description,
+                    videoUrl: dayData.video_url,
+                    rutubeUrl: dayData.rutube_url,
+                    date: dayData.date,
+                    isCompleted,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    materials: (matData || []).map((m: any) => ({
+                        id: m.id,
+                        title: m.title,
+                        type: m.type,
+                        url: m.url
+                    }))
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
+            const d = w?.days.find(d => d.id === dayId);
+            setDay(d || null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchDay();
     }, [weekId, dayId]);
 
-    return { day, loading };
+    const toggleComplete = async (completed: boolean) => {
+        if (!dayId) return;
+
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            if (completed) {
+                await supabase.from('user_progress').upsert({ user_id: user.id, day_id: dayId });
+            } else {
+                await supabase.from('user_progress').delete().match({ user_id: user.id, day_id: dayId });
+            }
+            fetchDay(); // Refresh state
+        } catch (error) {
+            console.error('Error toggling complete:', error);
+        }
+    };
+
+    return { day, loading, toggleComplete };
 }

@@ -178,3 +178,34 @@ create policy "Enable delete for all users" on materials for delete using (true)
 create policy "Enable insert for all users" on live_streams for insert with check (true);
 create policy "Enable update for all users" on live_streams for update using (true);
 create policy "Enable delete for all users" on live_streams for delete using (true);
+
+-- Create user_progress table
+create table if not exists public.user_progress (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  day_id uuid references days(id) on delete cascade not null,
+  completed_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(user_id, day_id)
+);
+
+-- RLS Policies for user_progress
+alter table public.user_progress enable row level security;
+
+-- Drop existing policies if they exist
+drop policy if exists "Users can view their own progress" on public.user_progress;
+drop policy if exists "Users can insert their own progress" on public.user_progress;
+drop policy if exists "Users can update their own progress" on public.user_progress;
+drop policy if exists "Users can delete their own progress" on public.user_progress;
+
+create policy "Users can view their own progress"
+  on public.user_progress for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own progress"
+  on public.user_progress for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete their own progress"
+  on public.user_progress for delete
+  using (auth.uid() = user_id);

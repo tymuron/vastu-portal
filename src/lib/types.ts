@@ -26,6 +26,7 @@ export interface Day {
     videoUrl?: string; // YouTube
     rutubeUrl?: string; // Rutube
     date?: string; // ISO Date
+    isCompleted?: boolean;
 }
 
 export interface Week {

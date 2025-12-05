@@ -123,13 +123,26 @@ export default function StudentDashboard() {
 
                             <div className="bg-vastu-gold/10 rounded-xl p-6 border border-vastu-gold/20">
                                 <h4 className="font-serif text-lg text-vastu-dark mb-2">Прогресс</h4>
-                                <div className="flex items-end gap-2 mb-2">
-                                    <span className="text-3xl font-bold text-vastu-gold">0%</span>
-                                    <span className="text-sm text-vastu-text-light mb-1.5">завершено</span>
-                                </div>
-                                <div className="h-2 bg-white rounded-full overflow-hidden">
-                                    <div className="h-full bg-vastu-gold w-0" />
-                                </div>
+                                {(() => {
+                                    const totalDays = activeWeek.days.length;
+                                    const completedDays = activeWeek.days.filter(d => d.isCompleted).length;
+                                    const percentage = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+
+                                    return (
+                                        <>
+                                            <div className="flex items-end gap-2 mb-2">
+                                                <span className="text-3xl font-bold text-vastu-gold">{percentage}%</span>
+                                                <span className="text-sm text-vastu-text-light mb-1.5">завершено</span>
+                                            </div>
+                                            <div className="h-2 bg-white rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-vastu-gold transition-all duration-1000 ease-out"
+                                                    style={{ width: `${percentage}%` }}
+                                                />
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
