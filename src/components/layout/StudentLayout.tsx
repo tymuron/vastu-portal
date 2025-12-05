@@ -95,12 +95,12 @@ export default function StudentLayout() {
                                                             : "text-vastu-light/60 hover:text-vastu-light hover:bg-white/5"
                                                 )}
                                             >
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-start gap-3 flex-1 min-w-0">
                                                     <div className={cn(
-                                                        "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors",
+                                                        "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors mt-1.5",
                                                         isWeekActive ? "bg-vastu-gold" : "bg-white/20"
                                                     )} />
-                                                    <span className="truncate">{week.title}</span>
+                                                    <span className="whitespace-normal leading-tight">{week.title}</span>
                                                 </div>
                                                 {week.isLocked && <Lock size={12} className="opacity-50" />}
                                             </button>
@@ -189,7 +189,7 @@ export default function StudentLayout() {
                                                     : "text-vastu-light/70"
                                         )}
                                     >
-                                        <span>{week.title}</span>
+                                        <span className="whitespace-normal leading-tight">{week.title}</span>
                                         {week.isLocked && <Lock size={12} />}
                                     </button>
                                 ))}
