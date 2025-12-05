@@ -63,7 +63,7 @@ export interface StreamComment {
     created_at: string;
 }
 
-export type LibraryCategory = 'checklist' | 'guide';
+export type LibraryCategory = 'checklist' | 'guide' | 'template' | 'book';
 
 export interface LibraryItem {
     id: string;
@@ -71,5 +71,6 @@ export interface LibraryItem {
     category: LibraryCategory;
     file_url: string;
     description?: string;
-    created_at?: string;
+    created_at: string;
+    file_type?: string;
 }

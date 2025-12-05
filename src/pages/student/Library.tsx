@@ -1,47 +1,52 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem, LibraryCategory } from '../../lib/types';
-import { Download, CheckSquare, BookOpen, FileText, Eye, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Download, CheckSquare, BookOpen, FileText, Eye } from 'lucide-react';
 import { cn, downloadFile } from '../../lib/utils';
 
 export default function Library() {
+    const [activeCategory, setActiveCategory] = useState<LibraryCategory | 'all'>('all');
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
-    const [previewFile, setPreviewFile] = useState<LibraryItem | null>(null);
-    const [isZoomed, setIsZoomed] = useState(true);
 
     useEffect(() => {
         fetchLibrary();
     }, []);
 
-    async function fetchLibrary() {
+    const fetchLibrary = async () => {
         try {
             const { data, error } = await supabase
                 .from('library_items')
                 .select('*')
-                .order('title');
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
-
-            if (data) {
-                setItems(data);
-            }
+            setItems(data || []);
         } catch (error) {
             console.error('Error fetching library:', error);
         } finally {
             setLoading(false);
         }
-    }
+    };
 
-    const filteredItems = items.filter(item =>
-        item.category === 'checklist' || item.category === 'guide'
-    );
+    const categories: { id: LibraryCategory | 'all'; label: string }[] = [
+        { id: 'all', label: 'Все материалы' },
+        { id: 'checklist', label: 'Чек-листы' },
+        { id: 'guide', label: 'Гайды' },
+        { id: 'template', label: 'Шаблоны' },
+        { id: 'book', label: 'Книги' },
+    ];
+
+    const filteredItems = activeCategory === 'all'
+        ? items
+        : items.filter(item => item.category === activeCategory);
 
     const getIcon = (category: LibraryCategory) => {
         switch (category) {
-            case 'checklist': return <CheckSquare className="w-6 h-6" />;
-            case 'guide': return <BookOpen className="w-6 h-6" />;
-            default: return <FileText className="w-6 h-6" />;
+            case 'checklist': return <CheckSquare className="w-5 h-5" />;
+            case 'guide': return <FileText className="w-5 h-5" />;
+            case 'book': return <BookOpen className="w-5 h-5" />;
+            default: return <FileText className="w-5 h-5" />;
         }
     };
 
@@ -50,158 +55,79 @@ export default function Library() {
         await downloadFile(item.file_url, item.title);
     };
 
-    const handleOpenInNewTab = (e: React.MouseEvent, url: string) => {
-        e.stopPropagation();
-        window.open(url, '_blank');
-    };
-
-    if (loading) return <div className="p-8 text-center">Загрузка библиотеки...</div>;
-
     return (
         <div className="space-y-8 animate-fade-in">
             {/* Header */}
             <div>
-                <h1 className="text-3xl font-serif text-[#422326] mb-2">Библиотека Материалов</h1>
-                <p className="text-gray-600">Полезные чек-листы и гайды для обучения.</p>
+                <h1 className="font-serif text-3xl text-[#422326] mb-2">Библиотека Материалов</h1>
+                <p className="text-gray-600">Полезные материалы для вашего обучения</p>
             </div>
 
-            {/* Content Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredItems.map((item) => {
-                    const isPdf = item.file_url.toLowerCase().endsWith('.pdf');
-                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(item.file_url);
-                    const isPreviewable = isPdf || isImage;
+            {/* Categories */}
+            <div className="flex flex-wrap gap-2">
+                {categories.map((category) => (
+                    <button
+                        key={category.id}
+                        onClick={() => setActiveCategory(category.id)}
+                        className={cn(
+                            "px-4 py-2 rounded-full text-sm transition-all duration-300",
+                            activeCategory === category.id
+                                ? "bg-[#422326] text-white shadow-md transform scale-105"
+                                : "bg-white text-gray-600 hover:bg-[#F4F2ED]"
+                        )}
+                    >
+                        {category.label}
+                    </button>
+                ))}
+            </div>
 
-                    return (
+            {/* Grid */}
+            {loading ? (
+                <div className="flex justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#422326]"></div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredItems.map((item) => (
                         <div
                             key={item.id}
-                            onClick={() => isPreviewable && setPreviewFile(item)}
-                            className={cn(
-                                "bg-white rounded-xl p-6 shadow-sm border border-[#E5E7EB] transition-all group relative",
-                                isPreviewable ? "cursor-pointer hover:shadow-md hover:border-[#422326]/30" : ""
-                            )}
+                            className="group bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 flex flex-col"
                         >
                             <div className="flex items-start justify-between mb-4">
-                                <div className="w-12 h-12 rounded-lg bg-[#F4F2ED] flex items-center justify-center text-[#422326] group-hover:bg-[#422326] group-hover:text-white transition-colors">
+                                <div className="p-3 bg-[#F4F2ED] rounded-lg text-[#422326] group-hover:scale-110 transition-transform duration-300">
                                     {getIcon(item.category)}
                                 </div>
-                                <button
-                                    onClick={(e) => handleOpenInNewTab(e, item.file_url)}
-                                    className="p-2 text-gray-400 hover:text-[#422326] hover:bg-gray-100 rounded-full transition-colors"
-                                    title="Открыть в новой вкладке"
-                                >
-                                    <Eye className="w-5 h-5" />
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => window.open(item.file_url, '_blank')}
+                                        className="p-2 text-gray-400 hover:text-[#422326] hover:bg-[#F4F2ED] rounded-lg transition-all duration-300"
+                                        title="Открыть"
+                                    >
+                                        <Eye className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => handleDownload(e, item)}
+                                        className="p-2 text-gray-400 hover:text-[#422326] hover:bg-[#F4F2ED] rounded-lg transition-all duration-300"
+                                        title="Скачать"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
 
-                            <h3 className="font-serif text-lg text-[#422326] mb-2 leading-tight group-hover:text-[#422326] transition-colors">
+                            <h3 className="font-serif text-lg text-[#422326] mb-2 group-hover:text-[#CABC90] transition-colors">
                                 {item.title}
                             </h3>
+                            <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1">
+                                {item.description}
+                            </p>
 
-                            {item.description && (
-                                <p className="text-sm text-gray-500 mb-4 line-clamp-2">
-                                    {item.description}
-                                </p>
-                            )}
-
-                            <div className="flex items-center text-xs text-gray-400 mt-auto pt-2">
-                                <span className="uppercase tracking-wider font-medium">{item.category === 'checklist' ? 'Чек-лист' : 'Гайд'}</span>
-                                {isPreviewable && <span className="mx-2">•</span>}
-                                {isPreviewable && <span>Нажмите для просмотра</span>}
+                            <div className="pt-4 border-t border-gray-50 flex items-center justify-between text-xs text-gray-400">
+                                <span>{new Date(item.created_at).toLocaleDateString('ru-RU')}</span>
+                                <span className="uppercase tracking-wider">{item.file_type}</span>
                             </div>
                         </div>
-                    );
-                })}
-            </div>
-
-            {filteredItems.length === 0 && (
-                <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                    <p className="text-gray-500">В библиотеке пока нет материалов.</p>
-                </div>
-            )}
-
-            {/* Preview Modal */}
-            {previewFile && (
-                <div className="fixed inset-0 bg-black/90 z-50 md:flex md:items-center md:justify-center md:p-8 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white w-full h-full md:rounded-xl md:w-auto md:h-auto md:max-w-[90vw] md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
-
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10 w-full">
-                            <h3 className="font-serif text-lg text-[#422326] truncate pr-4 max-w-[200px] md:max-w-md">{previewFile.title}</h3>
-                            <div className="flex items-center gap-2">
-                                {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
-                                    <button
-                                        onClick={() => setIsZoomed(!isZoomed)}
-                                        className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors hidden md:flex items-center gap-2"
-                                        title={isZoomed ? "Уменьшить" : "Увеличить"}
-                                    >
-                                        {isZoomed ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-                                        <span className="text-sm font-medium">{isZoomed ? "Уменьшить" : "Увеличить"}</span>
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => window.open(previewFile.file_url, '_blank')}
-                                    className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
-                                    title="Открыть в новой вкладке"
-                                >
-                                    <Eye className="w-5 h-5" />
-                                </button>
-                                <button
-                                    onClick={(e) => handleDownload(e, previewFile)}
-                                    className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
-                                    title="Скачать"
-                                >
-                                    <Download className="w-5 h-5" />
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setPreviewFile(null);
-                                        setIsZoomed(true);
-                                    }}
-                                    className="p-2 text-gray-600 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
-                                >
-                                    <X className="w-6 h-6" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Modal Content */}
-                        <div className="flex-1 md:flex-none bg-gray-100 overflow-hidden relative flex flex-col">
-                            {previewFile.file_url.toLowerCase().endsWith('.pdf') ? (
-                                <iframe
-                                    src={previewFile.file_url}
-                                    className="w-full h-full md:w-[80vw] md:h-[80vh]"
-                                    title={previewFile.title}
-                                />
-                            ) : (
-                                <div className={cn(
-                                    "flex-1 md:flex-none overflow-auto bg-gray-100",
-                                    isZoomed ? "block" : "flex items-center justify-center p-4"
-                                )}>
-                                    <img
-                                        src={previewFile.file_url}
-                                        alt={previewFile.title}
-                                        className={cn(
-                                            "shadow-lg transition-all duration-300",
-                                            isZoomed ? "w-full h-auto min-h-full md:w-auto md:h-auto md:max-w-[85vw] md:max-h-[80vh] object-contain" : "max-w-full max-h-[80vh] object-contain w-auto h-auto"
-                                        )}
-                                        onClick={() => setIsZoomed(!isZoomed)}
-                                        style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
-                                    />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Mobile Zoom FAB */}
-                        {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
-                            <button
-                                onClick={() => setIsZoomed(!isZoomed)}
-                                className="md:hidden absolute bottom-6 right-6 w-12 h-12 bg-[#422326] text-white rounded-full shadow-lg flex items-center justify-center z-20 hover:bg-[#2b1618] transition-colors"
-                            >
-                                {isZoomed ? <Minimize2 className="w-6 h-6" /> : <Maximize2 className="w-6 h-6" />}
-                            </button>
-                        )}
-                    </div>
+                    ))}
                 </div>
             )}
         </div>
