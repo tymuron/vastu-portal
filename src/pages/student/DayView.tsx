@@ -116,7 +116,7 @@ export default function DayView() {
 
                     <div>
                         <h1 className="text-3xl font-serif text-vastu-dark mb-4">{day.title}</h1>
-                        <p className="text-vastu-text-light leading-relaxed text-lg font-light">
+                        <p className="text-vastu-text-light leading-relaxed text-base font-light">
                             {day.description}
                         </p>
                     </div>
