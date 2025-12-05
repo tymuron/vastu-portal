@@ -172,7 +172,7 @@ export default function DayView() {
                                                 >
                                                     <div className="text-left">
                                                         <div className={`text-xs ${nextWeek.isLocked ? 'text-gray-400' : 'text-vastu-dark/70'}`}>Следующая неделя</div>
-                                                        <div className="font-medium line-clamp-1">Перейти к Неделе {weeks.findIndex(w => w.id === week.id) + 2}</div>
+                                                        <div className="font-medium line-clamp-1">{nextWeek.title}</div>
                                                     </div>
                                                     <ChevronRight size={16} />
                                                 </Link>

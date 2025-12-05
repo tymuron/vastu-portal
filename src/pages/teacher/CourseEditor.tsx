@@ -226,7 +226,16 @@ const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void
     );
 };
 
-const WeekEditor = ({ week, onDelete, onUpdate, onAddDay }: { week: Week, onDelete: () => void, onUpdate: () => void, onAddDay: () => void }) => {
+const WeekEditor = ({ week, onDelete, onUpdate, onAddDay, onMoveUp, onMoveDown, isFirst, isLast }: {
+    week: Week,
+    onDelete: () => void,
+    onUpdate: () => void,
+    onAddDay: () => void,
+    onMoveUp: () => void,
+    onMoveDown: () => void,
+    isFirst: boolean,
+    isLast: boolean
+}) => {
     const [expanded, setExpanded] = useState(false);
     const [localWeek, setLocalWeek] = useState(week);
     const [saving, setSaving] = useState(false);
@@ -308,6 +317,12 @@ const WeekEditor = ({ week, onDelete, onUpdate, onAddDay }: { week: Week, onDele
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button onClick={onMoveUp} disabled={isFirst} className="p-2 text-gray-400 hover:text-vastu-dark disabled:opacity-30 disabled:hover:text-gray-400">
+                        ↑
+                    </button>
+                    <button onClick={onMoveDown} disabled={isLast} className="p-2 text-gray-400 hover:text-vastu-dark disabled:opacity-30 disabled:hover:text-gray-400">
+                        ↓
+                    </button>
                     <input
                         type="date"
                         className="text-sm border rounded px-2 py-1 bg-white"
@@ -506,13 +521,35 @@ export default function CourseEditor() {
             </div>
 
             <div className="space-y-4">
-                {weeks.map((week) => (
+                {weeks.map((week, index) => (
                     <WeekEditor
                         key={week.id}
                         week={week}
                         onDelete={() => handleDeleteWeek(week.id)}
                         onUpdate={fetchWeeks}
                         onAddDay={() => handleAddDay(week.id)}
+                        onMoveUp={() => {
+                            if (index > 0) {
+                                const prevWeek = weeks[index - 1];
+                                const currentWeek = weeks[index];
+                                supabase.from('weeks').upsert([
+                                    { id: currentWeek.id, order_index: prevWeek.order_index },
+                                    { id: prevWeek.id, order_index: currentWeek.order_index }
+                                ]).then(() => fetchWeeks());
+                            }
+                        }}
+                        onMoveDown={() => {
+                            if (index < weeks.length - 1) {
+                                const nextWeek = weeks[index + 1];
+                                const currentWeek = weeks[index];
+                                supabase.from('weeks').upsert([
+                                    { id: currentWeek.id, order_index: nextWeek.order_index },
+                                    { id: nextWeek.id, order_index: currentWeek.order_index }
+                                ]).then(() => fetchWeeks());
+                            }
+                        }}
+                        isFirst={index === 0}
+                        isLast={index === weeks.length - 1}
                     />
                 ))}
             </div>

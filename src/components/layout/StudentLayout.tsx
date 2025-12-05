@@ -75,7 +75,7 @@ export default function StudentLayout() {
                                 {weeksLoading ? (
                                     <div className="px-4 py-2 text-xs text-white/30">Загрузка...</div>
                                 ) : (
-                                    weeks.map((week, index) => {
+                                    weeks.map((week) => {
                                         const isWeekActive = activeWeekId === week.id && location.pathname === '/student';
                                         return (
                                             <button
@@ -96,13 +96,11 @@ export default function StudentLayout() {
                                                 )}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <span className={cn(
-                                                        "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border",
-                                                        isWeekActive ? "border-vastu-gold text-vastu-gold" : "border-white/20 text-white/40"
-                                                    )}>
-                                                        {index + 1}
-                                                    </span>
-                                                    <span className="truncate max-w-[120px]">{week.title.split('. ')[1] || week.title}</span>
+                                                    <div className={cn(
+                                                        "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors",
+                                                        isWeekActive ? "bg-vastu-gold" : "bg-white/20"
+                                                    )} />
+                                                    <span className="truncate">{week.title}</span>
                                                 </div>
                                                 {week.isLocked && <Lock size={12} className="opacity-50" />}
                                             </button>
@@ -172,7 +170,7 @@ export default function StudentLayout() {
                             {/* Mobile Weeks */}
                             <div className="mb-4">
                                 <div className="text-xs uppercase tracking-widest text-white/40 mb-2 px-4">Мой Курс</div>
-                                {weeks.map((week, index) => (
+                                {weeks.map((week) => (
                                     <button
                                         key={week.id}
                                         onClick={() => {
@@ -191,7 +189,7 @@ export default function StudentLayout() {
                                                     : "text-vastu-light/70"
                                         )}
                                     >
-                                        <span>Неделя {index + 1}</span>
+                                        <span>{week.title}</span>
                                         {week.isLocked && <Lock size={12} />}
                                     </button>
                                 ))}
