@@ -19,6 +19,7 @@ interface Day {
     order_index: number;
     description?: string;
     video_url?: string;
+    rutube_url?: string;
     date?: string;
     materials?: Material[];
 }
@@ -66,6 +67,7 @@ export default function CourseEditor() {
                         title: day.title,
                         description: day.description,
                         video_url: day.video_url,
+                        rutube_url: day.rutube_url,
                         date: day.date,
                         order_index: day.order_index,
                         materials: day.materials || []
@@ -297,16 +299,30 @@ export default function CourseEditor() {
 
                                                         {/* Video URL */}
                                                         <div>
-                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Основное Видео</label>
-                                                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold">
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Основное Видео (YouTube)</label>
+                                                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold mb-2">
                                                                 <Video size={16} className="text-gray-400" />
                                                                 <input
                                                                     type="text"
-                                                                    placeholder="Ссылка на видео (Vimeo/YouTube)"
+                                                                    placeholder="Ссылка на YouTube..."
                                                                     defaultValue={day.video_url || ''}
                                                                     className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none"
                                                                     onBlur={(e) => {
                                                                         supabase.from('days').update({ video_url: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
+                                                                    }}
+                                                                />
+                                                            </div>
+
+                                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Rutube Видео (Опционально)</label>
+                                                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold">
+                                                                <Video size={16} className="text-[#00A551]" />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Ссылка на Rutube..."
+                                                                    defaultValue={day.rutube_url || ''}
+                                                                    className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none"
+                                                                    onBlur={(e) => {
+                                                                        supabase.from('days').update({ rutube_url: e.target.value }).eq('id', day.id).then(() => fetchWeeks());
                                                                     }}
                                                                 />
                                                             </div>
