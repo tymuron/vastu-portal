@@ -123,11 +123,11 @@ export default function Library() {
             {/* Preview Modal */}
             {previewFile && (
                 <div className="fixed inset-0 bg-black/90 z-50 md:flex md:items-center md:justify-center md:p-8 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white w-full h-full md:rounded-xl md:w-[90vw] md:h-[85vh] md:max-w-6xl flex flex-col overflow-hidden shadow-2xl relative">
+                    <div className="bg-white w-full h-full md:rounded-xl md:w-auto md:h-auto md:max-w-[90vw] md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
 
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10">
-                            <h3 className="font-serif text-lg text-[#422326] truncate pr-4 max-w-[60%] md:max-w-none">{previewFile.title}</h3>
+                        <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10 w-full">
+                            <h3 className="font-serif text-lg text-[#422326] truncate pr-4 max-w-[200px] md:max-w-md">{previewFile.title}</h3>
                             <div className="flex items-center gap-2">
                                 {!previewFile.file_url.toLowerCase().endsWith('.pdf') && (
                                     <button
@@ -166,16 +166,16 @@ export default function Library() {
                         </div>
 
                         {/* Modal Content */}
-                        <div className="flex-1 bg-gray-100 overflow-hidden relative flex flex-col">
+                        <div className="flex-1 bg-gray-100 overflow-hidden relative flex flex-col md:min-w-[50vw] md:min-h-[300px]">
                             {previewFile.file_url.toLowerCase().endsWith('.pdf') ? (
                                 <iframe
                                     src={previewFile.file_url}
-                                    className="w-full h-full"
+                                    className="w-full h-full md:h-[80vh]"
                                     title={previewFile.title}
                                 />
                             ) : (
                                 <div className={cn(
-                                    "flex-1 overflow-auto",
+                                    "flex-1 overflow-auto bg-gray-100",
                                     isZoomed ? "block" : "flex items-center justify-center p-4"
                                 )}>
                                     <img
@@ -183,7 +183,7 @@ export default function Library() {
                                         alt={previewFile.title}
                                         className={cn(
                                             "shadow-lg transition-all duration-300",
-                                            isZoomed ? "w-full h-auto min-h-full object-contain" : "max-w-full max-h-full object-contain"
+                                            isZoomed ? "w-full h-auto min-h-full object-contain" : "max-w-full max-h-[80vh] object-contain w-auto h-auto"
                                         )}
                                         onClick={() => setIsZoomed(!isZoomed)}
                                         style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
