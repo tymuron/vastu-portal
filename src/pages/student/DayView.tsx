@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
+import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube, CheckCircle, Circle } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
 
@@ -74,7 +74,7 @@ export default function DayView() {
 
     // We need weeks to find prev/next day
     const { weeks } = useWeeks();
-    const { day, loading } = useDay(weekId, dayId);
+    const { day, loading, toggleComplete } = useDay(weekId, dayId);
 
     const week = weeks.find(w => w.id === weekId);
 
@@ -127,6 +127,27 @@ export default function DayView() {
                     {/* Navigation Card */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <h3 className="font-serif text-lg mb-4 text-vastu-dark">Навигация</h3>
+
+                        <button
+                            onClick={() => toggleComplete(!day.isCompleted)}
+                            className={`w-full mb-4 py-3 rounded-xl flex items-center justify-center gap-2 font-medium transition-all ${day.isCompleted
+                                ? 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'
+                                : 'bg-vastu-dark text-white hover:bg-vastu-dark/90 shadow-md'
+                                }`}
+                        >
+                            {day.isCompleted ? (
+                                <>
+                                    <CheckCircle size={20} />
+                                    Урок пройден
+                                </>
+                            ) : (
+                                <>
+                                    <Circle size={20} />
+                                    Отметить пройденным
+                                </>
+                            )}
+                        </button>
+
                         <div className="space-y-3">
                             {prevDay && (
                                 <Link
