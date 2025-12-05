@@ -10,9 +10,17 @@ export function getVideoEmbedUrl(url: string): string {
 
     // Rutube
     // https://rutube.ru/video/c87.../
+    // https://rutube.ru/video/c87...?playlist=...
     if (url.includes('rutube.ru/video/')) {
-        const id = url.split('rutube.ru/video/')[1]?.split('/')[0];
-        if (id) return `https://rutube.ru/play/embed/${id}`;
+        const idMatch = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
+        if (idMatch && idMatch[1]) {
+            return `https://rutube.ru/play/embed/${idMatch[1]}`;
+        }
+    }
+
+    // Handle Rutube embed URLs directly
+    if (url.includes('rutube.ru/play/embed/')) {
+        return url;
     }
 
     // YouTube

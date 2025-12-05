@@ -37,7 +37,8 @@ create table if not exists library_items (
 );
 
 -- Create storage buckets if they don't exist
-insert into storage.buckets (id, name)
+-- Create storage buckets if they don't exist
+insert into storage.buckets (id, name, public)
 values ('library', 'library', false), ('avatars', 'avatars', true)
 on conflict (id) do update set public = excluded.public;
 
@@ -67,3 +68,79 @@ create policy "Avatar images are publicly accessible"
 create policy "Anyone can upload an avatar"
   on storage.objects for insert
   with check ( bucket_id = 'avatars' );
+
+-- Create weeks table
+create table if not exists weeks (
+  id uuid default uuid_generate_v4() primary key,
+  title text not null,
+  description text,
+  available_from timestamp with time zone,
+  order_index integer,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create materials table
+create table if not exists materials (
+  id uuid default uuid_generate_v4() primary key,
+  week_id uuid references weeks(id),
+  day_id uuid references days(id),
+  title text not null,
+  type text not null,
+  url text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Add rutube_url to days if it doesn't exist (safe migration)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name = 'days' and column_name = 'rutube_url') then
+    alter table days add column rutube_url text;
+  end if;
+end $$;
+
+-- Enable RLS for all tables
+alter table weeks enable row level security;
+alter table days enable row level security;
+alter table materials enable row level security;
+
+-- Drop permissive policies if they exist (to avoid errors on re-run)
+drop policy if exists "Enable read access for all users" on weeks;
+drop policy if exists "Enable insert for all users" on weeks;
+drop policy if exists "Enable update for all users" on weeks;
+drop policy if exists "Enable delete for all users" on weeks;
+
+drop policy if exists "Enable read access for all users" on days;
+drop policy if exists "Enable insert for all users" on days;
+drop policy if exists "Enable update for all users" on days;
+drop policy if exists "Enable delete for all users" on days;
+
+drop policy if exists "Enable read access for all users" on materials;
+drop policy if exists "Enable insert for all users" on materials;
+drop policy if exists "Enable update for all users" on materials;
+drop policy if exists "Enable delete for all users" on materials;
+
+drop policy if exists "Enable insert for all users" on live_streams;
+drop policy if exists "Enable update for all users" on live_streams;
+drop policy if exists "Enable delete for all users" on live_streams;
+
+-- Create permissive policies for development (Teacher App)
+-- In production, you should restrict write access to 'authenticated' users with 'teacher' role
+create policy "Enable read access for all users" on weeks for select using (true);
+create policy "Enable insert for all users" on weeks for insert with check (true);
+create policy "Enable update for all users" on weeks for update using (true);
+create policy "Enable delete for all users" on weeks for delete using (true);
+
+create policy "Enable read access for all users" on days for select using (true);
+create policy "Enable insert for all users" on days for insert with check (true);
+create policy "Enable update for all users" on days for update using (true);
+create policy "Enable delete for all users" on days for delete using (true);
+
+create policy "Enable read access for all users" on materials for select using (true);
+create policy "Enable insert for all users" on materials for insert with check (true);
+create policy "Enable update for all users" on materials for update using (true);
+create policy "Enable delete for all users" on materials for delete using (true);
+
+-- Update live_streams policies to allow editing
+create policy "Enable insert for all users" on live_streams for insert with check (true);
+create policy "Enable update for all users" on live_streams for update using (true);
+create policy "Enable delete for all users" on live_streams for delete using (true);
