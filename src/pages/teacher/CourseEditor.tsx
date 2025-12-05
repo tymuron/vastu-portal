@@ -528,24 +528,36 @@ export default function CourseEditor() {
                         onDelete={() => handleDeleteWeek(week.id)}
                         onUpdate={fetchWeeks}
                         onAddDay={() => handleAddDay(week.id)}
-                        onMoveUp={() => {
+                        onMoveUp={async () => {
                             if (index > 0) {
                                 const prevWeek = weeks[index - 1];
                                 const currentWeek = weeks[index];
-                                supabase.from('weeks').upsert([
-                                    { id: currentWeek.id, order_index: prevWeek.order_index },
-                                    { id: prevWeek.id, order_index: currentWeek.order_index }
-                                ]).then(() => fetchWeeks());
+
+                                // Swap order_index
+                                const { error: error1 } = await supabase.from('weeks').update({ order_index: prevWeek.order_index }).eq('id', currentWeek.id);
+                                const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', prevWeek.id);
+
+                                if (error1 || error2) {
+                                    alert('Ошибка при перемещении');
+                                    console.error(error1, error2);
+                                }
+                                fetchWeeks();
                             }
                         }}
-                        onMoveDown={() => {
+                        onMoveDown={async () => {
                             if (index < weeks.length - 1) {
                                 const nextWeek = weeks[index + 1];
                                 const currentWeek = weeks[index];
-                                supabase.from('weeks').upsert([
-                                    { id: currentWeek.id, order_index: nextWeek.order_index },
-                                    { id: nextWeek.id, order_index: currentWeek.order_index }
-                                ]).then(() => fetchWeeks());
+
+                                // Swap order_index
+                                const { error: error1 } = await supabase.from('weeks').update({ order_index: nextWeek.order_index }).eq('id', currentWeek.id);
+                                const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', nextWeek.id);
+
+                                if (error1 || error2) {
+                                    alert('Ошибка при перемещении');
+                                    console.error(error1, error2);
+                                }
+                                fetchWeeks();
                             }
                         }}
                         isFirst={index === 0}
