@@ -42,11 +42,16 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values 
   ('library', 'library', false, 52428800, null), -- 50MB
   ('avatars', 'avatars', true, 5242880, ARRAY['image/*']), -- 5MB
-  ('course-content', 'course-content', true, 1073741824, null) -- 1GB
+  ('course-content', 'course-content', true, 53687091200, null) -- 50GB
 on conflict (id) do update set 
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
+
+-- Force update course-content limit just in case
+update storage.buckets
+set file_size_limit = 53687091200 -- 50GB
+where id = 'course-content';
 
 -- Set up RLS (Row Level Security)
 alter table live_streams enable row level security;
