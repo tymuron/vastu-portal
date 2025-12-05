@@ -1,7 +1,74 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
-import { getVideoEmbedUrl } from '../../lib/utils';
+import { getVideoEmbedUrl, cn } from '../../lib/utils';
+
+// Helper component for dual video player (reused logic)
+const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, rutubeUrl?: string, title: string }) => {
+    const [activeSource, setActiveSource] = useState<'youtube' | 'rutube'>(youtubeUrl ? 'youtube' : 'rutube');
+
+    // If only one source exists, force that source
+    useEffect(() => {
+        if (youtubeUrl && !rutubeUrl) setActiveSource('youtube');
+        if (!youtubeUrl && rutubeUrl) setActiveSource('rutube');
+    }, [youtubeUrl, rutubeUrl]);
+
+    const currentUrl = activeSource === 'youtube' ? youtubeUrl : rutubeUrl;
+
+    return (
+        <div className="space-y-4">
+            {/* Source Switcher */}
+            {(youtubeUrl && rutubeUrl) && (
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit">
+                    <button
+                        onClick={() => setActiveSource('youtube')}
+                        className={cn(
+                            "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                            activeSource === 'youtube'
+                                ? "bg-white text-red-600 shadow-sm"
+                                : "text-gray-500 hover:text-gray-700"
+                        )}
+                    >
+                        <Youtube size={16} />
+                        YouTube
+                    </button>
+                    <button
+                        onClick={() => setActiveSource('rutube')}
+                        className={cn(
+                            "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
+                            activeSource === 'rutube'
+                                ? "bg-white text-[#00A551] shadow-sm" // Rutube green color
+                                : "text-gray-500 hover:text-gray-700"
+                        )}
+                    >
+                        <Video size={16} />
+                        Rutube
+                    </button>
+                </div>
+            )}
+
+            {/* Player */}
+            <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
+                {currentUrl ? (
+                    <iframe
+                        src={getVideoEmbedUrl(currentUrl)}
+                        className="w-full h-full"
+                        title={title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    />
+                ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-white/50">
+                        <Video size={48} />
+                        <span className="ml-2">Видео недоступно</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 export default function DayView() {
     const { weekId, dayId } = useParams();
 
@@ -40,23 +107,12 @@ export default function DayView() {
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Main Content (Video + Info) */}
                 <div className="lg:col-span-2 space-y-8">
-                    {/* Video Player Placeholder */}
-                    <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
-                        {day.videoUrl ? (
-                            <iframe
-                                src={getVideoEmbedUrl(day.videoUrl)}
-                                className="w-full h-full"
-                                title={day.title}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                            />
-                        ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-white/50">
-                                <Video size={48} />
-                                <span className="ml-2">Видео недоступно</span>
-                            </div>
-                        )}
-                    </div>
+                    {/* Video Player */}
+                    <VideoPlayer
+                        youtubeUrl={day.videoUrl}
+                        rutubeUrl={day.rutubeUrl}
+                        title={day.title}
+                    />
 
                     <div>
                         <h1 className="text-3xl font-serif text-vastu-dark mb-4">{day.title}</h1>

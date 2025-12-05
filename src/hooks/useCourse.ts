@@ -44,6 +44,7 @@ export function useWeeks() {
                             title: d.title,
                             description: d.description,
                             videoUrl: d.video_url,
+                            rutubeUrl: d.rutube_url,
                             date: d.date,
                             materials: [] // Fetched separately if needed, or we can fetch all materials and filter
                         })),
@@ -111,6 +112,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
                         title: dayData.title,
                         description: dayData.description,
                         videoUrl: dayData.video_url,
+                        rutubeUrl: dayData.rutube_url,
                         date: dayData.date,
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         materials: (matData || []).map((m: any) => ({

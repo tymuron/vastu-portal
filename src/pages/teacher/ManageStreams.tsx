@@ -174,20 +174,36 @@ export default function ManageStreams() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Ссылка на Видео (YouTube / Rutube) *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Ссылка на YouTube *
+                                </label>
                                 <div className="relative">
-                                    <Video className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                                    <Video className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                     <input
-                                        type="text"
+                                        type="url"
+                                        required
                                         value={formData.video_url}
-                                        onChange={e => setFormData({ ...formData, video_url: e.target.value })}
-                                        className="w-full pl-10 rounded-lg border-gray-300 focus:ring-[#422326] focus:border-[#422326]"
-                                        placeholder="Ссылка или код вставки..."
+                                        onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#422326] focus:border-transparent outline-none transition-all"
+                                        placeholder="https://youtube.com/..."
                                     />
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1 ml-1">
-                                    Поддерживается: YouTube, Rutube, код вставки (iframe)
-                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Ссылка на Rutube (опционально)
+                                </label>
+                                <div className="relative">
+                                    <Video className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                    <input
+                                        type="url"
+                                        value={formData.rutube_url || ''}
+                                        onChange={(e) => setFormData({ ...formData, rutube_url: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#422326] focus:border-transparent outline-none transition-all"
+                                        placeholder="https://rutube.ru/..."
+                                    />
+                                </div>
                             </div>
 
                             <div>

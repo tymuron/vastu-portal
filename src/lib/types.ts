@@ -23,7 +23,8 @@ export interface Day {
     title: string;
     description?: string;
     materials: Material[];
-    videoUrl?: string; // Main lesson video
+    videoUrl?: string; // YouTube
+    rutubeUrl?: string; // Rutube
     date?: string; // ISO Date
 }
 
@@ -47,7 +48,8 @@ export interface LiveStream {
     id: string;
     title: string;
     date: string; // ISO Date
-    video_url?: string;
+    video_url?: string; // YouTube
+    rutube_url?: string; // Rutube
     audio_url?: string;
     description?: string;
     created_at?: string;

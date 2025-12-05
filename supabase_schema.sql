@@ -8,7 +8,21 @@ create table if not exists live_streams (
   description text,
   date timestamp with time zone not null,
   video_url text,
+  rutube_url text,
   audio_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create days table (for lessons)
+create table if not exists days (
+  id uuid default uuid_generate_v4() primary key,
+  week_id uuid references weeks(id),
+  title text not null,
+  description text,
+  video_url text,
+  rutube_url text,
+  date timestamp with time zone,
+  order_index integer,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
