@@ -38,9 +38,15 @@ create table if not exists library_items (
 
 -- Create storage buckets if they don't exist
 -- Create storage buckets if they don't exist
-insert into storage.buckets (id, name, public)
-values ('library', 'library', false), ('avatars', 'avatars', true)
-on conflict (id) do update set public = excluded.public;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values 
+  ('library', 'library', false, 52428800, null), -- 50MB
+  ('avatars', 'avatars', true, 5242880, ARRAY['image/*']), -- 5MB
+  ('course-content', 'course-content', true, 1073741824, null) -- 1GB
+on conflict (id) do update set 
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 -- Set up RLS (Row Level Security)
 alter table live_streams enable row level security;
@@ -51,6 +57,10 @@ drop policy if exists "Public streams are viewable by everyone" on live_streams;
 drop policy if exists "Public library items are viewable by everyone" on library_items;
 drop policy if exists "Avatar images are publicly accessible" on storage.objects;
 drop policy if exists "Anyone can upload an avatar" on storage.objects;
+drop policy if exists "Course content is publicly accessible" on storage.objects;
+drop policy if exists "Anyone can upload course content" on storage.objects;
+drop policy if exists "Anyone can update course content" on storage.objects;
+drop policy if exists "Anyone can delete course content" on storage.objects;
 
 -- Create policies
 create policy "Public streams are viewable by everyone"
@@ -61,6 +71,8 @@ create policy "Public library items are viewable by everyone"
   on library_items for select
   using ( true );
 
+-- Storage Policies
+-- Avatars
 create policy "Avatar images are publicly accessible"
   on storage.objects for select
   using ( bucket_id = 'avatars' );
@@ -68,6 +80,23 @@ create policy "Avatar images are publicly accessible"
 create policy "Anyone can upload an avatar"
   on storage.objects for insert
   with check ( bucket_id = 'avatars' );
+
+-- Course Content
+create policy "Course content is publicly accessible"
+  on storage.objects for select
+  using ( bucket_id = 'course-content' );
+
+create policy "Anyone can upload course content"
+  on storage.objects for insert
+  with check ( bucket_id = 'course-content' );
+
+create policy "Anyone can update course content"
+  on storage.objects for update
+  using ( bucket_id = 'course-content' );
+
+create policy "Anyone can delete course content"
+  on storage.objects for delete
+  using ( bucket_id = 'course-content' );
 
 -- Create weeks table
 create table if not exists weeks (
