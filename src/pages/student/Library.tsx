@@ -8,7 +8,7 @@ export default function Library() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [previewFile, setPreviewFile] = useState<LibraryItem | null>(null);
-    const [isZoomed, setIsZoomed] = useState(false);
+    const [isZoomed, setIsZoomed] = useState(true);
 
     useEffect(() => {
         fetchLibrary();
@@ -122,8 +122,8 @@ export default function Library() {
 
             {/* Preview Modal */}
             {previewFile && (
-                <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 md:p-8 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-xl w-full h-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
+                <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center md:p-8 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white md:rounded-xl w-full h-full md:max-w-6xl md:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl relative">
 
                         {/* Modal Header */}
                         <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#F4F2ED] shrink-0 z-10">
@@ -149,7 +149,7 @@ export default function Library() {
                                 <button
                                     onClick={() => {
                                         setPreviewFile(null);
-                                        setIsZoomed(false);
+                                        setIsZoomed(true); // Reset to true for next time
                                     }}
                                     className="p-2 text-gray-600 hover:text-red-500 hover:bg-white rounded-lg transition-colors"
                                 >
