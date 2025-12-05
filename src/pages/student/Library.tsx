@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { LibraryItem, LibraryCategory } from '../../lib/types';
-import { Download, CheckSquare, BookOpen, FileText, Eye } from 'lucide-react';
-import { cn, downloadFile } from '../../lib/utils';
+import { LibraryItem } from '../../lib/types';
+import { Download, FileText, Eye } from 'lucide-react';
+import { downloadFile } from '../../lib/utils';
 
 export default function Library() {
-    const [activeCategory, setActiveCategory] = useState<LibraryCategory | 'all'>('all');
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -29,25 +28,6 @@ export default function Library() {
         }
     };
 
-    const categories: { id: LibraryCategory | 'all'; label: string }[] = [
-        { id: 'all', label: 'Все материалы' },
-        { id: 'checklist', label: 'Чек-листы' },
-        { id: 'guide', label: 'Гайды' },
-    ];
-
-    const filteredItems = activeCategory === 'all'
-        ? items
-        : items.filter(item => item.category === activeCategory);
-
-    const getIcon = (category: LibraryCategory) => {
-        switch (category) {
-            case 'checklist': return <CheckSquare className="w-5 h-5" />;
-            case 'guide': return <FileText className="w-5 h-5" />;
-            case 'book': return <BookOpen className="w-5 h-5" />;
-            default: return <FileText className="w-5 h-5" />;
-        }
-    };
-
     const handleDownload = async (e: React.MouseEvent, item: LibraryItem) => {
         e.stopPropagation();
         await downloadFile(item.file_url, item.title);
@@ -61,24 +41,6 @@ export default function Library() {
                 <p className="text-gray-600">Полезные материалы для вашего обучения</p>
             </div>
 
-            {/* Categories */}
-            <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                    <button
-                        key={category.id}
-                        onClick={() => setActiveCategory(category.id)}
-                        className={cn(
-                            "px-4 py-2 rounded-full text-sm transition-all duration-300",
-                            activeCategory === category.id
-                                ? "bg-[#422326] text-white shadow-md transform scale-105"
-                                : "bg-white text-gray-600 hover:bg-[#F4F2ED]"
-                        )}
-                    >
-                        {category.label}
-                    </button>
-                ))}
-            </div>
-
             {/* Grid */}
             {loading ? (
                 <div className="flex justify-center py-12">
@@ -86,14 +48,14 @@ export default function Library() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredItems.map((item) => (
+                    {items.map((item) => (
                         <div
                             key={item.id}
                             className="group bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 flex flex-col"
                         >
                             <div className="flex items-start justify-between mb-4">
                                 <div className="p-3 bg-[#F4F2ED] rounded-lg text-[#422326] group-hover:scale-110 transition-transform duration-300">
-                                    {getIcon(item.category)}
+                                    <FileText className="w-5 h-5" />
                                 </div>
                                 <div className="flex gap-2">
                                     <button
