@@ -166,16 +166,16 @@ export default function Library() {
                         </div>
 
                         {/* Modal Content */}
-                        <div className="flex-1 bg-gray-100 overflow-hidden relative flex flex-col md:min-w-[50vw] md:min-h-[300px]">
+                        <div className="flex-1 md:flex-none bg-gray-100 overflow-hidden relative flex flex-col">
                             {previewFile.file_url.toLowerCase().endsWith('.pdf') ? (
                                 <iframe
                                     src={previewFile.file_url}
-                                    className="w-full h-full md:h-[80vh]"
+                                    className="w-full h-full md:w-[80vw] md:h-[80vh]"
                                     title={previewFile.title}
                                 />
                             ) : (
                                 <div className={cn(
-                                    "flex-1 overflow-auto bg-gray-100",
+                                    "flex-1 md:flex-none overflow-auto bg-gray-100",
                                     isZoomed ? "block" : "flex items-center justify-center p-4"
                                 )}>
                                     <img
@@ -183,7 +183,7 @@ export default function Library() {
                                         alt={previewFile.title}
                                         className={cn(
                                             "shadow-lg transition-all duration-300",
-                                            isZoomed ? "w-full h-auto min-h-full object-contain" : "max-w-full max-h-[80vh] object-contain w-auto h-auto"
+                                            isZoomed ? "w-full h-auto min-h-full md:w-auto md:h-auto md:max-w-[85vw] md:max-h-[80vh] object-contain" : "max-w-full max-h-[80vh] object-contain w-auto h-auto"
                                         )}
                                         onClick={() => setIsZoomed(!isZoomed)}
                                         style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
