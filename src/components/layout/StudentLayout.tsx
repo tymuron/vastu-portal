@@ -129,7 +129,7 @@ export default function StudentLayout() {
                 </nav>
 
                 <div className="p-4 border-t border-white/10">
-                    <Link to="/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors group mb-2">
+                    <Link to="/student/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors group mb-2">
                         <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-vastu-light group-hover:text-vastu-gold transition-colors">
                             <UserIcon size={20} />
                         </div>

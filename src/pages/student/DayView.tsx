@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
-
+import { cn, getVideoEmbedUrl } from '../../lib/utils';
 export default function DayView() {
     const { weekId, dayId } = useParams();
 
@@ -44,7 +44,7 @@ export default function DayView() {
                     <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
                         {day.videoUrl ? (
                             <iframe
-                                src={day.videoUrl}
+                                src={getVideoEmbedUrl(day.videoUrl)}
                                 className="w-full h-full"
                                 title={day.title}
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -109,8 +109,8 @@ export default function DayView() {
                                                 <Link
                                                     to={nextWeek.isLocked ? '#' : `/student?week=${nextWeek.id}`}
                                                     className={`flex items-center justify-between gap-3 p-3 rounded-lg text-sm w-full transition-colors ${nextWeek.isLocked
-                                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                            : 'bg-vastu-gold text-vastu-dark hover:bg-vastu-gold/90'
+                                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                        : 'bg-vastu-gold text-vastu-dark hover:bg-vastu-gold/90'
                                                         }`}
                                                     onClick={(e) => nextWeek.isLocked && e.preventDefault()}
                                                 >
