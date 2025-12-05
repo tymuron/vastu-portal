@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, Camera, Save, Lock, Loader2 } from 'lucide-react';
+import { User, Camera, Save, Lock, Loader2, X, ZoomIn, ZoomOut } from 'lucide-react';
+import Cropper from 'react-easy-crop';
+import { getCroppedImg } from '../../lib/utils';
 
 export default function Profile() {
     const { user, loading: authLoading } = useAuth();
@@ -14,10 +16,19 @@ export default function Profile() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
 
+    // Cropper State
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+    const [isCropping, setIsCropping] = useState(false);
+
     useEffect(() => {
         if (user) {
             setFullName(user.user_metadata?.full_name || '');
-            setAvatarUrl(user.user_metadata?.avatar_url || null);
+            // Add cache busting to ensure image updates immediately
+            const url = user.user_metadata?.avatar_url;
+            setAvatarUrl(url ? `${url}?t=${new Date().getTime()}` : null);
         }
     }, [user]);
 
@@ -30,10 +41,6 @@ export default function Profile() {
             const updates: any = {
                 data: { full_name: fullName }
             };
-
-            if (avatarUrl) {
-                updates.data.avatar_url = avatarUrl;
-            }
 
             const { error } = await supabase.auth.updateUser(updates);
 
@@ -74,19 +81,38 @@ export default function Profile() {
         }
     };
 
-    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.addEventListener('load', () => {
+                setImageSrc(reader.result as string);
+                setIsCropping(true);
+            });
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const onCropComplete = useCallback((_: any, croppedAreaPixels: any) => {
+        setCroppedAreaPixels(croppedAreaPixels);
+    }, []);
+
+    const showCroppedImage = async () => {
+        if (!imageSrc || !croppedAreaPixels) return;
+
         try {
             setLoading(true);
-            const file = e.target.files?.[0];
-            if (!file) return;
+            const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
 
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${user?.id}-${Math.random()}.${fileExt}`;
+            if (!croppedImageBlob) throw new Error('Could not crop image');
+
+            // Upload to Supabase
+            const fileName = `${user?.id}-${Math.random()}.jpg`;
             const filePath = `${fileName}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('avatars')
-                .upload(filePath, file);
+                .upload(filePath, croppedImageBlob);
 
             if (uploadError) throw uploadError;
 
@@ -94,17 +120,20 @@ export default function Profile() {
                 .from('avatars')
                 .getPublicUrl(filePath);
 
-            setAvatarUrl(publicUrl);
+            // Update local state immediately with cache busting
+            setAvatarUrl(`${publicUrl}?t=${new Date().getTime()}`);
 
-            // Auto-save avatar URL to profile
+            // Save to profile
             await supabase.auth.updateUser({
                 data: { avatar_url: publicUrl }
             });
 
             setMessage({ type: 'success', text: 'Аватар обновлен!' });
-        } catch (error: any) {
-            console.error('Error uploading avatar:', error);
-            setMessage({ type: 'error', text: 'Ошибка при загрузке аватара' });
+            setIsCropping(false);
+            setImageSrc(null);
+        } catch (e) {
+            console.error(e);
+            setMessage({ type: 'error', text: 'Ошибка при сохранении аватара' });
         } finally {
             setLoading(false);
         }
@@ -113,7 +142,7 @@ export default function Profile() {
     if (authLoading) return <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#422326]" /></div>;
 
     return (
-        <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
+        <div className="max-w-2xl mx-auto space-y-8 animate-fade-in relative">
             <div>
                 <h1 className="text-3xl font-serif text-[#422326] mb-2">Личный Кабинет</h1>
                 <p className="text-gray-600">Управление личными данными и настройками аккаунта.</p>
@@ -146,7 +175,7 @@ export default function Profile() {
                                     type="file"
                                     accept="image/*"
                                     className="hidden"
-                                    onChange={handleAvatarUpload}
+                                    onChange={onFileChange}
                                     disabled={loading}
                                 />
                             </label>
@@ -244,6 +273,67 @@ export default function Profile() {
 
                 </div>
             </div>
+
+            {/* Cropper Modal */}
+            {isCropping && imageSrc && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scale-in">
+                        <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                            <h3 className="font-serif text-lg text-[#422326]">Редактирование фото</h3>
+                            <button onClick={() => setIsCropping(false)} className="text-gray-400 hover:text-gray-600">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="relative h-80 bg-gray-900">
+                            <Cropper
+                                image={imageSrc}
+                                crop={crop}
+                                zoom={zoom}
+                                aspect={1}
+                                onCropChange={setCrop}
+                                onCropComplete={onCropComplete}
+                                onZoomChange={setZoom}
+                                cropShape="round"
+                                showGrid={false}
+                            />
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="flex items-center gap-4">
+                                <ZoomOut size={20} className="text-gray-400" />
+                                <input
+                                    type="range"
+                                    value={zoom}
+                                    min={1}
+                                    max={3}
+                                    step={0.1}
+                                    aria-labelledby="Zoom"
+                                    onChange={(e) => setZoom(Number(e.target.value))}
+                                    className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#422326]"
+                                />
+                                <ZoomIn size={20} className="text-gray-400" />
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setIsCropping(false)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Отмена
+                                </button>
+                                <button
+                                    onClick={showCroppedImage}
+                                    disabled={loading}
+                                    className="flex-1 px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors flex items-center justify-center"
+                                >
+                                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Сохранить'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
