@@ -74,7 +74,7 @@ export default function FileUploader({ onUploadComplete, folder = 'general' }: F
                         {uploading ? 'Загрузка...' : 'Нажмите для загрузки файла'}
                     </span>
                     <span className="text-xs text-gray-400">
-                        PDF, Video, Images, Zip (Max 50GB)
+                        PDF, Video, Images, Zip (Unlimited size)
                     </span>
                 </div>
             </label>
