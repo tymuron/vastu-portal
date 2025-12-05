@@ -168,15 +168,15 @@ export default function Library() {
                                 />
                             ) : (
                                 <div className={cn(
-                                    "transition-all duration-300 ease-in-out",
-                                    isZoomed ? "w-full min-h-full p-0 block" : "w-full h-full flex items-center justify-center p-4"
+                                    "transition-all duration-300 ease-in-out flex items-center justify-center",
+                                    isZoomed ? "min-w-full min-h-full p-0 overflow-auto" : "w-full h-full p-4"
                                 )}>
                                     <img
                                         src={previewFile.file_url}
                                         alt={previewFile.title}
                                         className={cn(
                                             "shadow-lg transition-all duration-300",
-                                            isZoomed ? "w-full h-auto" : "max-w-full max-h-full object-contain"
+                                            isZoomed ? "max-w-none h-auto min-w-full" : "max-w-full max-h-full object-contain"
                                         )}
                                         onClick={() => setIsZoomed(!isZoomed)}
                                         style={{ cursor: isZoomed ? 'zoom-out' : 'zoom-in' }}
