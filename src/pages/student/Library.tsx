@@ -33,8 +33,6 @@ export default function Library() {
         { id: 'all', label: 'Все материалы' },
         { id: 'checklist', label: 'Чек-листы' },
         { id: 'guide', label: 'Гайды' },
-        { id: 'template', label: 'Шаблоны' },
-        { id: 'book', label: 'Книги' },
     ];
 
     const filteredItems = activeCategory === 'all'
