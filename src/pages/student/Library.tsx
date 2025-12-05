@@ -140,6 +140,13 @@ export default function Library() {
                                     </button>
                                 )}
                                 <button
+                                    onClick={() => window.open(previewFile.file_url, '_blank')}
+                                    className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
+                                    title="Открыть в новой вкладке"
+                                >
+                                    <Eye className="w-5 h-5" />
+                                </button>
+                                <button
                                     onClick={(e) => handleDownload(e, previewFile)}
                                     className="p-2 text-gray-600 hover:text-[#422326] hover:bg-white rounded-lg transition-colors"
                                     title="Скачать"
