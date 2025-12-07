@@ -116,9 +116,10 @@ export default function DayView() {
 
                     <div>
                         <h1 className="text-3xl font-serif text-vastu-dark mb-4">{day.title}</h1>
-                        <p className="text-vastu-text-light leading-relaxed text-base font-light">
-                            {day.description}
-                        </p>
+                        <div
+                            className="text-vastu-text-light leading-relaxed text-base font-light prose prose-stone max-w-none [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-4"
+                            dangerouslySetInnerHTML={{ __html: day.description || '' }}
+                        />
                     </div>
                 </div>
 
@@ -221,13 +222,13 @@ export default function DayView() {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-serif text-lg text-vastu-dark">Материалы урока</h3>
                             <span className="text-xs bg-vastu-light px-2 py-1 rounded-full text-vastu-text-light">
-                                {day.materials.length} файлов
+                                {day.materials.filter(m => !m.isHomework).length} файлов
                             </span>
                         </div>
 
                         <div className="space-y-3">
-                            {day.materials.length > 0 ? (
-                                day.materials.map((material) => (
+                            {day.materials.filter(m => !m.isHomework).length > 0 ? (
+                                day.materials.filter(m => !m.isHomework).map((material) => (
                                     <a
                                         key={material.id}
                                         href={material.url}
@@ -268,15 +269,40 @@ export default function DayView() {
                             <FileText size={20} className="text-vastu-gold" />
                             Домашнее задание
                         </h3>
-                        <p className="text-sm text-vastu-text-light mb-4">
-                            Выполните задание к этому уроку, чтобы закрепить материал.
-                        </p>
-                        <button
-                            className="w-full py-2 bg-vastu-light text-vastu-dark hover:bg-vastu-gold hover:text-white rounded-lg transition-colors text-sm font-medium"
-                            onClick={() => alert('Раздел домашних заданий находится в разработке.')}
-                        >
-                            Перейти к заданию
-                        </button>
+
+                        {day.homeworkDescription ? (
+                            <div className="space-y-4">
+                                <div
+                                    className="text-sm text-vastu-text-light prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-2"
+                                    dangerouslySetInnerHTML={{ __html: day.homeworkDescription }}
+                                />
+
+                                {day.materials.filter(m => m.isHomework).length > 0 && (
+                                    <div className="space-y-2 pt-2 border-t border-gray-100">
+                                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Файлы задания:</h4>
+                                        {day.materials.filter(m => m.isHomework).map((material) => (
+                                            <a
+                                                key={material.id}
+                                                href={material.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-100 hover:bg-orange-100 transition-colors group"
+                                            >
+                                                <FileText size={14} className="text-orange-500" />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-medium text-orange-900 truncate">{material.title}</div>
+                                                </div>
+                                                <Download size={14} className="text-orange-300 group-hover:text-orange-600" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-vastu-text-light mb-4">
+                                Нет домашнего задания для этого урока.
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

@@ -16,6 +16,7 @@ export interface Material {
     type: MaterialType;
     url: string;
     description?: string;
+    isHomework?: boolean;
 }
 
 export interface Day {
@@ -27,6 +28,7 @@ export interface Day {
     rutubeUrl?: string; // Rutube
     date?: string; // ISO Date
     isCompleted?: boolean;
+    homeworkDescription?: string;
 }
 
 export interface Week {

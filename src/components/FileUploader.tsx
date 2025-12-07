@@ -5,9 +5,11 @@ import { supabase } from '../lib/supabase';
 interface FileUploaderProps {
     onUploadComplete: (url: string, type: string, name: string) => void;
     folder?: string;
+    label?: string;
+    compact?: boolean;
 }
 
-export default function FileUploader({ onUploadComplete, folder = 'general' }: FileUploaderProps) {
+export default function FileUploader({ onUploadComplete, folder = 'general', label, compact = false }: FileUploaderProps) {
     const [uploading, setUploading] = useState(false);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,6 +55,27 @@ export default function FileUploader({ onUploadComplete, folder = 'general' }: F
         }
     };
 
+    if (compact) {
+        return (
+            <div className="relative inline-block">
+                <input
+                    type="file"
+                    id={`file-upload-${folder}-${Math.floor(Math.random() * 1000)}`}
+                    className="hidden"
+                    onChange={handleFileChange}
+                    disabled={uploading}
+                />
+                <label
+                    htmlFor={`file-upload-${folder}-${Math.floor(Math.random() * 1000)}`} // Unique ID
+                    className="px-3 py-2 bg-white border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-vastu-gold hover:text-vastu-gold cursor-pointer flex items-center gap-2 transition-colors"
+                >
+                    {uploading ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />}
+                    {label || 'Загрузить файл'}
+                </label>
+            </div>
+        );
+    }
+
     return (
         <div className="relative">
             <input
@@ -71,10 +94,10 @@ export default function FileUploader({ onUploadComplete, folder = 'general' }: F
                 </div>
                 <div className="text-center">
                     <span className="font-medium text-vastu-dark block mb-1">
-                        {uploading ? 'Загрузка...' : 'Нажмите для загрузки файла'}
+                        {uploading ? 'Загрузка...' : (label || 'Нажмите для загрузки файла')}
                     </span>
                     <span className="text-xs text-gray-400">
-                        PDF, Video, Images, Zip (Unlimited size)
+                        PDF, Video, Images, Zip
                     </span>
                 </div>
             </label>

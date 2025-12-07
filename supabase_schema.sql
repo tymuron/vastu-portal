@@ -209,3 +209,10 @@ create policy "Users can insert their own progress"
 create policy "Users can delete their own progress"
   on public.user_progress for delete
   using (auth.uid() = user_id);
+-- Add homework_description to days
+alter table public.days 
+add column if not exists homework_description text;
+
+-- Add is_homework to materials
+alter table public.materials 
+add column if not exists is_homework boolean default false;

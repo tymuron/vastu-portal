@@ -54,6 +54,7 @@ export function useWeeks() {
                             rutubeUrl: d.rutube_url,
                             date: d.date,
                             isCompleted: completedDayIds.has(d.id),
+                            homeworkDescription: d.homework_description,
                             materials: []
                         })),
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,7 +62,8 @@ export function useWeeks() {
                             id: m.id,
                             title: m.title,
                             type: m.type,
-                            url: m.url
+                            url: m.url,
+                            isHomework: m.is_homework
                         }))
                     }));
                     setWeeks(transformedWeeks);
@@ -130,6 +132,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
                     rutubeUrl: dayData.rutube_url,
                     date: dayData.date,
                     isCompleted,
+                    homeworkDescription: dayData.homework_description,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     materials: (matData || []).map((m: any) => ({
                         id: m.id,

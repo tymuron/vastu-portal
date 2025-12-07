@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Trash2, ChevronDown, ChevronRight, FileText, Video, X, Save, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, FileText, Video, X, Save, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import FileUploader from '../../components/FileUploader';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 interface Material {
     id: string;
@@ -10,6 +12,7 @@ interface Material {
     url: string;
     week_id?: string;
     day_id?: string;
+    is_homework?: boolean;
 }
 
 interface Day {
@@ -17,6 +20,7 @@ interface Day {
     title: string;
     order_index: number;
     description?: string;
+    homework_description?: string;
     video_url?: string;
     rutube_url?: string;
     date?: string;
@@ -35,12 +39,19 @@ interface Week {
 
 // --- Sub-components ---
 
-const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void, onUpdate: () => void }) => {
+const DayEditor = ({ day, onDelete, onUpdate, onMoveUp, onMoveDown, isFirst, isLast }: {
+    day: Day,
+    onDelete: () => void,
+    onUpdate: () => void,
+    onMoveUp: () => void,
+    onMoveDown: () => void,
+    isFirst: boolean,
+    isLast: boolean
+}) => {
     const [localDay, setLocalDay] = useState(day);
     const [saving, setSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
 
-    // Update local state when prop changes (e.g. after a refresh)
     useEffect(() => {
         setLocalDay(day);
         setIsDirty(false);
@@ -59,6 +70,7 @@ const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void
                 .update({
                     title: localDay.title,
                     description: localDay.description,
+                    homework_description: localDay.homework_description,
                     video_url: localDay.video_url,
                     rutube_url: localDay.rutube_url,
                     date: localDay.date
@@ -67,7 +79,7 @@ const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void
 
             if (error) throw error;
             setIsDirty(false);
-            onUpdate(); // Refresh parent
+            onUpdate();
         } catch (error) {
             console.error('Error saving day:', error);
             alert('Ошибка при сохранении урока');
@@ -76,12 +88,13 @@ const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void
         }
     };
 
-    const handleAddMaterial = async (url: string, type: string, name: string) => {
+    const handleAddMaterial = async (url: string, type: string, name: string, isHomework = false) => {
         const { error } = await supabase.from('materials').insert([{
             title: name,
             type,
             url,
-            day_id: day.id
+            day_id: day.id,
+            is_homework: isHomework
         }]);
         if (!error) onUpdate();
     };
@@ -92,135 +105,167 @@ const DayEditor = ({ day, onDelete, onUpdate }: { day: Day, onDelete: () => void
         if (!error) onUpdate();
     };
 
+    const lessonMaterials = day.materials?.filter(m => !m.is_homework) || [];
+    const homeworkMaterials = day.materials?.filter(m => m.is_homework) || [];
+
+    const modules = {
+        toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            ['link', 'clean']
+        ],
+    };
+
     return (
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm transition-all hover:border-vastu-gold/50 hover:shadow-md">
             <div className="flex justify-between items-start mb-6">
-                <div className="flex-1 mr-4 space-y-4">
-                    {/* Day Title */}
-                    <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Название урока</label>
-                        <input
-                            type="text"
-                            value={localDay.title}
-                            onChange={(e) => handleChange('title', e.target.value)}
-                            className="text-lg font-medium text-vastu-dark bg-transparent border-b border-gray-200 hover:border-vastu-gold focus:border-vastu-gold focus:outline-none w-full transition-colors py-1"
-                        />
+                <div className="flex-1 mr-4 space-y-6">
+                    {/* Header: Title and Reorder */}
+                    <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Название урока</label>
+                            <input
+                                type="text"
+                                value={localDay.title}
+                                onChange={(e) => handleChange('title', e.target.value)}
+                                className="text-lg font-medium text-vastu-dark bg-transparent border-b border-gray-200 hover:border-vastu-gold focus:border-vastu-gold focus:outline-none w-full transition-colors py-1"
+                            />
+                        </div>
+                        <div className="flex bg-gray-50 rounded-lg p-1">
+                            <button onClick={onMoveUp} disabled={isFirst} className="p-1.5 text-gray-400 hover:text-vastu-dark disabled:opacity-30">
+                                <ArrowUp size={16} />
+                            </button>
+                            <button onClick={onMoveDown} disabled={isLast} className="p-1.5 text-gray-400 hover:text-vastu-dark disabled:opacity-30">
+                                <ArrowDown size={16} />
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Day Description */}
+                    {/* Day Description (Rich Text) */}
                     <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Описание</label>
-                        <textarea
-                            placeholder="Краткое описание урока..."
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Описание урока</label>
+                        <ReactQuill
+                            theme="snow"
                             value={localDay.description || ''}
-                            onChange={(e) => handleChange('description', e.target.value)}
-                            className="w-full text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3 focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold focus:outline-none resize-y min-h-[80px]"
+                            onChange={(value) => handleChange('description', value)}
+                            modules={modules}
+                            className="bg-white rounded-lg"
                         />
                     </div>
 
-                    {/* Video URL */}
-                    <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Основное Видео (YouTube)</label>
-                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold mb-2">
-                            <Video size={16} className="text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Ссылка на YouTube..."
-                                value={localDay.video_url || ''}
-                                onChange={(e) => handleChange('video_url', e.target.value)}
-                                className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none"
-                            />
+                    {/* Videos */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">YouTube</label>
+                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                                <Video size={16} className="text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={localDay.video_url || ''}
+                                    onChange={(e) => handleChange('video_url', e.target.value)}
+                                    className="flex-1 text-sm bg-transparent focus:outline-none"
+                                    placeholder="YouTube URL"
+                                />
+                            </div>
                         </div>
-
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Rutube Видео (Опционально)</label>
-                        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus-within:border-vastu-gold focus-within:ring-1 focus-within:ring-vastu-gold">
-                            <Video size={16} className="text-[#00A551]" />
-                            <input
-                                type="text"
-                                placeholder="Ссылка на Rutube..."
-                                value={localDay.rutube_url || ''}
-                                onChange={(e) => handleChange('rutube_url', e.target.value)}
-                                className="flex-1 text-sm text-gray-700 bg-transparent focus:outline-none"
-                            />
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Rutube</label>
+                            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                                <Video size={16} className="text-[#00A551]" />
+                                <input
+                                    type="text"
+                                    value={localDay.rutube_url || ''}
+                                    onChange={(e) => handleChange('rutube_url', e.target.value)}
+                                    className="flex-1 text-sm bg-transparent focus:outline-none"
+                                    placeholder="Rutube URL"
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Day Date */}
-                    <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Дата урока (Календарь)</label>
-                        <input
-                            type="date"
-                            value={localDay.date ? new Date(localDay.date).toISOString().split('T')[0] : ''}
-                            onChange={(e) => {
-                                const date = e.target.value ? new Date(e.target.value).toISOString() : null;
-                                handleChange('date', date);
-                            }}
-                            className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold focus:outline-none"
-                        />
+                    {/* Homework Section */}
+                    <div className="border-t border-gray-100 pt-6">
+                        <label className="block text-xs font-bold text-vastu-gold uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <FileText size={16} /> Домашнее Задание
+                        </label>
+
+                        <div className="space-y-4">
+                            <ReactQuill
+                                theme="snow"
+                                value={localDay.homework_description || ''}
+                                onChange={(value) => handleChange('homework_description', value)}
+                                modules={modules}
+                                placeholder="Опишите домашнее задание..."
+                                className="bg-white rounded-lg"
+                            />
+
+                            {/* Homework Materials */}
+                            <div>
+                                <div className="space-y-2 mb-3">
+                                    {homeworkMaterials.map(m => (
+                                        <div key={m.id} className="flex items-center justify-between bg-orange-50 p-2 rounded border border-orange-100 text-sm">
+                                            <span className="truncate flex-1 font-medium text-orange-800">{m.title}</span>
+                                            <button onClick={() => handleDeleteMaterial(m.id)} className="text-orange-400 hover:text-red-500"><X size={14} /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <FileUploader
+                                        folder={`homework/${day.id}`}
+                                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, true)}
+                                        label="Прикрепить файл"
+                                        compact
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
+                {/* Sidebar Actions */}
+                <div className="flex flex-col gap-2 sticky top-4">
                     <button
                         onClick={handleSave}
                         disabled={!isDirty || saving}
-                        className={`p-2 rounded-lg transition-colors flex items-center justify-center ${isDirty ? 'bg-vastu-gold text-white hover:bg-vastu-gold/90' : 'bg-gray-100 text-gray-400'}`}
-                        title="Сохранить изменения"
+                        className={`p-2 rounded-lg transition-colors ${isDirty ? 'bg-vastu-gold text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-400'}`}
+                        title="Сохранить"
                     >
-                        {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
                     </button>
-                    <button onClick={onDelete} className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors" title="Удалить урок">
-                        <Trash2 size={18} />
+                    <button onClick={onDelete} className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50" title="Удалить урок">
+                        <Trash2 size={20} />
                     </button>
                 </div>
             </div>
 
-            {/* Day Materials */}
-            <div className="mt-6 pt-6 border-t border-gray-100">
-                <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Материалы урока (Файлы)</h5>
-                <div className="space-y-3 mb-4">
-                    {day.materials?.map(m => (
-                        <div key={m.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm hover:border-vastu-gold/30 transition-colors">
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-md ${m.type === 'video' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
-                                    {m.type === 'video' ? <Video size={16} /> : <FileText size={16} />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <input
-                                        defaultValue={m.title}
-                                        className="font-medium text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-vastu-gold focus:outline-none px-1 w-full"
-                                        onBlur={(e) => {
-                                            if (e.target.value !== m.title) {
-                                                supabase.from('materials').update({ title: e.target.value }).eq('id', m.id).then(() => onUpdate());
-                                            }
-                                        }}
-                                    />
-                                    <a href={m.url} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:text-vastu-gold truncate block mt-0.5">
-                                        {m.url}
-                                    </a>
-                                </div>
-                            </div>
-                            <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500 p-1"><X size={16} /></button>
+            {/* Lesson Materials (Non-Homework) */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+                <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Материалы к уроку</h5>
+                <div className="space-y-2 mb-3">
+                    {lessonMaterials.map(m => (
+                        <div key={m.id} className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                            <span className="truncate flex-1">{m.title}</span>
+                            <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
                         </div>
                     ))}
                 </div>
-
-                <FileUploader
-                    folder={`days/${day.id}`}
-                    onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name)}
-                />
-                <button
-                    onClick={() => {
-                        const url = window.prompt('Введите ссылку (URL):');
-                        if (!url) return;
-                        const name = window.prompt('Название ссылки:', 'Дополнительный материал');
-                        if (!name) return;
-                        handleAddMaterial(url, 'link', name);
-                    }}
-                    className="w-full mt-2 py-3 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center gap-2 text-gray-500 hover:text-vastu-dark hover:border-vastu-gold hover:bg-vastu-gold/5 transition-all font-medium text-sm"
-                >
-                    <Plus size={16} /> Добавить ссылку на сайт
-                </button>
+                <div className="flex gap-2">
+                    <FileUploader
+                        folder={`days/${day.id}`}
+                        onUploadComplete={(url, type, name) => handleAddMaterial(url, type, name, false)}
+                        compact
+                    />
+                    <button
+                        onClick={() => {
+                            const url = window.prompt('URL:');
+                            if (url) handleAddMaterial(url, 'link', window.prompt('Название:', 'Ссылка') || 'Ссылка', false);
+                        }}
+                        className="px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-vastu-gold hover:text-vastu-gold"
+                    >
+                        + Ссылка
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -404,18 +449,44 @@ const WeekEditor = ({ week, onDelete, onUpdate, onAddDay, onMoveUp, onMoveDown, 
                                 </div>
                             )}
 
-                            {week.days.map((day) => (
-                                <DayEditor
-                                    key={day.id}
-                                    day={day}
-                                    onDelete={() => {
-                                        if (window.confirm('Удалить урок?')) {
-                                            supabase.from('days').delete().eq('id', day.id).then(() => onUpdate());
-                                        }
-                                    }}
-                                    onUpdate={onUpdate}
-                                />
-                            ))}
+                            {week.days
+                                .sort((a, b) => a.order_index - b.order_index)
+                                .map((day, index) => (
+                                    <DayEditor
+                                        key={day.id}
+                                        day={day}
+                                        onDelete={() => {
+                                            if (window.confirm('Удалить урок?')) {
+                                                supabase.from('days').delete().eq('id', day.id).then(() => onUpdate());
+                                            }
+                                        }}
+                                        onUpdate={onUpdate}
+                                        isFirst={index === 0}
+                                        isLast={index === week.days.length - 1}
+                                        onMoveUp={async () => {
+                                            if (index > 0) {
+                                                const days = week.days.sort((a, b) => a.order_index - b.order_index);
+                                                const prevDay = days[index - 1];
+                                                const currentDay = days[index];
+
+                                                await supabase.from('days').update({ order_index: prevDay.order_index }).eq('id', currentDay.id);
+                                                await supabase.from('days').update({ order_index: currentDay.order_index }).eq('id', prevDay.id);
+                                                onUpdate();
+                                            }
+                                        }}
+                                        onMoveDown={async () => {
+                                            if (index < week.days.length - 1) {
+                                                const days = week.days.sort((a, b) => a.order_index - b.order_index);
+                                                const nextDay = days[index + 1];
+                                                const currentDay = days[index];
+
+                                                await supabase.from('days').update({ order_index: nextDay.order_index }).eq('id', currentDay.id);
+                                                await supabase.from('days').update({ order_index: currentDay.order_index }).eq('id', nextDay.id);
+                                                onUpdate();
+                                            }
+                                        }}
+                                    />
+                                ))}
 
                             <button
                                 onClick={onAddDay}
@@ -467,6 +538,7 @@ export default function CourseEditor() {
                         rutube_url: day.rutube_url,
                         date: day.date,
                         order_index: day.order_index,
+                        homework_description: day.homework_description,
                         materials: day.materials || []
                     })),
                     materials: week.materials || []
