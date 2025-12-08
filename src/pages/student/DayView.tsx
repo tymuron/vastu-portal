@@ -99,7 +99,7 @@ export default function DayView() {
             <div className="flex items-center gap-2 text-sm text-vastu-text-light mb-6">
                 <Link to="/student" className="hover:text-vastu-gold">Курс</Link>
                 <ChevronRight size={14} />
-                <Link to={`/student/week/${week.id}`} className="hover:text-vastu-gold">{week.title}</Link>
+                <Link to={`/student?week=${week.id}`} className="hover:text-vastu-gold">{week.title}</Link>
                 <ChevronRight size={14} />
                 <span className="text-vastu-dark font-medium truncate">{day.title}</span>
             </div>
