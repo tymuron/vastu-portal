@@ -51,10 +51,10 @@ export default function Library() {
                     {items.map((item) => (
                         <div
                             key={item.id}
-                            className="group bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 flex flex-col"
+                            className="group bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col"
                         >
                             <div className="flex items-start justify-between mb-4">
-                                <div className="p-3 bg-[#F4F2ED] rounded-lg text-[#422326] group-hover:scale-110 transition-transform duration-300">
+                                <div className="p-3 bg-[#F4F2ED] rounded-lg text-[#422326]">
                                     <FileText className="w-5 h-5" />
                                 </div>
                                 <div className="flex gap-2">
@@ -75,7 +75,7 @@ export default function Library() {
                                 </div>
                             </div>
 
-                            <h3 className="font-serif text-lg text-[#422326] mb-2 group-hover:text-[#CABC90] transition-colors">
+                            <h3 className="font-serif text-lg text-[#422326] mb-2">
                                 {item.title}
                             </h3>
                             <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1">
