@@ -111,7 +111,6 @@ export default function LiveStreams() {
             {/* Header */}
             <div>
                 <h1 className="font-serif text-3xl text-[#422326] mb-2">Прямые Эфиры</h1>
-                <p className="text-gray-600">Присоединяйтесь к живым разборам и лекциям</p>
             </div>
 
             {/* Upcoming Stream (Featured) */}
@@ -165,8 +164,7 @@ export default function LiveStreams() {
 
             {/* Past Streams Grid */}
             <div>
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-serif text-xl text-[#422326]">Прошедшие эфиры</h3>
+                <div className="flex items-center justify-end mb-6">
 
                     {/* Month Filter */}
                     <select
