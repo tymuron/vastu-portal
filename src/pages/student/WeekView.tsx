@@ -31,7 +31,7 @@ export default function WeekView() {
 
                     <h1 className="text-3xl md:text-4xl font-serif mb-4 relative z-10">{week.title}</h1>
                     <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed relative z-10">
-                        {week.description}
+                        {week.description ? week.description.replace(/<[^>]+>/g, '') : ''}
                     </p>
                 </div>
 

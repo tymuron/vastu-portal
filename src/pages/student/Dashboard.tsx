@@ -51,7 +51,7 @@ export default function StudentDashboard() {
                         {/* Removed auto-generated Week label to avoid mismatched numbering */}
                         <h2 className="text-3xl md:text-5xl font-serif mb-6">{activeWeek.title}</h2>
                         <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed text-lg">
-                            {activeWeek.description}
+                            {stripHtml(activeWeek.description || '')}
                         </p>
                     </div>
                 </div>

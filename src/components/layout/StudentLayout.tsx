@@ -101,7 +101,7 @@ export default function StudentLayout() {
                                                         "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors mt-1.5",
                                                         isWeekActive ? "bg-vastu-gold" : "bg-white/20"
                                                     )} />
-                                                    <span className="whitespace-normal leading-tight">{week.title}</span>
+                                                    <span className="whitespace-normal leading-tight break-words">{week.title}</span>
                                                 </div>
                                                 {week.isLocked && <Lock size={12} className="opacity-50" />}
                                             </button>
