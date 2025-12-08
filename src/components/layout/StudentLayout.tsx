@@ -31,11 +31,11 @@ export default function StudentLayout() {
             className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
                 isActive
-                    ? "bg-vastu-gold/10 text-vastu-dark font-medium"
+                    ? "bg-vastu-gold text-vastu-dark font-medium shadow-sm"
                     : "text-vastu-light/70 hover:bg-white/5 hover:text-vastu-light"
             )}
         >
-            <Icon size={20} className={cn("transition-colors", isActive ? "text-vastu-gold" : "text-vastu-light/50 group-hover:text-vastu-gold")} />
+            <Icon size={20} className={cn("transition-colors", isActive ? "text-vastu-dark" : "text-vastu-light/50 group-hover:text-vastu-gold")} />
             <span>{label}</span>
         </Link>
     );
