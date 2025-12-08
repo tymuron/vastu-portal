@@ -76,7 +76,8 @@ export default function StudentLayout() {
                                     <div className="px-4 py-2 text-xs text-white/30">Загрузка...</div>
                                 ) : (
                                     weeks.map((week) => {
-                                        const isWeekActive = activeWeekId === week.id && location.pathname === '/student';
+                                        const isWeekActive = (activeWeekId === week.id && location.pathname === '/student') ||
+                                            location.pathname.includes(`/week/${week.id}`);
                                         return (
                                             <button
                                                 key={week.id}

@@ -216,3 +216,6 @@ add column if not exists homework_description text;
 -- Add is_homework to materials
 alter table public.materials 
 add column if not exists is_homework boolean default false;
+-- Add rutube_url to live_streams
+alter table public.live_streams 
+add column if not exists rutube_url text;

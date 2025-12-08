@@ -88,7 +88,9 @@ export default function WeekView() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-vastu-text-light line-clamp-1">{day.description}</p>
+                                            <p className="text-sm text-vastu-text-light line-clamp-1">
+                                                {day.description ? day.description.replace(/<[^>]+>/g, '') : ''}
+                                            </p>
                                         </div>
                                     </div>
                                     <ChevronRight size={20} className="text-gray-300 group-hover:text-vastu-gold transition-colors" />

@@ -133,7 +133,7 @@ export default function DayView() {
                             onClick={() => toggleComplete(!day.isCompleted)}
                             className={`w-full mb-4 py-3 rounded-xl flex items-center justify-center gap-2 font-medium transition-all ${day.isCompleted
                                 ? 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'
-                                : 'bg-vastu-dark text-white hover:bg-vastu-dark/90 shadow-md'
+                                : 'bg-[#A68B74] text-white hover:bg-[#937A65] shadow-md'
                                 }`}
                         >
                             {day.isCompleted ? (

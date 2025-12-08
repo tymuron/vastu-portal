@@ -3,6 +3,13 @@ import { PlayCircle, ChevronRight, FileText, Loader2, Play } from 'lucide-react'
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 
+// Helper to strip HTML
+const stripHtml = (html: string) => {
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+};
+
 export default function StudentDashboard() {
     const { weeks, loading } = useWeeks();
     const location = useLocation();
@@ -41,9 +48,7 @@ export default function StudentDashboard() {
                     <div className="absolute top-0 right-0 w-96 h-96 bg-vastu-gold opacity-10 rounded-full blur-[100px] translate-x-1/3 -translate-y-1/3" />
 
                     <div className="relative z-10">
-                        <span className="text-vastu-gold text-sm font-bold tracking-widest uppercase mb-2 block">
-                            Неделя {weeks.findIndex(w => w.id === activeWeek.id) + 1}
-                        </span>
+                        {/* Removed auto-generated Week label to avoid mismatched numbering */}
                         <h2 className="text-3xl md:text-5xl font-serif mb-6">{activeWeek.title}</h2>
                         <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed text-lg">
                             {activeWeek.description}
@@ -74,8 +79,8 @@ export default function StudentDashboard() {
                                                 <h4 className="font-medium text-vastu-dark group-hover:text-vastu-gold transition-colors">
                                                     {day.title}
                                                 </h4>
-                                                <p className="text-xs text-vastu-text-light line-clamp-1 mt-0.5">
-                                                    {day.description}
+                                                <p className="text-xs text-vastu-text-light line-clamp-2 mt-0.5">
+                                                    {stripHtml(day.description || '')}
                                                 </p>
                                             </div>
                                         </div>
@@ -120,30 +125,7 @@ export default function StudentDashboard() {
                                     )}
                                 </div>
                             </div>
-
-                            <div className="bg-vastu-gold/10 rounded-xl p-6 border border-vastu-gold/20">
-                                <h4 className="font-serif text-lg text-vastu-dark mb-2">Прогресс</h4>
-                                {(() => {
-                                    const totalDays = activeWeek.days.length;
-                                    const completedDays = activeWeek.days.filter(d => d.isCompleted).length;
-                                    const percentage = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
-
-                                    return (
-                                        <>
-                                            <div className="flex items-end gap-2 mb-2">
-                                                <span className="text-3xl font-bold text-vastu-gold">{percentage}%</span>
-                                                <span className="text-sm text-vastu-text-light mb-1.5">завершено</span>
-                                            </div>
-                                            <div className="h-2 bg-white rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-vastu-gold transition-all duration-1000 ease-out"
-                                                    style={{ width: `${percentage}%` }}
-                                                />
-                                            </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
+                            {/* Progres widget removed */}
                         </div>
                     </div>
                 </div>
