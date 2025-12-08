@@ -133,12 +133,14 @@ export default function DayView() {
                             {prevDay && (
                                 <Link
                                     to={`/student/week/${week.id}/day/${prevDay.id}`}
-                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-vastu-light/50 transition-colors text-sm group"
+                                    className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-vastu-dark transition-colors text-sm group"
                                 >
-                                    <ChevronLeft size={16} className="text-vastu-gold" />
-                                    <div className="text-left">
-                                        <div className="text-xs text-vastu-text-light">Предыдущий урок</div>
-                                        <div className="font-medium text-vastu-dark group-hover:text-vastu-gold transition-colors line-clamp-1">{prevDay.title}</div>
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <ChevronLeft size={16} className="text-vastu-gold flex-shrink-0" />
+                                        <div className="text-left overflow-hidden">
+                                            <div className="text-xs text-vastu-text-light">Предыдущий урок</div>
+                                            <div className="font-medium truncate">{prevDay.title}</div>
+                                        </div>
                                     </div>
                                 </Link>
                             )}
@@ -147,18 +149,14 @@ export default function DayView() {
                                     to={`/student/week/${week.id}/day/${nextDay.id}`}
                                     className="flex items-center justify-between gap-3 p-3 rounded-lg bg-vastu-dark text-vastu-light hover:bg-vastu-dark/90 transition-colors text-sm"
                                 >
-                                    <div className="text-left">
+                                    <div className="text-left overflow-hidden">
                                         <div className="text-xs text-white/50">Следующий урок</div>
-                                        <div className="font-medium line-clamp-1">{nextDay.title}</div>
+                                        <div className="font-medium truncate">{nextDay.title}</div>
                                     </div>
-                                    <ChevronRight size={16} className="text-vastu-gold" />
+                                    <ChevronRight size={16} className="text-vastu-gold flex-shrink-0" />
                                 </Link>
                             ) : (
                                 <div className="space-y-3">
-                                    <div className="p-3 text-center text-sm text-vastu-text-light bg-gray-50 rounded-lg">
-                                        Это последний урок недели
-                                    </div>
-
                                     {/* Next Week Button */}
                                     {weeks[weeks.findIndex(w => w.id === week.id) + 1] ? (
                                         (() => {
@@ -172,11 +170,11 @@ export default function DayView() {
                                                         }`}
                                                     onClick={(e) => nextWeek.isLocked && e.preventDefault()}
                                                 >
-                                                    <div className="text-left">
+                                                    <div className="text-left overflow-hidden">
                                                         <div className={`text-xs ${nextWeek.isLocked ? 'text-gray-400' : 'text-vastu-dark/70'}`}>Следующая неделя</div>
-                                                        <div className="font-medium line-clamp-1">{nextWeek.title}</div>
+                                                        <div className="font-medium truncate">{nextWeek.title}</div>
                                                     </div>
-                                                    <ChevronRight size={16} />
+                                                    <ChevronRight size={16} className="flex-shrink-0" />
                                                 </Link>
                                             );
                                         })()
