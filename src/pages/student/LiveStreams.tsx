@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LiveStream } from '../../lib/types';
-import { Calendar, Clock, Video, MessageCircle, Youtube } from 'lucide-react';
+import { Calendar, Clock, Video, Youtube } from 'lucide-react';
 import { cn, getVideoEmbedUrl } from '../../lib/utils';
 
 // Helper component for dual video player
@@ -72,6 +72,7 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
 export default function LiveStreams() {
     const [streams, setStreams] = useState<LiveStream[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedMonth, setSelectedMonth] = useState<string>('all');
 
     useEffect(() => {
         fetchStreams();
@@ -97,6 +98,13 @@ export default function LiveStreams() {
 
     const upcomingStreams = streams.filter(s => new Date(s.date) > new Date());
     const pastStreams = streams.filter(s => new Date(s.date) <= new Date());
+
+    const filteredPastStreams = pastStreams.filter(stream => {
+        if (selectedMonth === 'all') return true;
+        const date = new Date(stream.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+        return monthKey === selectedMonth;
+    });
 
     return (
         <div className="space-y-12 animate-fade-in">
@@ -157,31 +165,58 @@ export default function LiveStreams() {
 
             {/* Past Streams Grid */}
             <div>
-                <h3 className="font-serif text-xl text-[#422326] mb-6">Прошедшие эфиры</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {pastStreams.map((stream) => (
-                        <div key={stream.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-all">
-                            <VideoPlayer
-                                youtubeUrl={stream.video_url}
-                                rutubeUrl={stream.rutube_url}
-                                title={stream.title}
-                            />
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-serif text-xl text-[#422326]">Прошедшие эфиры</h3>
 
-                            <div className="p-6">
-                                <div className="text-sm text-gray-500 mb-2">
-                                    {new Date(stream.date).toLocaleDateString('ru-RU')}
+                    {/* Month Filter */}
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-vastu-dark focus:outline-none focus:border-vastu-gold"
+                    >
+                        <option value="all">Все месяцы</option>
+                        {Array.from(new Set(streams.map(s => {
+                            const date = new Date(s.date);
+                            return `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+                        }))).sort().reverse().map(monthKey => {
+                            const [year, monthIndex] = monthKey.split('-');
+                            const date = new Date(parseInt(year), parseInt(monthIndex));
+                            const label = date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+                            return (
+                                <option key={monthKey} value={monthKey}>
+                                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                                </option>
+                            );
+                        })}
+                    </select>
+                </div>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredPastStreams.length > 0 ? (
+                        filteredPastStreams.map((stream) => (
+                            <div key={stream.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-md transition-all">
+                                <VideoPlayer
+                                    youtubeUrl={stream.video_url}
+                                    rutubeUrl={stream.rutube_url}
+                                    title={stream.title}
+                                />
+
+                                <div className="p-6">
+                                    <div className="text-sm text-gray-500 mb-2">
+                                        {new Date(stream.date).toLocaleDateString('ru-RU')}
+                                    </div>
+                                    <h4 className="font-serif text-lg text-[#422326] mb-2">{stream.title}</h4>
+                                    <p className="text-sm text-gray-500 line-clamp-2">
+                                        {stream.description}
+                                    </p>
                                 </div>
-                                <h4 className="font-serif text-lg text-[#422326] mb-2">{stream.title}</h4>
-                                <p className="text-sm text-gray-500 line-clamp-2 mb-4">
-                                    {stream.description}
-                                </p>
-                                <button className="text-[#422326] font-medium text-sm hover:underline flex items-center gap-1">
-                                    <MessageCircle className="w-4 h-4" />
-                                    Обсуждение
-                                </button>
                             </div>
+                        ))
+                    ) : (
+                        <div className="col-span-full py-10 text-center text-gray-400 italic">
+                            Нет эфиров за этот период
                         </div>
-                    ))}
+                    )}
                 </div>
             </div>
         </div>
