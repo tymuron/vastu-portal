@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
@@ -171,6 +171,11 @@ export default function LoginPage() {
                                 className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
                                 placeholder="••••••••"
                             />
+                            <div className="flex justify-end mt-1">
+                                <Link to="/forgot-password" className="text-xs text-vastu-gold/70 hover:text-vastu-gold transition-colors">
+                                    Забыли пароль?
+                                </Link>
+                            </div>
                         </div>
                     </div>
 

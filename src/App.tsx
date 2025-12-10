@@ -16,6 +16,8 @@ import ManageLibrary from './pages/teacher/ManageLibrary';
 
 import { AuthProvider } from './contexts/AuthContext';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import UpdatePasswordPage from './pages/UpdatePasswordPage';
 
 function App() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -50,6 +52,8 @@ function App() {
                 <Routes>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                    <Route path="/update-password" element={<UpdatePasswordPage />} />
 
                     {/* Student Routes */}
                     <Route path="/student" element={<StudentLayout />}>
