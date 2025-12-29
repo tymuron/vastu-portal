@@ -233,6 +233,8 @@ export default function DayView() {
                                             <a
                                                 href={material.url}
                                                 download
+                                                target="_blank"
+                                                rel="noreferrer"
                                                 className="p-2 -mr-2 text-gray-300 hover:text-vastu-gold transition-colors"
                                                 title="Скачать файл"
                                             >
@@ -295,6 +297,8 @@ export default function DayView() {
                                                     <a
                                                         href={material.url}
                                                         download
+                                                        target="_blank"
+                                                        rel="noreferrer"
                                                         className="p-1 -mr-1 text-orange-300 hover:text-orange-600"
                                                         title="Скачать файл"
                                                     >
