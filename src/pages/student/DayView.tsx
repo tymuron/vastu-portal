@@ -93,6 +93,10 @@ export default function DayView() {
         }
     };
 
+    const isDownloadable = (type: string) => {
+        return ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'file', 'ppt', 'pptx'].includes(type.toLowerCase());
+    };
+
     return (
         <div className="max-w-6xl mx-auto animate-fade-in">
             {/* Breadcrumbs */}
@@ -207,22 +211,35 @@ export default function DayView() {
                         <div className="space-y-3">
                             {day.materials.filter(m => !m.isHomework).length > 0 ? (
                                 day.materials.filter(m => !m.isHomework).map((material) => (
-                                    <a
+                                    <div
                                         key={material.id}
-                                        href={material.url}
-                                        target="_blank"
-                                        rel="noreferrer"
                                         className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                     >
-                                        <div className="w-8 h-8 rounded bg-vastu-light flex items-center justify-center text-vastu-text-light group-hover:text-vastu-gold transition-colors">
-                                            {getIconForType(material.type)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium text-vastu-dark truncate">{material.title}</div>
-                                            <div className="text-xs text-vastu-text-light uppercase">{material.type}</div>
-                                        </div>
-                                        <Download size={16} className="text-gray-300 group-hover:text-vastu-gold transition-colors" />
-                                    </a>
+                                        <a
+                                            href={material.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex-1 flex items-center gap-3 min-w-0"
+                                        >
+                                            <div className="w-8 h-8 rounded bg-vastu-light flex items-center justify-center text-vastu-text-light group-hover:text-vastu-gold transition-colors">
+                                                {getIconForType(material.type)}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-vastu-dark truncate">{material.title}</div>
+                                                <div className="text-xs text-vastu-text-light uppercase">{material.type}</div>
+                                            </div>
+                                        </a>
+                                        {isDownloadable(material.type) && (
+                                            <a
+                                                href={material.url}
+                                                download
+                                                className="p-2 -mr-2 text-gray-300 hover:text-vastu-gold transition-colors"
+                                                title="Скачать файл"
+                                            >
+                                                <Download size={16} />
+                                            </a>
+                                        )}
+                                    </div>
                                 ))
                             ) : (
                                 <div className="text-sm text-vastu-text-light italic">
@@ -259,19 +276,32 @@ export default function DayView() {
                                     <div className="space-y-2 pt-2 border-t border-gray-100">
                                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Файлы задания:</h4>
                                         {day.materials.filter(m => m.isHomework).map((material) => (
-                                            <a
+                                            <div
                                                 key={material.id}
-                                                href={material.url}
-                                                target="_blank"
-                                                rel="noreferrer"
                                                 className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-100 hover:bg-orange-100 transition-colors group"
                                             >
-                                                <FileText size={14} className="text-orange-500" />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="text-sm font-medium text-orange-900 truncate">{material.title}</div>
-                                                </div>
-                                                <Download size={14} className="text-orange-300 group-hover:text-orange-600" />
-                                            </a>
+                                                <a
+                                                    href={material.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex-1 flex items-center gap-2 min-w-0"
+                                                >
+                                                    <FileText size={14} className="text-orange-500" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-sm font-medium text-orange-900 truncate">{material.title}</div>
+                                                    </div>
+                                                </a>
+                                                {isDownloadable(material.type) && (
+                                                    <a
+                                                        href={material.url}
+                                                        download
+                                                        className="p-1 -mr-1 text-orange-300 hover:text-orange-600"
+                                                        title="Скачать файл"
+                                                    >
+                                                        <Download size={14} />
+                                                    </a>
+                                                )}
+                                            </div>
                                         ))}
                                     </div>
                                 )}

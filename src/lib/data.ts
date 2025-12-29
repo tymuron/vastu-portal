@@ -36,8 +36,8 @@ export const MOCK_COURSE: Course = {
                     description: 'История возникновения и основные законы.',
                     videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ', // Placeholder
                     materials: [
-                        { id: 'dm1', title: 'Презентация урока', type: 'pptx', url: '#' },
-                        { id: 'dm2', title: 'Чек-лист анализа дома', type: 'pdf', url: '#' }
+                        { id: 'dm1', title: 'Презентация урока (Тест)', type: 'pptx', url: '/test.ppt' }, // Local file (Same Origin) -> Download works
+                        { id: 'dm2', title: 'Чек-лист анализа дома', type: 'pdf', url: '/test.pdf' } // Local file (Same Origin) -> Download works
                     ]
                 },
                 {
