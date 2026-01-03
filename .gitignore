@@ -115,3 +115,5 @@ dist
 
 # macOS
 .DS_Store
+.github_token
+temp_token.txt
