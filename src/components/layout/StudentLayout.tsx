@@ -166,7 +166,7 @@ export default function StudentLayout() {
             {/* Mobile Menu Overlay */}
             {isMobileMenuOpen && (
                 <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
-                    <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 pt-20" onClick={e => e.stopPropagation()}>
+                    <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 pt-20 overflow-y-auto pb-10" onClick={e => e.stopPropagation()}>
                         <nav className="space-y-2">
                             {/* Mobile Weeks */}
                             <div className="mb-4">
