@@ -17,6 +17,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const LAVA_WEBHOOK_API_KEY = process.env.LAVA_WEBHOOK_API_KEY;
 const APP_URL = process.env.APP_URL;
+const CRON_SECRET = process.env.CRON_SECRET;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // Lazy-init: only create the admin client when the webhook actually fires,
 // so the static server still boots if envs are missing in dev.
@@ -155,6 +157,78 @@ async function findUserIdByEmail(supabase, email) {
     return null;
 }
 
+// Compute expires_at for one course_offers row joined with its course.
+// Returns an ISO string, or null for "lifetime" (no expiry).
+//   - is_lifetime offer  -> null
+//   - course not configured for time-limit -> null (default to lifetime)
+//   - otherwise: starts_at + access_duration_months months
+function computeExpiresAt(offerRow) {
+    if (!offerRow) return null;
+    if (offerRow.is_lifetime) return null;
+    const course = offerRow.courses || null;
+    const startsAt = course?.starts_at || null;
+    const months = course?.access_duration_months;
+    if (!startsAt || months == null) return null;
+    const d = new Date(startsAt);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setUTCMonth(d.getUTCMonth() + Number(months));
+    return d.toISOString();
+}
+
+// Manual per-row upsert into public.user_entitlements with VIP-aware merge.
+// Merge rules:
+//   - No existing row                  -> INSERT with computed expires_at
+//   - Existing expires_at is null      -> keep null (lifetime stays lifetime)
+//   - Incoming expires_at is null      -> UPDATE to null  (VIP/lifetime overrides standard)
+//   - Both non-null                    -> UPDATE to GREATEST(existing, incoming)
+// source / source_payment_id are NEVER overwritten on conflict — first record wins.
+// Returns null on success, or a {message} error-shaped object on failure.
+async function upsertEntitlement(supabase, userId, courseId, expiresAt, sourcePaymentId) {
+    const { data: existing, error: selErr } = await supabase
+        .from('user_entitlements')
+        .select('id, expires_at')
+        .eq('user_id', userId)
+        .eq('course_id', courseId)
+        .maybeSingle();
+
+    if (selErr) return selErr;
+
+    if (!existing) {
+        const { error: insErr } = await supabase.from('user_entitlements').insert({
+            user_id: userId,
+            course_id: courseId,
+            source: 'lava.top',
+            source_payment_id: sourcePaymentId,
+            expires_at: expiresAt
+        });
+        return insErr || null;
+    }
+
+    // Existing already lifetime -> nothing to change.
+    if (existing.expires_at === null) return null;
+
+    // Incoming is lifetime -> upgrade to lifetime.
+    if (expiresAt === null) {
+        const { error: updErr } = await supabase
+            .from('user_entitlements')
+            .update({ expires_at: null })
+            .eq('id', existing.id);
+        return updErr || null;
+    }
+
+    // Both non-null -> keep the latest expiry.
+    const existingMs = new Date(existing.expires_at).getTime();
+    const incomingMs = new Date(expiresAt).getTime();
+    if (incomingMs > existingMs) {
+        const { error: updErr } = await supabase
+            .from('user_entitlements')
+            .update({ expires_at: expiresAt })
+            .eq('id', existing.id);
+        return updErr || null;
+    }
+    return null;
+}
+
 async function handleLavaWebhook(req, res) {
     // 1. Authenticate
     const headerKey =
@@ -219,10 +293,12 @@ async function handleLavaWebhook(req, res) {
 
         // 5. Look up the course(s) by lava offer id. One offer can map
         //    to multiple courses (e.g. a VIP offer grants access to both
-        //    the base course and the VIP bonus course).
+        //    the base course and the VIP bonus course). Also pull
+        //    is_lifetime from the offer + starts_at / access_duration_months
+        //    from the joined course so we can compute expires_at per row.
         const { data: offerRows, error: offerErr } = await supabase
             .from('course_offers')
-            .select('course_id')
+            .select('course_id, is_lifetime, courses(starts_at, access_duration_months)')
             .eq('lava_offer_id', offerId);
 
         if (offerErr) {
@@ -278,22 +354,24 @@ async function handleLavaWebhook(req, res) {
             return;
         }
 
-        // 7. Upsert one entitlement per mapped course (idempotent on user_id+course_id)
-        const rows = courseIds.map((cid) => ({
-            user_id: userId,
-            course_id: cid,
-            source: 'lava.top',
-            source_payment_id: paymentId
-        }));
-
-        const { error: entErr } = await supabase
-            .from('user_entitlements')
-            .upsert(rows, { onConflict: 'user_id,course_id', ignoreDuplicates: true });
-
-        if (entErr) {
-            console.error('user_entitlements upsert error:', entErr.message);
-            sendJson(res, 500, { error: entErr.message });
-            return;
+        // 7. Compute expires_at per offer row and upsert one entitlement
+        //    per mapped course. Merge rules are encoded in upsertEntitlement().
+        const expiresAtPerCourse = [];
+        for (const row of offerRows) {
+            const expiresAt = computeExpiresAt(row);
+            expiresAtPerCourse.push(expiresAt);
+            const upsertErr = await upsertEntitlement(
+                supabase,
+                userId,
+                row.course_id,
+                expiresAt,
+                paymentId
+            );
+            if (upsertErr) {
+                console.error('user_entitlements upsert error:', upsertErr.message);
+                sendJson(res, 500, { error: upsertErr.message });
+                return;
+            }
         }
 
         // 8. Done
@@ -301,10 +379,211 @@ async function handleLavaWebhook(req, res) {
             success: true,
             user_id: userId,
             course_ids: courseIds,
+            expires_at: expiresAtPerCourse,
             invited
         });
     } catch (err) {
         console.error('Lava webhook unexpected error:', err);
+        sendJson(res, 500, { error: err?.message || 'Internal error' });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Daily expiry-reminder cron
+// ---------------------------------------------------------------------------
+
+function formatDateRu(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+}
+
+function buildExpiryEmailHtml({ courseTitle, expiresAtIso, loginUrl }) {
+    const dateStr = formatDateRu(expiresAtIso);
+    // Cream bg / burgundy / Cormorant aesthetic to match the invite email.
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ваш доступ скоро закончится</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F2EDE2;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#F2EDE2;">
+          <tr>
+            <td align="center" style="padding:24px 24px 8px 24px;">
+              <div style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:34px;color:#422326;letter-spacing:0.5px;">Anna Romeo</div>
+              <div style="margin-top:10px;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:#8a6a3b;font-variant:small-caps;">Васту &amp; дизайн портал</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px;">
+              <hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" />
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 24px;">
+              <h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-weight:400;font-size:30px;color:#422326;margin:0 0 16px 0;">Ваш доступ скоро закончится</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px;font-size:16px;line-height:1.7;color:#422326;">
+              <p style="margin:0 0 16px 0;">Через несколько дней истекает ваш доступ к курсу <strong>${courseTitle}</strong>. После <strong>${dateStr}</strong> вы больше не сможете открывать материалы курса.</p>
+              <p style="margin:0 0 24px 0;">Если хотите продлить доступ или вернуться к материалам — войдите в личный кабинет.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 24px 8px 24px;">
+              <a href="${loginUrl}" style="display:inline-block;background-color:#422326;color:#F2EDE2;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;padding:14px 28px;border:1px solid #422326;">Войти в личный кабинет</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 24px 8px 24px;">
+              <hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 32px 24px;font-size:13px;line-height:1.6;color:#7a5a3a;">
+              <p style="margin:0;">Ваш прогресс сохранится — если вы решите вернуться позже и продлить доступ, все ваши отметки и заметки останутся на месте.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+async function handleExpiryReminders(req, res) {
+    // 1. Auth
+    if (!CRON_SECRET) {
+        console.error('CRON_SECRET is not set on the server');
+        sendJson(res, 500, { error: 'Cron not configured' });
+        return;
+    }
+    const headerSecret = req.headers['x-cron-secret'];
+    if (!headerSecret || headerSecret !== CRON_SECRET) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+
+    // 2. Resend availability — let cron run cleanly until Resend is wired up.
+    if (!RESEND_API_KEY) {
+        sendJson(res, 200, {
+            skipped: true,
+            reason: 'RESEND_API_KEY not configured'
+        });
+        return;
+    }
+
+    try {
+        const supabase = getSupabaseAdmin();
+
+        // 3. Candidates: entitlements expiring 6-8 days from now (buffer in
+        //    case cron skips a day) that haven't been reminded yet.
+        const lower = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString();
+        const upper = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: rows, error: qErr } = await supabase
+            .from('user_entitlements')
+            .select(
+                'id, user_id, course_id, expires_at, profiles!inner(email, full_name), courses!inner(title)'
+            )
+            .gte('expires_at', lower)
+            .lte('expires_at', upper)
+            .is('reminder_sent_at', null);
+
+        if (qErr) {
+            console.error('expiry-reminders query error:', qErr.message);
+            sendJson(res, 500, { error: qErr.message });
+            return;
+        }
+
+        const checked = rows?.length || 0;
+        let sent = 0;
+        let failed = 0;
+
+        const loginUrl =
+            (APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com') +
+            '/login';
+
+        // 4. Send sequentially — volume is tiny and we want to be polite to Resend.
+        for (const row of rows || []) {
+            const email = row.profiles?.email;
+            const courseTitle = row.courses?.title || 'курсу';
+            if (!email) {
+                failed += 1;
+                console.warn('expiry-reminders: row missing profile email', row.id);
+                continue;
+            }
+
+            const html = buildExpiryEmailHtml({
+                courseTitle,
+                expiresAtIso: row.expires_at,
+                loginUrl
+            });
+
+            // NOTE: change the `from` address to a verified domain in production.
+            // `onboarding@resend.dev` is Resend's default free-tier sender and
+            // works without domain verification.
+            const body = {
+                from: 'Anna Romeo <onboarding@resend.dev>',
+                to: email,
+                subject: 'Ваш доступ к курсу скоро закончится',
+                html
+            };
+
+            try {
+                const resp = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${RESEND_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                if (!resp.ok) {
+                    const errText = await resp.text().catch(() => '');
+                    console.error(
+                        `Resend send failed for entitlement ${row.id} (status ${resp.status}):`,
+                        errText
+                    );
+                    failed += 1;
+                    continue;
+                }
+
+                const { error: updErr } = await supabase
+                    .from('user_entitlements')
+                    .update({ reminder_sent_at: new Date().toISOString() })
+                    .eq('id', row.id);
+                if (updErr) {
+                    console.error(
+                        `reminder_sent_at update failed for ${row.id}:`,
+                        updErr.message
+                    );
+                    failed += 1;
+                    continue;
+                }
+                sent += 1;
+            } catch (sendErr) {
+                console.error(
+                    `Resend send threw for entitlement ${row.id}:`,
+                    sendErr?.message || sendErr
+                );
+                failed += 1;
+            }
+        }
+
+        sendJson(res, 200, { checked, sent, failed });
+    } catch (err) {
+        console.error('handleExpiryReminders unexpected error:', err);
         sendJson(res, 500, { error: err?.message || 'Internal error' });
     }
 }
@@ -317,6 +596,15 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && urlPath === '/api/lava/webhook') {
         handleLavaWebhook(req, res).catch((err) => {
             console.error('handleLavaWebhook threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // Daily expiry-reminder cron (must also short-circuit before static logic)
+    if (req.method === 'POST' && urlPath === '/api/cron/expiry-reminders') {
+        handleExpiryReminders(req, res).catch((err) => {
+            console.error('handleExpiryReminders threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
         });
         return;

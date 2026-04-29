@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -18,6 +18,8 @@ export default function StudentLayout() {
         setActiveCourseId,
         loading: coursesLoading,
         error: coursesError,
+        activeCourseExpiresAt,
+        expiresInDays,
     } = useCourseContext();
     const { weeks, loading: weeksLoading } = useWeeks();
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
@@ -126,6 +128,20 @@ export default function StudentLayout() {
                             </div>
                             <ChevronRight size={16} className="text-white/40 flex-shrink-0" />
                         </button>
+                    )}
+
+                    {activeCourseExpiresAt && (
+                        <div className="text-[10px] uppercase tracking-widest mt-1 mb-2 px-4">
+                            <span className={cn(
+                                "inline-flex items-center gap-1.5",
+                                expiresInDays !== null && expiresInDays <= 7
+                                    ? "text-red-300"
+                                    : "text-vastu-gold/70"
+                            )}>
+                                <Clock size={10} />
+                                Доступ до {new Date(activeCourseExpiresAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </span>
+                        </div>
                     )}
 
                     {/* My Course Section */}
@@ -257,6 +273,20 @@ export default function StudentLayout() {
                                     </div>
                                     <ChevronRight size={16} className="text-white/40 flex-shrink-0" />
                                 </button>
+                            )}
+
+                            {activeCourseExpiresAt && (
+                                <div className="text-[10px] uppercase tracking-widest mt-1 mb-3 px-4">
+                                    <span className={cn(
+                                        "inline-flex items-center gap-1.5",
+                                        expiresInDays !== null && expiresInDays <= 7
+                                            ? "text-red-300"
+                                            : "text-vastu-gold/70"
+                                    )}>
+                                        <Clock size={10} />
+                                        Доступ до {new Date(activeCourseExpiresAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                    </span>
+                                </div>
                             )}
 
                             {/* Mobile Weeks */}
