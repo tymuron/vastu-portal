@@ -2,23 +2,39 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Week, Day } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
+import { useCourseContext } from '../contexts/CourseContext';
 
 export function useWeeks() {
+    const { activeCourseId } = useCourseContext();
     const [weeks, setWeeks] = useState<Week[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        let cancelled = false;
+
         async function fetchWeeks() {
+            setLoading(true);
+            setError(null);
             try {
                 // If no keys or placeholder, fallback to mock
                 if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
-                    setWeeks(MOCK_COURSE.weeks);
-                    setLoading(false);
+                    if (!cancelled) {
+                        setWeeks(MOCK_COURSE.weeks ?? []);
+                        setLoading(false);
+                    }
                     return;
                 }
 
-                // Fetch Weeks
+                if (!activeCourseId) {
+                    if (!cancelled) {
+                        setWeeks([]);
+                        setLoading(false);
+                    }
+                    return;
+                }
+
+                // Fetch Weeks scoped to active course
                 const { data, error } = await supabase
                     .from('weeks')
                     .select(`
@@ -26,6 +42,7 @@ export function useWeeks() {
             days (*),
             materials (*)
           `)
+                    .eq('course_id', activeCourseId)
                     .order('order_index', { ascending: true });
 
                 if (error) throw error;
@@ -66,21 +83,33 @@ export function useWeeks() {
                             isHomework: m.is_homework
                         }))
                     }));
-                    setWeeks(transformedWeeks);
+                    if (!cancelled) setWeeks(transformedWeeks);
                 }
             } catch (err) {
                 console.error(err);
-                setError('Failed to fetch weeks');
-                setWeeks(MOCK_COURSE.weeks);
+                if (!cancelled) {
+                    setError('Failed to fetch weeks');
+                    setWeeks(MOCK_COURSE.weeks ?? []);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         }
 
         fetchWeeks();
-    }, []);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeCourseId]);
 
     return { weeks, loading, error };
+}
+
+export function useCourses() {
+    const { courses, activeCourseId, setActiveCourseId, loading, error } = useCourseContext();
+    const activeCourse = courses.find((c) => c.id === activeCourseId) ?? null;
+    return { courses, activeCourseId, activeCourse, setActiveCourseId, loading, error };
 }
 
 export function useDay(weekId: string | undefined, dayId: string | undefined) {
@@ -91,7 +120,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
         if (!weekId || !dayId) return;
 
         if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
-            const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
+            const w = MOCK_COURSE.weeks?.find(w => w.id === weekId);
             const d = w?.days.find(d => d.id === dayId);
             setDay(d || null);
             setLoading(false);
@@ -144,7 +173,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
             }
         } catch (err) {
             console.error(err);
-            const w = MOCK_COURSE.weeks.find(w => w.id === weekId);
+            const w = MOCK_COURSE.weeks?.find(w => w.id === weekId);
             const d = w?.days.find(d => d.id === dayId);
             setDay(d || null);
         } finally {

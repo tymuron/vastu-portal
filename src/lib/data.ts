@@ -18,7 +18,11 @@ export const MOCK_USER_TEACHER: User = {
 
 export const MOCK_COURSE: Course = {
     id: 'c1',
+    slug: 'vastu-basics',
     title: 'Васту-Дизайн: Основы и Практика',
+    description: 'Полный курс по основам Васту-Дизайна.',
+    isActive: true,
+    orderIndex: 0,
     weeks: [
         {
             id: 'w1',

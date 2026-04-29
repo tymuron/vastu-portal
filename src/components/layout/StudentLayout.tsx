@@ -1,9 +1,10 @@
 import { Outlet, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWeeks } from '../../hooks/useCourse';
+import { useCourseContext } from '../../contexts/CourseContext';
 
 export default function StudentLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -11,8 +12,25 @@ export default function StudentLayout() {
     const location = useLocation();
     const navigate = useNavigate();
     const { user, signOut, loading: authLoading } = useAuth();
+    const {
+        courses,
+        activeCourseId,
+        setActiveCourseId,
+        loading: coursesLoading,
+        error: coursesError,
+    } = useCourseContext();
     const { weeks, loading: weeksLoading } = useWeeks();
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
+    const activeCourse = courses.find((c) => c.id === activeCourseId) ?? null;
+    const hasMultipleCourses = courses.length > 1;
+    const isOnPicker = location.pathname === '/student/courses';
+
+    // Auto-select the only course when there's exactly one
+    useEffect(() => {
+        if (!coursesLoading && courses.length === 1 && activeCourseId !== courses[0].id) {
+            setActiveCourseId(courses[0].id);
+        }
+    }, [coursesLoading, courses, activeCourseId, setActiveCourseId]);
 
     // Extract weekId from query params if on dashboard
     const searchParams = new URLSearchParams(location.search);
@@ -22,6 +40,41 @@ export default function StudentLayout() {
 
     if (!user) {
         return <Navigate to="/login" replace />;
+    }
+
+    if (coursesLoading) {
+        return (
+            <div className="h-screen flex items-center justify-center">
+                <Loader2 className="animate-spin text-vastu-gold" size={40} />
+            </div>
+        );
+    }
+
+    if (!coursesError && courses.length === 0) {
+        return (
+            <div className="min-h-screen bg-vastu-light flex items-center justify-center p-6">
+                <div className="bg-white rounded-2xl border border-gray-100 p-10 max-w-lg w-full text-center shadow-sm">
+                    <div className="w-14 h-14 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold mx-auto mb-5">
+                        <BookOpen size={26} />
+                    </div>
+                    <h1 className="font-serif text-2xl text-vastu-dark mb-3">Доступ к курсам</h1>
+                    <p className="text-vastu-text-light leading-relaxed mb-6">
+                        У вас пока нет доступа к курсам. После оплаты вы получите письмо с доступом.
+                    </p>
+                    <button
+                        onClick={() => signOut()}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-vastu-text-light hover:text-vastu-dark transition-colors"
+                    >
+                        <LogOut size={16} />
+                        <span>Выйти из аккаунта</span>
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (hasMultipleCourses && !activeCourseId && !isOnPicker) {
+        return <Navigate to="/student/courses" replace />;
     }
 
     const NavItem = ({ to, icon: Icon, label, isActive, onClick }: { to: string; icon: any; label: string; isActive: boolean; onClick?: () => void }) => (
@@ -57,6 +110,24 @@ export default function StudentLayout() {
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
+                    {/* Course Switcher (only visible when 2+ courses) */}
+                    {hasMultipleCourses && (
+                        <button
+                            onClick={() => navigate('/student/courses')}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-3 mb-1 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                        >
+                            <div className="min-w-0 flex-1">
+                                <div className="text-[10px] uppercase tracking-widest text-white/40 mb-0.5">
+                                    Активный курс
+                                </div>
+                                <div className="text-sm text-vastu-gold truncate">
+                                    {activeCourse?.title ?? 'Выбрать курс'}
+                                </div>
+                            </div>
+                            <ChevronRight size={16} className="text-white/40 flex-shrink-0" />
+                        </button>
+                    )}
+
                     {/* My Course Section */}
                     <div>
                         <button
@@ -168,6 +239,26 @@ export default function StudentLayout() {
                 <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 pt-20 overflow-y-auto pb-10" onClick={e => e.stopPropagation()}>
                         <nav className="space-y-2">
+                            {hasMultipleCourses && (
+                                <button
+                                    onClick={() => {
+                                        navigate('/student/courses');
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-between gap-3 px-4 py-3 mb-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-left"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className="text-[10px] uppercase tracking-widest text-white/40 mb-0.5">
+                                            Активный курс
+                                        </div>
+                                        <div className="text-sm text-vastu-gold truncate">
+                                            {activeCourse?.title ?? 'Выбрать курс'}
+                                        </div>
+                                    </div>
+                                    <ChevronRight size={16} className="text-white/40 flex-shrink-0" />
+                                </button>
+                            )}
+
                             {/* Mobile Weeks */}
                             <div className="mb-4">
                                 <div className="text-xs uppercase tracking-widest text-white/40 mb-2 px-4">Мой Курс</div>

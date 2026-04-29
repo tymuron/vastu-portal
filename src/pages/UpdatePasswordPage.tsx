@@ -9,19 +9,48 @@ export default function UpdatePasswordPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [verifying, setVerifying] = useState(true);
+    const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => {
-        // Simple check to ensure we have a session (handled by the magic link flow)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (!session) {
-                // If no session, user might have just navigated here manually.
-                // In a real magic link flow, Supabase sets the session before mounting if the #access_token is present.
-                // We'll give it a moment or show an error if strictly required.
-                // For now, let's assume if they are here, they clicked the link.
-                // If they are not logged in, updateUser will fail anyway.
+        let resolved = false;
+
+        // The invite / recovery link puts tokens in the URL hash. Supabase JS
+        // (with detectSessionInUrl: true, the default) will parse them and
+        // emit SIGNED_IN / PASSWORD_RECOVERY shortly after mount. We listen
+        // for either rather than racing against getSession().
+        const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+            if (resolved) return;
+            if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION') {
+                if (session) {
+                    resolved = true;
+                    setHasSession(true);
+                    setVerifying(false);
+                }
             }
-            setVerifying(false);
         });
+
+        // Fallback: if there's already a session (user navigated back here
+        // while logged in), accept it immediately.
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (resolved) return;
+            if (session) {
+                resolved = true;
+                setHasSession(true);
+                setVerifying(false);
+            }
+        });
+
+        // Hard timeout so the user isn't stuck on a spinner if the link is bad.
+        const timeout = window.setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            setVerifying(false);
+        }, 4000);
+
+        return () => {
+            sub.subscription.unsubscribe();
+            window.clearTimeout(timeout);
+        };
     }, []);
 
     const handleUpdate = async (e: React.FormEvent) => {
@@ -60,38 +89,56 @@ export default function UpdatePasswordPage() {
 
             <div className="w-full max-w-md p-8 bg-vastu-light/5 backdrop-blur-sm border border-vastu-gold/20 rounded-2xl shadow-2xl relative z-10">
                 <div className="text-center mb-10">
-                    <h1 className="text-3xl font-serif text-vastu-gold mb-2">Новый пароль</h1>
-                    <p className="text-vastu-light/60 font-light tracking-widest text-sm uppercase">Придумайте новый пароль</p>
+                    <h1 className="text-3xl font-serif text-vastu-gold mb-2">
+                        {hasSession ? 'Новый пароль' : 'Ссылка недействительна'}
+                    </h1>
+                    <p className="text-vastu-light/60 font-light tracking-widest text-sm uppercase">
+                        {hasSession ? 'Придумайте новый пароль' : 'Запросите новую ссылку'}
+                    </p>
                 </div>
 
-                <form onSubmit={handleUpdate} className="space-y-6">
-                    {error && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                            {error}
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Новый пароль</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
-                            placeholder="••••••••"
-                            required
-                            minLength={6}
-                        />
+                {!hasSession ? (
+                    <div className="text-center space-y-4">
+                        <p className="text-vastu-light/80 text-sm leading-relaxed">
+                            Похоже, ссылка устарела или уже была использована. Попробуйте войти, либо запросите новую ссылку через «Забыли пароль».
+                        </p>
+                        <button
+                            onClick={() => navigate('/login')}
+                            className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transition-all"
+                        >
+                            На страницу входа
+                        </button>
                     </div>
+                ) : (
+                    <form onSubmit={handleUpdate} className="space-y-6">
+                        {error && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
+                                {error}
+                            </div>
+                        )}
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? 'Обновление...' : 'Сохранить пароль'}
-                    </button>
-                </form>
+                        <div>
+                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Новый пароль</label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
+                                placeholder="••••••••"
+                                required
+                                minLength={6}
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Обновление...' : 'Сохранить пароль'}
+                        </button>
+                    </form>
+                )}
             </div>
         </div>
     );

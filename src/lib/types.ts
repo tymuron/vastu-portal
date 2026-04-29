@@ -43,8 +43,21 @@ export interface Week {
 
 export interface Course {
     id: string;
+    slug: string;
     title: string;
-    weeks: Week[];
+    description?: string;
+    isActive: boolean;
+    orderIndex: number;
+    weeks?: Week[];
+}
+
+export interface Entitlement {
+    id: string;
+    userId: string;
+    courseId: string;
+    source: 'lava.top' | 'manual' | 'migration';
+    sourcePaymentId?: string;
+    grantedAt: string;
 }
 
 export interface LiveStream {

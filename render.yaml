@@ -9,3 +9,12 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      # Server-side only (used by /api/lava/webhook)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: LAVA_WEBHOOK_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
