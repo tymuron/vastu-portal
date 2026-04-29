@@ -510,7 +510,106 @@ interface Course {
     order_index: number;
 }
 
+interface CourseOffer {
+    id: string;
+    course_id: string;
+    lava_offer_id: string;
+}
+
 const ACTIVE_COURSE_STORAGE_KEY = 'vastu.teacher.activeCourseId';
+
+const LavaOfferPanel = ({ courseId, courseTitle }: { courseId: string; courseTitle: string }) => {
+    const [offers, setOffers] = useState<CourseOffer[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const refresh = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('course_offers')
+            .select('id, course_id, lava_offer_id')
+            .eq('course_id', courseId)
+            .order('created_at', { ascending: true });
+        if (!error && data) setOffers(data as CourseOffer[]);
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        refresh();
+    }, [courseId]);
+
+    const handleAdd = async () => {
+        const raw = window.prompt(
+            `Введите Lava offer ID для курса «${courseTitle}»\n(скопируйте UUID оффера из админки lava.top):`
+        );
+        const lavaOfferId = (raw || '').trim();
+        if (!lavaOfferId) return;
+
+        const { error } = await supabase
+            .from('course_offers')
+            .insert([{ course_id: courseId, lava_offer_id: lavaOfferId }]);
+        if (error) {
+            if (error.code === '23505') {
+                alert('Этот Lava offer ID уже привязан (возможно, к другому курсу).');
+            } else {
+                alert('Ошибка: ' + error.message);
+            }
+            return;
+        }
+        refresh();
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Удалить привязку?')) return;
+        const { error } = await supabase.from('course_offers').delete().eq('id', id);
+        if (error) {
+            alert('Ошибка: ' + error.message);
+            return;
+        }
+        refresh();
+    };
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3 gap-3">
+                <div>
+                    <div className="text-xs uppercase tracking-wider text-gray-400">Lava.top</div>
+                    <div className="text-sm font-medium text-vastu-dark">Привязка офферов к курсу</div>
+                </div>
+                <button
+                    onClick={handleAdd}
+                    className="flex items-center gap-1 text-sm bg-vastu-dark text-white px-3 py-1.5 rounded-lg hover:bg-vastu-dark/90"
+                >
+                    <Plus size={14} /> Привязать
+                </button>
+            </div>
+            {loading ? (
+                <div className="text-xs text-gray-400 py-2">Загрузка...</div>
+            ) : offers.length === 0 ? (
+                <div className="text-xs text-gray-500 py-2">
+                    Пока нет привязок. После оплаты на lava.top покупатель не получит доступ, пока ID оффера не привязан здесь.
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {offers.map(o => (
+                        <div
+                            key={o.id}
+                            className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-sm"
+                        >
+                            <code className="text-xs text-vastu-dark font-mono truncate">{o.lava_offer_id}</code>
+                            <button
+                                onClick={() => handleDelete(o.id)}
+                                className="text-gray-400 hover:text-red-500 ml-3 flex-shrink-0"
+                                title="Удалить привязку"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function CourseEditor() {
     const [weeks, setWeeks] = useState<Week[]>([]);
@@ -679,6 +778,10 @@ export default function CourseEditor() {
                     <Plus size={18} /> Добавить неделю
                 </button>
             </div>
+
+            {activeCourse && (
+                <LavaOfferPanel courseId={activeCourse.id} courseTitle={activeCourse.title} />
+            )}
 
             {courses.length === 0 ? (
                 <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-vastu-dark">
