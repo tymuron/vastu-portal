@@ -10,6 +10,8 @@ interface CourseContextType {
     setActiveCourseId: (id: string | null) => void;
     loading: boolean;
     error: string | null;
+    activeCourseExpiresAt: string | null;
+    expiresInDays: number | null;
 }
 
 const STORAGE_KEY = 'vastu.activeCourseId';
@@ -20,6 +22,8 @@ const CourseContext = createContext<CourseContextType>({
     setActiveCourseId: () => { },
     loading: true,
     error: null,
+    activeCourseExpiresAt: null,
+    expiresInDays: null,
 });
 
 export const useCourseContext = () => useContext(CourseContext);
@@ -35,6 +39,7 @@ interface RawCourseRow {
 
 interface EntitlementRow {
     course_id: string;
+    expires_at: string | null;
     courses: RawCourseRow | RawCourseRow[] | null;
 }
 
@@ -53,6 +58,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     const [activeCourseId, setActiveCourseIdState] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [expiryByCourse, setExpiryByCourse] = useState<Map<string, string | null>>(new Map());
 
     const setActiveCourseId = useCallback((id: string | null) => {
         setActiveCourseIdState(id);
@@ -92,6 +98,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                     };
                     if (!cancelled) {
                         setCourses([mockCourse]);
+                        setExpiryByCourse(new Map([[mockCourse.id, null]]));
                         const stored = readStoredId();
                         const next = stored && stored === mockCourse.id ? stored : mockCourse.id;
                         setActiveCourseIdState(next);
@@ -104,6 +111,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 if (!user) {
                     if (!cancelled) {
                         setCourses([]);
+                        setExpiryByCourse(new Map());
                         setActiveCourseIdState(null);
                         setLoading(false);
                     }
@@ -111,6 +119,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 let list: Course[] = [];
+                const expiryMap = new Map<string, string | null>();
 
                 if (role === 'teacher') {
                     const { data, error: qErr } = await supabase
@@ -124,17 +133,21 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 } else {
                     const { data, error: qErr } = await supabase
                         .from('user_entitlements')
-                        .select('course_id, courses(id, slug, title, description, is_active, order_index)')
+                        .select('course_id, expires_at, courses(id, slug, title, description, is_active, order_index)')
                         .eq('user_id', user.id);
 
                     if (qErr) throw qErr;
 
                     const rows = (data ?? []) as unknown as EntitlementRow[];
                     const mapped: Course[] = [];
+                    const now = Date.now();
                     for (const row of rows) {
+                        // skip rows whose expires_at is non-null AND already past
+                        if (row.expires_at && new Date(row.expires_at).getTime() <= now) continue;
                         const c = Array.isArray(row.courses) ? row.courses[0] : row.courses;
                         if (c && c.is_active) {
                             mapped.push(mapCourse(c));
+                            expiryMap.set(c.id, row.expires_at);
                         }
                     }
                     mapped.sort((a, b) => a.orderIndex - b.orderIndex);
@@ -144,6 +157,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 if (cancelled) return;
 
                 setCourses(list);
+                setExpiryByCourse(expiryMap);
 
                 const stored = readStoredId();
                 const storedStillValid = stored && list.some((c) => c.id === stored);
@@ -181,9 +195,29 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         };
     }, [user, role, authLoading]);
 
+    const activeCourseExpiresAt = activeCourseId
+        ? expiryByCourse.get(activeCourseId) ?? null
+        : null;
+
+    let expiresInDays: number | null = null;
+    if (activeCourseExpiresAt) {
+        const diffMs = new Date(activeCourseExpiresAt).getTime() - Date.now();
+        if (diffMs > 0) {
+            expiresInDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        }
+    }
+
     return (
         <CourseContext.Provider
-            value={{ courses, activeCourseId, setActiveCourseId, loading, error }}
+            value={{
+                courses,
+                activeCourseId,
+                setActiveCourseId,
+                loading,
+                error,
+                activeCourseExpiresAt,
+                expiresInDays,
+            }}
         >
             {children}
         </CourseContext.Provider>

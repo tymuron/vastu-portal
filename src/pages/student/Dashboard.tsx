@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PlayCircle, ChevronRight, FileText, Loader2, Play, BookOpen } from 'lucide-react';
+import { PlayCircle, ChevronRight, FileText, Loader2, Play, BookOpen, AlertCircle, Lock } from 'lucide-react';
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
+import { useCourseContext } from '../../contexts/CourseContext';
 
 // Helper to strip HTML
 const stripHtml = (html: string) => {
@@ -10,10 +11,24 @@ const stripHtml = (html: string) => {
     return tmp.textContent || tmp.innerText || '';
 };
 
+const pluralizeDays = (n: number): string => {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 'день';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'дня';
+    return 'дней';
+};
+
 export default function StudentDashboard() {
     const { weeks, loading } = useWeeks();
     const location = useLocation();
     const navigate = useNavigate();
+    const { activeCourseExpiresAt, expiresInDays } = useCourseContext();
+
+    const isExpired = activeCourseExpiresAt
+        ? new Date(activeCourseExpiresAt).getTime() <= Date.now()
+        : false;
+    const showWarning = expiresInDays !== null && expiresInDays <= 7 && expiresInDays >= 0;
 
     // Get week from URL
     const searchParams = new URLSearchParams(location.search);
@@ -34,6 +49,20 @@ export default function StudentDashboard() {
 
     if (loading) {
         return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
+    }
+
+    if (isExpired) {
+        return (
+            <div className="animate-fade-in max-w-2xl mx-auto">
+                <div className="bg-white rounded-2xl border border-gray-100 p-10 md:p-14 text-center">
+                    <Lock size={32} className="mx-auto text-vastu-text-light mb-4" />
+                    <h2 className="font-serif text-2xl text-vastu-dark mb-3">Доступ к курсу истёк</h2>
+                    <p className="text-vastu-text-light leading-relaxed">
+                        Срок вашего доступа к этому курсу закончился. Ваш прогресс сохранён — если вы продлите доступ, всё восстановится.
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     if (weeks.length === 0) {
@@ -58,6 +87,20 @@ export default function StudentDashboard() {
 
     return (
         <div className="animate-fade-in">
+            {showWarning && activeCourseExpiresAt && (
+                <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
+                    <AlertCircle size={20} />
+                    <div>
+                        <div className="font-medium">
+                            Ваш доступ заканчивается через {expiresInDays} {pluralizeDays(expiresInDays!)}
+                        </div>
+                        <div className="text-sm text-red-700/80">
+                            После {new Date(activeCourseExpiresAt).toLocaleDateString('ru-RU')} вы не сможете открывать материалы. Ваш прогресс сохранится.
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Active Week Content */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
                 <div className="bg-vastu-dark p-8 md:p-12 text-vastu-light relative overflow-hidden">

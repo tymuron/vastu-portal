@@ -252,7 +252,104 @@ create policy "Users can view library for entitled courses"
   );
 
 -- ---------------------------------------------------------------------------
--- 9. Verification
+-- 9. Access expiry (time-limited access)
+-- ---------------------------------------------------------------------------
+-- Standard buyers get 6 months from a fixed course-start date; VIP buyers
+-- and Course 1 grandfathered users keep lifetime access. Existing
+-- entitlements default expires_at=NULL, so they remain lifetime.
+
+alter table public.courses
+  add column if not exists starts_at timestamptz;
+alter table public.courses
+  add column if not exists access_duration_months integer;
+alter table public.course_offers
+  add column if not exists is_lifetime boolean default false;
+alter table public.user_entitlements
+  add column if not exists expires_at timestamptz;
+alter table public.user_entitlements
+  add column if not exists reminder_sent_at timestamptz;
+
+update public.courses
+  set starts_at = timestamptz '2026-05-18 00:00:00+00',
+      access_duration_months = 6
+  where slug = 'vastu-2';
+-- vastu-2-vip stays unconfigured (no expiry; VIP-bonus access is lifetime)
+-- vastu-1 stays unconfigured (legacy, lifetime for grandfathered users)
+
+update public.course_offers
+  set is_lifetime = true
+  where lava_offer_id in (
+    'cc9da614-4a70-485f-b009-19427d87e375',
+    '39485bee-88cb-44d1-9fd4-2b2580164801'
+  );
+
+drop policy if exists "Users can view weeks for entitled courses" on public.weeks;
+create policy "Users can view weeks for entitled courses"
+  on public.weeks for select using (
+    exists (select 1 from public.user_entitlements e
+            where e.user_id = auth.uid()
+              and e.course_id = weeks.course_id
+              and (e.expires_at is null or e.expires_at > now()))
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher')
+  );
+
+drop policy if exists "Users can view days for entitled courses" on public.days;
+create policy "Users can view days for entitled courses"
+  on public.days for select using (
+    exists (
+      select 1 from public.weeks w
+      where w.id = days.week_id and (
+        exists (select 1 from public.user_entitlements e
+                where e.user_id = auth.uid()
+                  and e.course_id = w.course_id
+                  and (e.expires_at is null or e.expires_at > now()))
+        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher')
+      )
+    )
+  );
+
+drop policy if exists "Users can view materials for entitled courses" on public.materials;
+create policy "Users can view materials for entitled courses"
+  on public.materials for select using (
+    exists (
+      select 1 from public.weeks w
+      where (w.id = materials.week_id or w.id = (select d.week_id from public.days d where d.id = materials.day_id))
+      and (
+        exists (select 1 from public.user_entitlements e
+                where e.user_id = auth.uid()
+                  and e.course_id = w.course_id
+                  and (e.expires_at is null or e.expires_at > now()))
+        or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher')
+      )
+    )
+  );
+
+drop policy if exists "Users can view streams for entitled courses" on public.live_streams;
+create policy "Users can view streams for entitled courses"
+  on public.live_streams for select using (
+    exists (select 1 from public.user_entitlements e
+            where e.user_id = auth.uid()
+              and e.course_id = live_streams.course_id
+              and (e.expires_at is null or e.expires_at > now()))
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher')
+  );
+
+drop policy if exists "Users can view library for entitled courses" on public.library_items;
+create policy "Users can view library for entitled courses"
+  on public.library_items for select using (
+    exists (select 1 from public.user_entitlements e
+            where e.user_id = auth.uid()
+              and e.course_id = library_items.course_id
+              and (e.expires_at is null or e.expires_at > now()))
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher')
+  );
+
+create index if not exists user_entitlements_expires_at_idx
+  on public.user_entitlements(expires_at)
+  where expires_at is not null and reminder_sent_at is null;
+
+-- ---------------------------------------------------------------------------
+-- 10. Verification
 -- ---------------------------------------------------------------------------
 
 select c.slug, c.title, count(co.id) as offers_attached
