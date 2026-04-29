@@ -217,24 +217,25 @@ async function handleLavaWebhook(req, res) {
     try {
         const supabase = getSupabaseAdmin();
 
-        // 5. Look up the course by lava offer id
-        const { data: offerRow, error: offerErr } = await supabase
+        // 5. Look up the course(s) by lava offer id. One offer can map
+        //    to multiple courses (e.g. a VIP offer grants access to both
+        //    the base course and the VIP bonus course).
+        const { data: offerRows, error: offerErr } = await supabase
             .from('course_offers')
             .select('course_id')
-            .eq('lava_offer_id', offerId)
-            .maybeSingle();
+            .eq('lava_offer_id', offerId);
 
         if (offerErr) {
             console.error('course_offers lookup error:', offerErr.message);
             sendJson(res, 500, { error: 'course_offers lookup failed' });
             return;
         }
-        if (!offerRow?.course_id) {
+        if (!offerRows || offerRows.length === 0) {
             console.warn(`Lava webhook: unknown offer id ${offerId}`);
             sendJson(res, 200, { ignored: true, reason: 'unknown offer' });
             return;
         }
-        const courseId = offerRow.course_id;
+        const courseIds = offerRows.map((r) => r.course_id);
 
         // 6. Invite or look up the user
         let userId = null;
@@ -277,18 +278,17 @@ async function handleLavaWebhook(req, res) {
             return;
         }
 
-        // 7. Upsert the entitlement (idempotent on user_id+course_id)
+        // 7. Upsert one entitlement per mapped course (idempotent on user_id+course_id)
+        const rows = courseIds.map((cid) => ({
+            user_id: userId,
+            course_id: cid,
+            source: 'lava.top',
+            source_payment_id: paymentId
+        }));
+
         const { error: entErr } = await supabase
             .from('user_entitlements')
-            .upsert(
-                {
-                    user_id: userId,
-                    course_id: courseId,
-                    source: 'lava.top',
-                    source_payment_id: paymentId
-                },
-                { onConflict: 'user_id,course_id', ignoreDuplicates: true }
-            );
+            .upsert(rows, { onConflict: 'user_id,course_id', ignoreDuplicates: true });
 
         if (entErr) {
             console.error('user_entitlements upsert error:', entErr.message);
@@ -300,7 +300,7 @@ async function handleLavaWebhook(req, res) {
         sendJson(res, 200, {
             success: true,
             user_id: userId,
-            course_id: courseId,
+            course_ids: courseIds,
             invited
         });
     } catch (err) {

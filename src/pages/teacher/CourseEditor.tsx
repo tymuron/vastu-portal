@@ -539,7 +539,7 @@ const LavaOfferPanel = ({ courseId, courseTitle }: { courseId: string; courseTit
 
     const handleAdd = async () => {
         const raw = window.prompt(
-            `Введите Lava offer ID для курса «${courseTitle}»\n(скопируйте UUID оффера из админки lava.top):`
+            `Введите Lava offer ID для курса «${courseTitle}»\n(скопируйте UUID оффера из админки lava.top).\n\nОдин оффер можно привязать к нескольким курсам — это полезно для VIP-тарифов, которые открывают и базовый курс, и бонусный.`
         );
         const lavaOfferId = (raw || '').trim();
         if (!lavaOfferId) return;
@@ -549,7 +549,7 @@ const LavaOfferPanel = ({ courseId, courseTitle }: { courseId: string; courseTit
             .insert([{ course_id: courseId, lava_offer_id: lavaOfferId }]);
         if (error) {
             if (error.code === '23505') {
-                alert('Этот Lava offer ID уже привязан (возможно, к другому курсу).');
+                alert('Этот Lava offer ID уже привязан к этому курсу.');
             } else {
                 alert('Ошибка: ' + error.message);
             }
