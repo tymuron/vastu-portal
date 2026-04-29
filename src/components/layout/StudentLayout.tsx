@@ -303,6 +303,27 @@ export default function StudentLayout() {
                                     onClick={() => setIsMobileMenuOpen(false)}
                                 />
                             </div>
+
+                            <div className="border-t border-white/10 mt-4 pt-4 space-y-1">
+                                <Link
+                                    to="/student/profile"
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-vastu-light/70 hover:bg-white/5 hover:text-vastu-light transition-colors"
+                                >
+                                    <UserIcon size={20} className="text-vastu-light/50" />
+                                    <span className="truncate">{displayName}</span>
+                                </Link>
+                                <button
+                                    onClick={() => {
+                                        setIsMobileMenuOpen(false);
+                                        signOut();
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-vastu-light/60 hover:bg-white/5 hover:text-white transition-colors text-left"
+                                >
+                                    <LogOut size={20} className="text-vastu-light/50" />
+                                    <span>Выйти из аккаунта</span>
+                                </button>
+                            </div>
                         </nav>
                     </div>
                 </div>
