@@ -3,11 +3,22 @@ import { supabase } from '../../lib/supabase';
 import { LibraryItem, LibraryCategory } from '../../lib/types';
 import { Plus, Trash2, FileText, Save, X, Link as LinkIcon, Upload } from 'lucide-react';
 
+interface CourseRow {
+    id: string;
+    slug: string;
+    title: string;
+    order_index: number;
+}
+
+const ACTIVE_COURSE_STORAGE_KEY = 'vastu.teacher.activeCourseId';
+
 export default function ManageLibrary() {
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [courses, setCourses] = useState<CourseRow[]>([]);
+    const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
 
     // Drag & Drop State
     const [isDragging, setIsDragging] = useState(false);
@@ -22,14 +33,43 @@ export default function ManageLibrary() {
     });
 
     useEffect(() => {
-        fetchLibrary();
+        async function fetchCourses() {
+            const { data, error } = await supabase
+                .from('courses')
+                .select('id, slug, title, order_index')
+                .order('order_index', { ascending: true });
+            if (!error && data) {
+                setCourses(data as CourseRow[]);
+                const stored = typeof window !== 'undefined'
+                    ? window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY)
+                    : null;
+                const validStored = stored && data.some((c: any) => c.id === stored) ? stored : null;
+                if (validStored) setActiveCourseId(validStored);
+                else if (data.length > 0) setActiveCourseId(data[0].id);
+            }
+        }
+        fetchCourses();
     }, []);
 
+    useEffect(() => {
+        if (activeCourseId) {
+            try { window.localStorage.setItem(ACTIVE_COURSE_STORAGE_KEY, activeCourseId); } catch {}
+        }
+        fetchLibrary();
+    }, [activeCourseId]);
+
     async function fetchLibrary() {
+        if (!activeCourseId) {
+            setItems([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('library_items')
                 .select('*')
+                .eq('course_id', activeCourseId)
                 .order('title');
 
             if (error) throw error;
@@ -67,6 +107,10 @@ export default function ManageLibrary() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!formData.title || !formData.file_url) return;
+        if (!editingId && !activeCourseId) {
+            alert('Сначала выберите курс');
+            return;
+        }
 
         try {
             let error;
@@ -81,7 +125,7 @@ export default function ManageLibrary() {
                 // Insert new
                 const { error: insertError } = await supabase
                     .from('library_items')
-                    .insert([formData]);
+                    .insert([{ ...formData, course_id: activeCourseId }]);
                 error = insertError;
             }
 
@@ -135,6 +179,11 @@ export default function ManageLibrary() {
         e.preventDefault();
         setIsDragging(false);
 
+        if (!activeCourseId) {
+            alert('Сначала выберите курс');
+            return;
+        }
+
         const files = Array.from(e.dataTransfer.files);
         if (files.length === 0) return;
 
@@ -170,7 +219,8 @@ export default function ManageLibrary() {
                         title: title,
                         category: 'checklist', // Default category
                         file_url: publicUrl,
-                        description: 'Загружено перетаскиванием'
+                        description: 'Загружено перетаскиванием',
+                        course_id: activeCourseId
                     }]);
 
                 if (dbError) throw dbError;
@@ -198,11 +248,25 @@ export default function ManageLibrary() {
 
     return (
         <div className="max-w-4xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-serif text-[#422326]">Управление Библиотекой</h1>
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-8">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <h1 className="text-3xl font-serif text-[#422326] whitespace-nowrap">Управление Библиотекой</h1>
+                    {courses.length > 0 && (
+                        <select
+                            value={activeCourseId || ''}
+                            onChange={(e) => setActiveCourseId(e.target.value || null)}
+                            className="bg-white border border-gray-200 rounded-lg text-[#422326] px-3 py-2 text-sm font-medium focus:outline-none focus:border-vastu-gold transition-colors max-w-xs truncate"
+                        >
+                            {courses.map(c => (
+                                <option key={c.id} value={c.id}>{c.title}</option>
+                            ))}
+                        </select>
+                    )}
+                </div>
                 <button
                     onClick={handleAddNew}
-                    className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors"
+                    disabled={!activeCourseId}
+                    className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <Plus className="w-5 h-5 mr-2" />
                     Добавить Материал

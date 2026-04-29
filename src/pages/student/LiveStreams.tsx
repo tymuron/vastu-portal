@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { LiveStream } from '../../lib/types';
 import { Calendar, Clock, Video, Youtube } from 'lucide-react';
 import { cn, getVideoEmbedUrl } from '../../lib/utils';
+import { useCourseContext } from '../../contexts/CourseContext';
 
 // Helper component for dual video player
 const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, rutubeUrl?: string, title: string }) => {
@@ -70,19 +71,27 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
 };
 
 export default function LiveStreams() {
+    const { activeCourseId } = useCourseContext();
     const [streams, setStreams] = useState<LiveStream[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedMonth, setSelectedMonth] = useState<string>('all');
 
     useEffect(() => {
         fetchStreams();
-    }, []);
+    }, [activeCourseId]);
 
     const fetchStreams = async () => {
+        if (!activeCourseId) {
+            setStreams([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('live_streams')
                 .select('*')
+                .eq('course_id', activeCourseId)
                 .order('date', { ascending: false });
 
             if (error) throw error;
