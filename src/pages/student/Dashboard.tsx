@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PlayCircle, ChevronRight, FileText, Loader2, Play } from 'lucide-react';
+import { PlayCircle, ChevronRight, FileText, Loader2, Play, BookOpen } from 'lucide-react';
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 
@@ -34,6 +34,22 @@ export default function StudentDashboard() {
 
     if (loading) {
         return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
+    }
+
+    if (weeks.length === 0) {
+        return (
+            <div className="animate-fade-in max-w-2xl mx-auto">
+                <div className="bg-white rounded-2xl border border-gray-100 p-10 md:p-14 text-center">
+                    <div className="w-14 h-14 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold mx-auto mb-5">
+                        <BookOpen size={26} />
+                    </div>
+                    <h2 className="font-serif text-2xl text-vastu-dark mb-3">Скоро здесь появятся материалы</h2>
+                    <p className="text-vastu-text-light leading-relaxed">
+                        В этом курсе пока нет материалов. Загляните позже — мы готовим для вас уроки.
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     const activeWeek = weeks.find(w => w.id === activeWeekId);

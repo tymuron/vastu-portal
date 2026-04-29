@@ -503,11 +503,61 @@ const WeekEditor = ({ week, onDelete, onUpdate, onAddDay, onMoveUp, onMoveDown, 
     );
 };
 
+interface Course {
+    id: string;
+    slug: string;
+    title: string;
+    order_index: number;
+}
+
+const ACTIVE_COURSE_STORAGE_KEY = 'vastu.teacher.activeCourseId';
+
 export default function CourseEditor() {
     const [weeks, setWeeks] = useState<Week[]>([]);
     const [loading, setLoading] = useState(true);
+    const [courses, setCourses] = useState<Course[]>([]);
+    const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
 
-    async function fetchWeeks() {
+    async function fetchCourses() {
+        try {
+            const { data, error } = await supabase
+                .from('courses')
+                .select('id, slug, title, order_index')
+                .order('order_index', { ascending: true });
+
+            if (error) throw error;
+
+            if (data) {
+                setCourses(data as Course[]);
+
+                // Restore from localStorage if it points to an existing course;
+                // otherwise default to the first course.
+                const stored = typeof window !== 'undefined'
+                    ? window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY)
+                    : null;
+                const validStored = stored && data.some((c: any) => c.id === stored) ? stored : null;
+                if (validStored) {
+                    setActiveCourseId(validStored);
+                } else if (data.length > 0) {
+                    setActiveCourseId(data[0].id);
+                } else {
+                    setActiveCourseId(null);
+                    setLoading(false);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching courses:', error);
+            setLoading(false);
+        }
+    }
+
+    async function fetchWeeks(courseId: string | null) {
+        if (!courseId) {
+            setWeeks([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('weeks')
@@ -519,6 +569,7 @@ export default function CourseEditor() {
                     ),
                     materials (*)
                 `)
+                .eq('course_id', courseId)
                 .order('order_index', { ascending: true });
 
             if (error) throw error;
@@ -553,20 +604,39 @@ export default function CourseEditor() {
     }
 
     useEffect(() => {
-        fetchWeeks();
+        fetchCourses();
     }, []);
 
+    useEffect(() => {
+        if (activeCourseId) {
+            try {
+                window.localStorage.setItem(ACTIVE_COURSE_STORAGE_KEY, activeCourseId);
+            } catch (e) {
+                // ignore storage errors
+            }
+        }
+        fetchWeeks(activeCourseId);
+    }, [activeCourseId]);
+
+    const refreshWeeks = () => fetchWeeks(activeCourseId);
+
     const handleAddWeek = async () => {
+        if (!activeCourseId) {
+            alert('Сначала выберите курс');
+            return;
+        }
         const title = window.prompt('Название недели:');
         if (!title) return;
-        const { error } = await supabase.from('weeks').insert([{ title, order_index: weeks.length + 1 }]);
-        if (!error) fetchWeeks();
+        const { error } = await supabase
+            .from('weeks')
+            .insert([{ title, order_index: weeks.length + 1, course_id: activeCourseId }]);
+        if (!error) refreshWeeks();
     };
 
     const handleDeleteWeek = async (id: string) => {
         if (!window.confirm('Удалить неделю?')) return;
         const { error } = await supabase.from('weeks').delete().eq('id', id);
-        if (!error) fetchWeeks();
+        if (!error) refreshWeeks();
     };
 
     const handleAddDay = async (weekId: string) => {
@@ -577,66 +647,96 @@ export default function CourseEditor() {
             alert('Ошибка при создании урока: ' + error.message);
             console.error(error);
         } else {
-            fetchWeeks();
+            refreshWeeks();
         }
     };
 
-    if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
+    const activeCourse = courses.find(c => c.id === activeCourseId) || null;
 
     return (
         <div className="max-w-4xl mx-auto space-y-8 pb-20">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-serif text-vastu-dark">Редактор Курса</h1>
-                <button onClick={handleAddWeek} className="flex items-center gap-2 bg-vastu-dark text-white px-4 py-2 rounded-lg hover:bg-vastu-dark/90">
+            <div className="flex flex-wrap justify-between items-center gap-4">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <h1 className="text-3xl font-serif text-vastu-dark whitespace-nowrap">Редактор Курса</h1>
+                    {courses.length > 0 && (
+                        <select
+                            value={activeCourseId || ''}
+                            onChange={(e) => setActiveCourseId(e.target.value || null)}
+                            className="bg-white border border-gray-200 rounded-lg text-vastu-dark px-3 py-2 text-sm font-medium focus:outline-none focus:border-vastu-gold transition-colors max-w-xs truncate"
+                            title={activeCourse?.title || 'Выберите курс'}
+                        >
+                            {courses.map(c => (
+                                <option key={c.id} value={c.id}>{c.title}</option>
+                            ))}
+                        </select>
+                    )}
+                </div>
+                <button
+                    onClick={handleAddWeek}
+                    disabled={!activeCourseId}
+                    className="flex items-center gap-2 bg-vastu-dark text-white px-4 py-2 rounded-lg hover:bg-vastu-dark/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
                     <Plus size={18} /> Добавить неделю
                 </button>
             </div>
 
-            <div className="space-y-4">
-                {weeks.map((week, index) => (
-                    <WeekEditor
-                        key={week.id}
-                        week={week}
-                        onDelete={() => handleDeleteWeek(week.id)}
-                        onUpdate={fetchWeeks}
-                        onAddDay={() => handleAddDay(week.id)}
-                        onMoveUp={async () => {
-                            if (index > 0) {
-                                const prevWeek = weeks[index - 1];
-                                const currentWeek = weeks[index];
+            {courses.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-vastu-dark">
+                    Пока нет ни одного курса.
+                </div>
+            ) : loading ? (
+                <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>
+            ) : weeks.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-lg p-8 text-center text-vastu-dark">
+                    В этом курсе пока нет недель. Нажмите «Добавить неделю», чтобы создать первую.
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {weeks.map((week, index) => (
+                        <WeekEditor
+                            key={week.id}
+                            week={week}
+                            onDelete={() => handleDeleteWeek(week.id)}
+                            onUpdate={refreshWeeks}
+                            onAddDay={() => handleAddDay(week.id)}
+                            onMoveUp={async () => {
+                                if (index > 0) {
+                                    const prevWeek = weeks[index - 1];
+                                    const currentWeek = weeks[index];
 
-                                // Swap order_index
-                                const { error: error1 } = await supabase.from('weeks').update({ order_index: prevWeek.order_index }).eq('id', currentWeek.id);
-                                const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', prevWeek.id);
+                                    // Swap order_index
+                                    const { error: error1 } = await supabase.from('weeks').update({ order_index: prevWeek.order_index }).eq('id', currentWeek.id);
+                                    const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', prevWeek.id);
 
-                                if (error1 || error2) {
-                                    alert('Ошибка при перемещении');
-                                    console.error(error1, error2);
+                                    if (error1 || error2) {
+                                        alert('Ошибка при перемещении');
+                                        console.error(error1, error2);
+                                    }
+                                    refreshWeeks();
                                 }
-                                fetchWeeks();
-                            }
-                        }}
-                        onMoveDown={async () => {
-                            if (index < weeks.length - 1) {
-                                const nextWeek = weeks[index + 1];
-                                const currentWeek = weeks[index];
+                            }}
+                            onMoveDown={async () => {
+                                if (index < weeks.length - 1) {
+                                    const nextWeek = weeks[index + 1];
+                                    const currentWeek = weeks[index];
 
-                                // Swap order_index
-                                const { error: error1 } = await supabase.from('weeks').update({ order_index: nextWeek.order_index }).eq('id', currentWeek.id);
-                                const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', nextWeek.id);
+                                    // Swap order_index
+                                    const { error: error1 } = await supabase.from('weeks').update({ order_index: nextWeek.order_index }).eq('id', currentWeek.id);
+                                    const { error: error2 } = await supabase.from('weeks').update({ order_index: currentWeek.order_index }).eq('id', nextWeek.id);
 
-                                if (error1 || error2) {
-                                    alert('Ошибка при перемещении');
-                                    console.error(error1, error2);
+                                    if (error1 || error2) {
+                                        alert('Ошибка при перемещении');
+                                        console.error(error1, error2);
+                                    }
+                                    refreshWeeks();
                                 }
-                                fetchWeeks();
-                            }
-                        }}
-                        isFirst={index === 0}
-                        isLast={index === weeks.length - 1}
-                    />
-                ))}
-            </div>
+                            }}
+                            isFirst={index === 0}
+                            isLast={index === weeks.length - 1}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
