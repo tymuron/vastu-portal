@@ -12,44 +12,116 @@ export default function UpdatePasswordPage() {
     const [hasSession, setHasSession] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
         let resolved = false;
 
-        // The invite / recovery link puts tokens in the URL hash. Supabase JS
-        // (with detectSessionInUrl: true, the default) will parse them and
-        // emit SIGNED_IN / PASSWORD_RECOVERY shortly after mount. We listen
-        // for either rather than racing against getSession().
-        const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-            if (resolved) return;
-            if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION') {
-                if (session) {
-                    resolved = true;
-                    setHasSession(true);
-                    setVerifying(false);
-                }
-            }
-        });
-
-        // Fallback: if there's already a session (user navigated back here
-        // while logged in), accept it immediately.
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (resolved) return;
-            if (session) {
-                resolved = true;
-                setHasSession(true);
-                setVerifying(false);
-            }
-        });
-
-        // Hard timeout so the user isn't stuck on a spinner if the link is bad.
-        const timeout = window.setTimeout(() => {
-            if (resolved) return;
+        const finish = (ok: boolean) => {
+            if (cancelled || resolved) return;
             resolved = true;
+            setHasSession(ok);
             setVerifying(false);
-        }, 4000);
+        };
+
+        async function establishSession() {
+            // Establish a session from whatever Supabase put in the URL.
+            // We try every known shape so the same page works for invite,
+            // password recovery, and OAuth-style callbacks, in any browser
+            // (including in-app browsers like Gmail, where Supabase's
+            // automatic detectSessionInUrl can be unreliable because of
+            // strict storage/cookie rules).
+
+            try {
+                const url = new URL(window.location.href);
+                const queryParams = url.searchParams;
+
+                // Supabase may also pack tokens into a fragment (#...).
+                const hashParams = new URLSearchParams(
+                    window.location.hash.startsWith('#')
+                        ? window.location.hash.slice(1)
+                        : ''
+                );
+
+                // 1) PKCE flow: ?code=... -> exchange for a session
+                const code = queryParams.get('code');
+                if (code) {
+                    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+                    if (!error && data?.session) {
+                        // Strip ?code= from the URL so a refresh doesn't re-run the exchange
+                        url.searchParams.delete('code');
+                        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+                        return finish(true);
+                    }
+                    if (error) console.warn('exchangeCodeForSession:', error.message);
+                }
+
+                // 2) Token-hash flow (also known as "verify OTP"):
+                //    /update-password?token_hash=...&type=invite
+                const tokenHash = queryParams.get('token_hash') || hashParams.get('token_hash');
+                const otpType = (queryParams.get('type') || hashParams.get('type')) as
+                    | 'invite' | 'recovery' | 'magiclink' | 'signup' | 'email_change' | null;
+                if (tokenHash && otpType) {
+                    const { data, error } = await supabase.auth.verifyOtp({
+                        type: otpType as any,
+                        token_hash: tokenHash,
+                    });
+                    if (!error && data?.session) {
+                        url.searchParams.delete('token_hash');
+                        url.searchParams.delete('type');
+                        window.history.replaceState({}, '', url.pathname + url.search);
+                        return finish(true);
+                    }
+                    if (error) console.warn('verifyOtp:', error.message);
+                }
+
+                // 3) Implicit flow: #access_token=...&refresh_token=...
+                const accessToken = hashParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token');
+                if (accessToken && refreshToken) {
+                    const { data, error } = await supabase.auth.setSession({
+                        access_token: accessToken,
+                        refresh_token: refreshToken,
+                    });
+                    if (!error && data?.session) {
+                        // Clean the hash off the URL
+                        window.history.replaceState({}, '', url.pathname + url.search);
+                        return finish(true);
+                    }
+                    if (error) console.warn('setSession:', error.message);
+                }
+
+                // 4) Fallback: maybe a session is already in storage (the
+                //    user reopened the tab or clicked back in to change
+                //    their password while still logged in).
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) return finish(true);
+
+                // 5) Last resort: wait briefly for Supabase's own auto-detect
+                //    in case the SDK is parsing things on its own.
+                window.setTimeout(async () => {
+                    if (resolved || cancelled) return;
+                    const { data: { session: late } } = await supabase.auth.getSession();
+                    finish(!!late);
+                }, 1500);
+            } catch (err) {
+                console.error('establishSession error:', err);
+                finish(false);
+            }
+        }
+
+        establishSession();
+
+        // Pick up any auth event that fires while we're working
+        // (e.g. SDK auto-detect that beats us to it).
+        const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+            if (resolved || cancelled) return;
+            if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION')) {
+                finish(true);
+            }
+        });
 
         return () => {
+            cancelled = true;
             sub.subscription.unsubscribe();
-            window.clearTimeout(timeout);
         };
     }, []);
 
