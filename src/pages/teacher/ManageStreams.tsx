@@ -3,11 +3,22 @@ import { supabase } from '../../lib/supabase';
 import { LiveStream } from '../../lib/types';
 import { Plus, Trash2, Video, Save, X } from 'lucide-react';
 
+interface CourseRow {
+    id: string;
+    slug: string;
+    title: string;
+    order_index: number;
+}
+
+const ACTIVE_COURSE_STORAGE_KEY = 'vastu.teacher.activeCourseId';
+
 export default function ManageStreams() {
     const [streams, setStreams] = useState<LiveStream[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [courses, setCourses] = useState<CourseRow[]>([]);
+    const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState<Partial<LiveStream>>({
@@ -19,14 +30,43 @@ export default function ManageStreams() {
     });
 
     useEffect(() => {
-        fetchStreams();
+        async function fetchCourses() {
+            const { data, error } = await supabase
+                .from('courses')
+                .select('id, slug, title, order_index')
+                .order('order_index', { ascending: true });
+            if (!error && data) {
+                setCourses(data as CourseRow[]);
+                const stored = typeof window !== 'undefined'
+                    ? window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY)
+                    : null;
+                const validStored = stored && data.some((c: any) => c.id === stored) ? stored : null;
+                if (validStored) setActiveCourseId(validStored);
+                else if (data.length > 0) setActiveCourseId(data[0].id);
+            }
+        }
+        fetchCourses();
     }, []);
 
+    useEffect(() => {
+        if (activeCourseId) {
+            try { window.localStorage.setItem(ACTIVE_COURSE_STORAGE_KEY, activeCourseId); } catch {}
+        }
+        fetchStreams();
+    }, [activeCourseId]);
+
     async function fetchStreams() {
+        if (!activeCourseId) {
+            setStreams([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('live_streams')
                 .select('*')
+                .eq('course_id', activeCourseId)
                 .order('date', { ascending: false });
 
             if (error) throw error;
@@ -66,6 +106,10 @@ export default function ManageStreams() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!formData.title || !formData.date) return;
+        if (!editingId && !activeCourseId) {
+            alert('Сначала выберите курс');
+            return;
+        }
 
         try {
             let error;
@@ -80,7 +124,7 @@ export default function ManageStreams() {
                 // Insert new
                 const { error: insertError } = await supabase
                     .from('live_streams')
-                    .insert([formData]);
+                    .insert([{ ...formData, course_id: activeCourseId }]);
                 error = insertError;
             }
 
@@ -124,11 +168,25 @@ export default function ManageStreams() {
 
     return (
         <div className="max-w-4xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-serif text-[#422326]">Управление Эфирами</h1>
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-8">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <h1 className="text-3xl font-serif text-[#422326] whitespace-nowrap">Управление Эфирами</h1>
+                    {courses.length > 0 && (
+                        <select
+                            value={activeCourseId || ''}
+                            onChange={(e) => setActiveCourseId(e.target.value || null)}
+                            className="bg-white border border-gray-200 rounded-lg text-[#422326] px-3 py-2 text-sm font-medium focus:outline-none focus:border-vastu-gold transition-colors max-w-xs truncate"
+                        >
+                            {courses.map(c => (
+                                <option key={c.id} value={c.id}>{c.title}</option>
+                            ))}
+                        </select>
+                    )}
+                </div>
                 <button
                     onClick={handleAddNew}
-                    className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors"
+                    disabled={!activeCourseId}
+                    className="flex items-center px-4 py-2 bg-[#422326] text-white rounded-lg hover:bg-[#2b1618] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <Plus className="w-5 h-5 mr-2" />
                     Добавить Эфир

@@ -3,20 +3,29 @@ import { supabase } from '../../lib/supabase';
 import { LibraryItem } from '../../lib/types';
 import { Download, FileText, Eye } from 'lucide-react';
 import { downloadFile } from '../../lib/utils';
+import { useCourseContext } from '../../contexts/CourseContext';
 
 export default function Library() {
+    const { activeCourseId } = useCourseContext();
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchLibrary();
-    }, []);
+    }, [activeCourseId]);
 
     const fetchLibrary = async () => {
+        if (!activeCourseId) {
+            setItems([]);
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('library_items')
                 .select('*')
+                .eq('course_id', activeCourseId)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
