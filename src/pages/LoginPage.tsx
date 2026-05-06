@@ -22,7 +22,7 @@ export default function LoginPage() {
         try {
             if (!import.meta.env.VITE_SUPABASE_URL) {
                 // Mock fallback
-                if (role === 'student') navigate('/student');
+                if (role === 'student') navigate('/welcome');
                 else navigate('/teacher');
                 return;
             }
@@ -51,7 +51,7 @@ export default function LoginPage() {
                 if (realRole === 'teacher') {
                     navigate('/teacher');
                 } else {
-                    navigate('/student');
+                    navigate('/welcome');
                 }
             }
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
 
                     <div className="space-y-4">
                         <button
-                            onClick={() => authRole === 'teacher' ? navigate('/teacher') : navigate('/student')}
+                            onClick={() => authRole === 'teacher' ? navigate('/teacher') : navigate('/welcome')}
                             className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 flex items-center justify-center gap-2"
                         >
                             Продолжить

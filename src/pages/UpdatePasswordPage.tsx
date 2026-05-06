@@ -134,8 +134,7 @@ export default function UpdatePasswordPage() {
             const { error } = await supabase.auth.updateUser({ password: password });
             if (error) throw error;
 
-            alert('Пароль успешно обновлен! Сейчас вы будете перенаправлены в личный кабинет.');
-            navigate('/student');
+            navigate('/welcome');
         } catch (err: any) {
             setError(err.message || 'Ошибка обновления пароля. Возможно, ссылка устарела.');
         } finally {
