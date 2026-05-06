@@ -59,77 +59,17 @@ export default function WelcomePage() {
 
                         <div className="max-w-sm border-l border-vastu-light/15 pl-8 pb-4">
                             <p className="font-serif text-lg font-light leading-relaxed text-vastu-light/85 sm:text-xl">
-                                Ваше пространство курса{' '}
+                                Ваше пространство{' '}
                                 <span className="font-serif italic text-vastu-gold">открыто</span>.
-                                Курс «Васту для бизнеса» стартует 18 мая 2026.
                             </p>
                             <div className="mt-7 flex flex-wrap gap-3">
                                 <button
                                     onClick={() => navigate('/student')}
                                     className="bg-vastu-gold px-6 py-3 font-serif text-base font-medium text-vastu-dark transition-colors hover:bg-[#D4C6A0]"
                                 >
-                                    Войти в кабинет
+                                    К урокам
                                 </button>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Course intro — cream */}
-            <section className="px-8 py-24 sm:px-12 sm:py-28 lg:px-16 lg:py-32">
-                <div className="grid gap-16 lg:grid-cols-[1fr_2fr] lg:gap-24">
-                    <div>
-                        <div className="mb-7 text-[11px] font-medium uppercase tracking-[0.18em] text-vastu-dark">
-                            <span className="mr-1">—</span> О программе
-                        </div>
-                        <h2
-                            className="font-serif font-normal text-vastu-text"
-                            style={{
-                                fontSize: 'clamp(40px, 5vw, 72px)',
-                                lineHeight: 1.05,
-                                letterSpacing: '-0.01em',
-                            }}
-                        >
-                            Курс по Васту
-                            <br />
-                            <span className="font-serif italic text-vastu-dark">для бизнеса</span>
-                        </h2>
-                    </div>
-
-                    <div className="lg:pt-6">
-                        <p className="max-w-2xl font-serif text-xl font-light leading-relaxed text-vastu-text-light sm:text-2xl">
-                            Шесть модулей, открывающихся последовательно. Каждый урок длится
-                            30–60 минут — смотрите в удобное время. Доступ к материалам
-                            сохраняется до{' '}
-                            <span className="font-serif italic text-vastu-dark">
-                                18 ноября 2026
-                            </span>
-                            .
-                        </p>
-
-                        <div className="mt-12 grid gap-8 border-t border-vastu-text/10 pt-10 sm:grid-cols-3">
-                            {[
-                                { kicker: 'Старт', value: '18 мая' },
-                                { kicker: 'Длительность', value: '6 месяцев' },
-                                { kicker: 'Формат', value: 'Видеоуроки' },
-                            ].map((item) => (
-                                <div key={item.kicker}>
-                                    <div className="mb-3 text-[10px] font-medium uppercase tracking-[0.16em] text-vastu-text-light">
-                                        — {item.kicker}
-                                    </div>
-                                    <div
-                                        className="font-serif text-vastu-dark"
-                                        style={{
-                                            fontSize: 'clamp(28px, 3vw, 36px)',
-                                            lineHeight: 1,
-                                            letterSpacing: '-0.005em',
-                                        }}
-                                    >
-                                        {item.value}
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     </div>
                 </div>
@@ -155,8 +95,8 @@ export default function WelcomePage() {
                                 letterSpacing: '-0.005em',
                             }}
                         >
-                            «Рада приветствовать вас на курсе. Здесь мы вместе пройдём путь
-                            от первых принципов Васту до их применения в реальных бизнес-пространствах.»
+                            «Рада приветствовать вас здесь. Желаю вам глубокого погружения
+                            и пользы от каждого урока.»
                         </p>
                         <div className="mt-8 font-serif text-lg text-vastu-text">
                             Anna Romeo
