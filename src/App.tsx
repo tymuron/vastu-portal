@@ -21,6 +21,7 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import UpdatePasswordPage from './pages/UpdatePasswordPage';
 import WelcomePage from './pages/WelcomePage';
+import BuyPage from './pages/BuyPage';
 
 function App() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -58,6 +59,7 @@ function App() {
                     <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                     <Route path="/update-password" element={<UpdatePasswordPage />} />
                     <Route path="/welcome" element={<WelcomePage />} />
+                    <Route path="/buy/:offerId" element={<BuyPage />} />
 
                     {/* Student Routes */}
                     <Route path="/student" element={<CourseProvider><StudentLayout /></CourseProvider>}>

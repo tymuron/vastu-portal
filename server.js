@@ -16,6 +16,7 @@ const distPath = path.join(__dirname, 'dist');
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const LAVA_WEBHOOK_API_KEY = process.env.LAVA_WEBHOOK_API_KEY;
+const LAVA_API_KEY = process.env.LAVA_API_KEY;
 const APP_URL = process.env.APP_URL;
 const CRON_SECRET = process.env.CRON_SECRET;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -389,6 +390,92 @@ async function handleLavaWebhook(req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Lava invoice creation (server -> Lava /api/v3/invoice)
+// ---------------------------------------------------------------------------
+
+const ALLOWED_CURRENCIES = new Set(['RUB', 'EUR', 'USD']);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function handleCreateInvoice(req, res) {
+    if (!LAVA_API_KEY) {
+        console.error('LAVA_API_KEY is not set on the server');
+        sendJson(res, 500, { error: 'Invoice creation not configured' });
+        return;
+    }
+
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch (err) {
+        if (err.code === 'PAYLOAD_TOO_LARGE') {
+            sendJson(res, 413, { error: 'Payload too large' });
+            return;
+        }
+        if (err.code === 'INVALID_JSON') {
+            sendJson(res, 400, { error: 'Invalid JSON' });
+            return;
+        }
+        sendJson(res, 400, { error: 'Failed to read body' });
+        return;
+    }
+
+    const email = (payload?.email || '').trim();
+    const offerId = (payload?.offerId || '').trim();
+    const currency = (payload?.currency || 'RUB').trim().toUpperCase();
+
+    if (!EMAIL_RE.test(email)) {
+        sendJson(res, 400, { error: 'Invalid email' });
+        return;
+    }
+    if (!UUID_RE.test(offerId)) {
+        sendJson(res, 400, { error: 'Invalid offerId' });
+        return;
+    }
+    if (!ALLOWED_CURRENCIES.has(currency)) {
+        sendJson(res, 400, { error: 'Unsupported currency' });
+        return;
+    }
+
+    try {
+        const lavaResp = await fetch('https://gate.lava.top/api/v3/invoice', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Api-Key': LAVA_API_KEY
+            },
+            body: JSON.stringify({ email, offerId, currency })
+        });
+
+        const text = await lavaResp.text();
+        let body = null;
+        try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text }; }
+
+        if (!lavaResp.ok) {
+            console.error(`Lava invoice failed (${lavaResp.status}):`, text);
+            sendJson(res, lavaResp.status === 404 ? 404 : 502, {
+                error: body?.error || 'Lava invoice request failed',
+                status: lavaResp.status
+            });
+            return;
+        }
+
+        const paymentUrl = body?.paymentUrl;
+        if (!paymentUrl) {
+            console.error('Lava invoice response missing paymentUrl:', text);
+            sendJson(res, 502, { error: 'Lava response missing paymentUrl' });
+            return;
+        }
+
+        sendJson(res, 200, { paymentUrl });
+    } catch (err) {
+        console.error('Lava invoice fetch threw:', err);
+        sendJson(res, 502, { error: 'Failed to reach Lava' });
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Daily expiry-reminder cron
 // ---------------------------------------------------------------------------
 
@@ -605,6 +692,17 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && urlPath === '/api/cron/expiry-reminders') {
         handleExpiryReminders(req, res).catch((err) => {
             console.error('handleExpiryReminders threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // Lava invoice creation — proxy to Lava's /api/v3/invoice so storefront
+    // sales fire webhooks. Customer hits /buy/<offerId>, page POSTs here, we
+    // call Lava with our X-Api-Key, and return paymentUrl for the redirect.
+    if (req.method === 'POST' && urlPath === '/api/lava/invoice') {
+        handleCreateInvoice(req, res).catch((err) => {
+            console.error('handleCreateInvoice threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
         });
         return;
