@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ALLOWED_CURRENCIES = ['EUR', 'RUB', 'USD'] as const;
+type Currency = (typeof ALLOWED_CURRENCIES)[number];
 
 export default function BuyPage() {
     const { offerId } = useParams<{ offerId: string }>();
+    const [searchParams] = useSearchParams();
+    const queryCurrency = (searchParams.get('currency') || '').toUpperCase();
+    const initialCurrency: Currency = (ALLOWED_CURRENCIES as readonly string[]).includes(queryCurrency)
+        ? (queryCurrency as Currency)
+        : 'EUR';
+
     const [email, setEmail] = useState('');
+    const [currency, setCurrency] = useState<Currency>(initialCurrency);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +30,7 @@ export default function BuyPage() {
             const resp = await fetch('/api/lava/invoice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim(), offerId, currency: 'RUB' })
+                body: JSON.stringify({ email: email.trim(), offerId, currency })
             });
             const data = await resp.json().catch(() => ({}));
 
@@ -83,6 +92,28 @@ export default function BuyPage() {
                                 placeholder="name@example.com"
                                 disabled={submitting}
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Валюта</label>
+                            <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
+                                {ALLOWED_CURRENCIES.map((c) => (
+                                    <button
+                                        type="button"
+                                        key={c}
+                                        onClick={() => setCurrency(c)}
+                                        disabled={submitting}
+                                        className={
+                                            'flex-1 py-2 text-sm font-medium rounded-md transition-all duration-300 ' +
+                                            (currency === c
+                                                ? 'bg-vastu-gold text-vastu-dark shadow-lg'
+                                                : 'text-vastu-light/50 hover:text-vastu-light')
+                                        }
+                                    >
+                                        {c}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         <button
