@@ -476,6 +476,181 @@ async function handleCreateInvoice(req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Community welcome email (Telegram channel + chat invite)
+//
+// Sent on top of the standard Supabase invite (the password-setup one) so
+// buyers also get the curated Telegram links matching Anna's brand voice.
+// Triggered manually for now via the /api/admin/welcome-email endpoint;
+// we'll wire it into the webhook flow once both VIP and Standard variants
+// are finalized with Anna.
+// ---------------------------------------------------------------------------
+
+// TODO: move these to env vars once Anna confirms they're stable.
+const TG_VIP_CHANNEL_URL = 'https://t.me/+pMxLYn9BUac1Zjky';
+const TG_VIP_CHAT_URL = 'https://t.me/+NOF9mWBLLSI2OWEy';
+const TG_GENERAL_CHAT_URL = 'https://t.me/+7I610xAqeeVjZmJi';
+
+function tgButton(href, label) {
+    return `<a href="${href}" style="display:inline-block;background-color:#422326;color:#F2EDE2;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;padding:13px 24px;border:1px solid #422326;margin:6px 4px;">${label}</a>`;
+}
+
+function buildVipWelcomeEmailHtml({ firstName, loginUrl }) {
+    const greeting = firstName
+        ? `Здравствуйте, ${firstName} 🤍`
+        : 'Здравствуйте 🤍';
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Добро пожаловать на VIP-поток</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F2EDE2;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#F2EDE2;">
+          <tr>
+            <td align="center" style="padding:24px 24px 8px 24px;">
+              <div style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:34px;color:#422326;letter-spacing:0.5px;">Anna Romeo</div>
+              <div style="margin-top:10px;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:#8a6a3b;font-variant:small-caps;">Васту &amp; дизайн портал</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px;">
+              <hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" />
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 24px;">
+              <h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-weight:400;font-size:30px;color:#422326;margin:0 0 16px 0;">${greeting}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px;font-size:16px;line-height:1.75;color:#422326;">
+              <p style="margin:0 0 16px 0;">Рада приветствовать вас на VIP-потоке курса <em>«Васту для бизнеса»</em>.</p>
+              <p style="margin:0 0 24px 0;">Очень жду нашей совместной работы — впереди глубокая программа и личные разборы.</p>
+              <p style="margin:0 0 12px 0;">Отправляю ссылки на наше пространство:</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 24px 16px 24px;">
+              ${tgButton(TG_VIP_CHANNEL_URL, 'VIP-канал')}
+              ${tgButton(TG_VIP_CHAT_URL, 'VIP-чат')}
+              ${tgButton(TG_GENERAL_CHAT_URL, 'Общий чат потока')}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;font-size:15px;line-height:1.7;color:#422326;">
+              <p style="margin:0 0 8px 0;font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:20px;">Где что происходит</p>
+              <p style="margin:0 0 12px 0;"><strong>VIP-канал и VIP-чат</strong> — ваше основное пространство. Здесь материалы для VIP, ссылки на уроки, прямая связь со мной, ваши личные вопросы и кейсы.</p>
+              <p style="margin:0 0 16px 0;"><strong>Общий чат потока</strong> — здесь вся группа: знакомства, обсуждения уроков, разные кейсы участников. Это живая среда, где много полезного из чужого опыта — рекомендую быть включёнными.</p>
+              <p style="margin:0 0 16px 0;">Расписание VIP zoom-встреч и информацию о личных разборах предназначения пришлю отдельно.</p>
+              <p style="margin:0 0 16px 0;"><strong>Предобучение (Модуль&nbsp;0)</strong> уже открыто — стартует 13 мая. Можно заходить и начинать в своём темпе.</p>
+              <p style="margin:0 0 16px 0;">На вашу почту пришло (или вот-вот придёт) письмо с доступом к платформе. Если письма нет — напишите <a href="https://t.me/tymuron" style="color:#8a6a3b;">@tymuron</a> вашу почту, пожалуйста.</p>
+              <p style="margin:0 0 24px 0;"><strong>Старт основного обучения</strong> — 18 мая.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 24px 16px 24px;">
+              <a href="${loginUrl}" style="display:inline-block;background-color:#F2EDE2;color:#422326;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;padding:13px 24px;border:1px solid #422326;">Войти в личный кабинет</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 24px 8px 24px;">
+              <hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" />
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:0 24px 32px 24px;font-size:14px;line-height:1.6;color:#7a5a3a;font-style:italic;">
+              <p style="margin:0;">До встречи на программе 🙌</p>
+              <p style="margin:8px 0 0 0;font-family:'Cormorant Garamond',Georgia,serif;font-size:18px;">Anna Romeo</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+async function handleSendWelcomeEmail(req, res) {
+    if (!CRON_SECRET) {
+        console.error('CRON_SECRET is not set on the server');
+        sendJson(res, 500, { error: 'Endpoint not configured' });
+        return;
+    }
+    const headerSecret = req.headers['x-cron-secret'];
+    if (!headerSecret || headerSecret !== CRON_SECRET) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+    if (!RESEND_API_KEY) {
+        sendJson(res, 500, { error: 'RESEND_API_KEY not configured' });
+        return;
+    }
+
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch (err) {
+        if (err.code === 'INVALID_JSON') {
+            sendJson(res, 400, { error: 'Invalid JSON' });
+            return;
+        }
+        sendJson(res, 400, { error: 'Failed to read body' });
+        return;
+    }
+
+    const email = (payload?.email || '').trim();
+    const firstName = (payload?.firstName || '').trim() || null;
+    const tier = (payload?.tier || 'vip').trim().toLowerCase();
+
+    if (!EMAIL_RE.test(email)) {
+        sendJson(res, 400, { error: 'Invalid email' });
+        return;
+    }
+    if (tier !== 'vip') {
+        // Стандарт-вариант ещё не написан Анной — заглушка пока.
+        sendJson(res, 400, { error: 'Only tier="vip" is supported right now' });
+        return;
+    }
+
+    const loginUrl =
+        (APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com') +
+        '/login';
+    const html = buildVipWelcomeEmailHtml({ firstName, loginUrl });
+    const subject = 'Добро пожаловать на VIP-поток курса «Васту для бизнеса»';
+
+    try {
+        const resp = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                from: 'Anna Romeo <onboarding@resend.dev>',
+                to: email,
+                subject,
+                html
+            })
+        });
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            console.error(`Resend welcome-email failed (${resp.status}):`, errText);
+            sendJson(res, 502, { error: 'Resend send failed', status: resp.status });
+            return;
+        }
+        sendJson(res, 200, { sent: true, to: email, tier });
+    } catch (err) {
+        console.error('Resend welcome-email threw:', err);
+        sendJson(res, 502, { error: 'Failed to reach Resend' });
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Daily expiry-reminder cron
 // ---------------------------------------------------------------------------
 
@@ -703,6 +878,16 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && urlPath === '/api/lava/invoice') {
         handleCreateInvoice(req, res).catch((err) => {
             console.error('handleCreateInvoice threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // Manual welcome-email trigger — Anna/Tymur calls this with x-cron-secret
+    // to send the styled Telegram-links email to a specific customer.
+    if (req.method === 'POST' && urlPath === '/api/admin/welcome-email') {
+        handleSendWelcomeEmail(req, res).catch((err) => {
+            console.error('handleSendWelcomeEmail threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
         });
         return;
