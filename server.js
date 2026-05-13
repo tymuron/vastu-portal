@@ -485,6 +485,11 @@ async function handleCreateInvoice(req, res) {
 // are finalized with Anna.
 // ---------------------------------------------------------------------------
 
+// Verified sender for Resend (annaromeo.design DKIM/SPF/DMARC live since
+// 2026-05-13). Anna doesn't need a real mailbox at hello@ — Resend just
+// uses this string in the From header.
+const RESEND_FROM = 'Anna Romeo <hello@annaromeo.design>';
+
 // TODO: move these to env vars once Anna confirms they're stable.
 const TG_VIP_CHANNEL_URL = 'https://t.me/+pMxLYn9BUac1Zjky';
 const TG_VIP_CHAT_URL = 'https://t.me/+NOF9mWBLLSI2OWEy';
@@ -713,7 +718,7 @@ async function handleSendWelcomeEmail(req, res) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                from: 'Anna Romeo <onboarding@resend.dev>',
+                from: RESEND_FROM,
                 to: email,
                 subject,
                 html
@@ -874,11 +879,8 @@ async function handleExpiryReminders(req, res) {
                 loginUrl
             });
 
-            // NOTE: change the `from` address to a verified domain in production.
-            // `onboarding@resend.dev` is Resend's default free-tier sender and
-            // works without domain verification.
             const body = {
-                from: 'Anna Romeo <onboarding@resend.dev>',
+                from: RESEND_FROM,
                 to: email,
                 subject: 'Ваш доступ к курсу скоро закончится',
                 html
