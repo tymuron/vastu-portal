@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock, Home } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -112,6 +112,13 @@ export default function StudentLayout() {
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
+                    <NavItem
+                        to="/welcome"
+                        icon={Home}
+                        label="Главная"
+                        isActive={false}
+                    />
+
                     {/* Course Switcher (only visible when 2+ courses) */}
                     {hasMultipleCourses && (
                         <button
@@ -255,6 +262,14 @@ export default function StudentLayout() {
                 <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 pt-20 overflow-y-auto pb-10" onClick={e => e.stopPropagation()}>
                         <nav className="space-y-2">
+                            <NavItem
+                                to="/welcome"
+                                icon={Home}
+                                label="Главная"
+                                isActive={false}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            />
+
                             {hasMultipleCourses && (
                                 <button
                                     onClick={() => {
