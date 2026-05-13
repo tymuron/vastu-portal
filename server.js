@@ -488,6 +488,8 @@ async function handleCreateInvoice(req, res) {
 // TODO: move these to env vars once Anna confirms they're stable.
 const TG_VIP_CHANNEL_URL = 'https://t.me/+pMxLYn9BUac1Zjky';
 const TG_VIP_CHAT_URL = 'https://t.me/+NOF9mWBLLSI2OWEy';
+const TG_STANDARD_CHANNEL_URL = 'https://t.me/+Nql1v_FqMvpiMWYy';
+// "Чат потока" for Standard = "Общий чат потока" for VIP — same Telegram chat.
 const TG_GENERAL_CHAT_URL = 'https://t.me/+7I610xAqeeVjZmJi';
 
 function tgButton(href, label) {
@@ -609,23 +611,22 @@ function buildStandardWelcomeEmailHtml({ firstName, loginUrl }) {
           </tr>
           <tr>
             <td style="padding:8px 24px;font-size:16px;line-height:1.75;color:#422326;">
-              <p style="margin:0 0 16px 0;">Рада приветствовать вас на курсе <em>«Васту для бизнеса»</em>.</p>
-              <p style="margin:0 0 24px 0;">Очень жду нашей совместной работы.</p>
-              <p style="margin:0 0 12px 0;">Отправляю ссылку на наше пространство:</p>
+              <p style="margin:0 0 16px 0;">Добро пожаловать на курс <em>«Васту для бизнеса»</em>.</p>
+              <p style="margin:0 0 12px 0;">Делюсь ссылками:</p>
             </td>
           </tr>
           <tr>
             <td align="center" style="padding:8px 24px 16px 24px;">
-              ${tgButton(TG_GENERAL_CHAT_URL, 'Общий чат потока')}
+              ${tgButton(TG_STANDARD_CHANNEL_URL, 'Канал потока')}
+              ${tgButton(TG_GENERAL_CHAT_URL, 'Чат потока')}
             </td>
           </tr>
           <tr>
             <td style="padding:16px 24px;font-size:15px;line-height:1.7;color:#422326;">
-              <p style="margin:0 0 8px 0;font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:20px;">Где что происходит</p>
-              <p style="margin:0 0 16px 0;"><strong>Общий чат потока</strong> — здесь вся группа: знакомства, обсуждения уроков, разные кейсы участников. Это живая среда, где много полезного из чужого опыта — рекомендую быть включёнными.</p>
-              <p style="margin:0 0 16px 0;"><strong>Предобучение (Модуль&nbsp;0)</strong> уже открыто — стартует 13 мая. Можно заходить и начинать в своём темпе.</p>
-              <p style="margin:0 0 16px 0;">На вашу почту пришло (или вот-вот придёт) письмо с доступом к платформе. Если письма нет — напишите <a href="https://t.me/tymuron" style="color:#8a6a3b;">@tymuron</a> вашу почту, пожалуйста.</p>
-              <p style="margin:0 0 24px 0;"><strong>Старт основного обучения</strong> — 18 мая.</p>
+              <p style="margin:0 0 12px 0;"><strong>‼ Доступ на платформу пришёл на почту.</strong></p>
+              <p style="margin:0 0 12px 0;">Предобучение (Модуль&nbsp;0) открыто с сегодняшнего дня, 13 мая.</p>
+              <p style="margin:0 0 24px 0;">Если письма нет — пишите <a href="https://t.me/tymuron" style="color:#8a6a3b;">@tymuron</a>.</p>
+              <p style="margin:0 0 16px 0;"><strong>Старт основного обучения</strong> — 18 мая. Очень жду 🙌</p>
             </td>
           </tr>
           <tr>
@@ -640,8 +641,7 @@ function buildStandardWelcomeEmailHtml({ firstName, loginUrl }) {
           </tr>
           <tr>
             <td align="center" style="padding:0 24px 32px 24px;font-size:14px;line-height:1.6;color:#7a5a3a;font-style:italic;">
-              <p style="margin:0;">До встречи на программе 🙌</p>
-              <p style="margin:8px 0 0 0;font-family:'Cormorant Garamond',Georgia,serif;font-size:18px;">Anna Romeo</p>
+              <p style="margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-size:18px;">Anna Romeo</p>
             </td>
           </tr>
         </table>
