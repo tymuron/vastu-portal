@@ -292,6 +292,30 @@ async function handleLavaWebhook(req, res) {
     try {
         const supabase = getSupabaseAdmin();
 
+        // 4.5. Lava's webhook payload only includes product.id (the picked-by
+        //    pickOfferId function above), not the actual offer.id under that
+        //    product. To resolve the real offer, look up our lava_invoices
+        //    table by contractId — we stashed {contractId -> offerId} when
+        //    we generated the invoice in handleCreateInvoice.
+        let resolvedOfferId = offerId;
+        if (paymentId) {
+            const { data: invoiceRow, error: invErr } = await supabase
+                .from('lava_invoices')
+                .select('offer_id')
+                .eq('contract_id', paymentId)
+                .maybeSingle();
+            if (invErr) {
+                console.error('lava_invoices lookup error:', invErr.message);
+            } else if (invoiceRow?.offer_id) {
+                resolvedOfferId = invoiceRow.offer_id;
+            } else {
+                console.warn(
+                    `Lava webhook: no lava_invoices row for contractId ${paymentId} — ` +
+                    `falling back to product.id ${offerId} (will likely be ignored)`
+                );
+            }
+        }
+
         // 5. Look up the course(s) by lava offer id. One offer can map
         //    to multiple courses (e.g. a VIP offer grants access to both
         //    the base course and the VIP bonus course). Also pull
@@ -300,7 +324,7 @@ async function handleLavaWebhook(req, res) {
         const { data: offerRows, error: offerErr } = await supabase
             .from('course_offers')
             .select('course_id, is_lifetime, courses(starts_at, access_duration_months)')
-            .eq('lava_offer_id', offerId);
+            .eq('lava_offer_id', resolvedOfferId);
 
         if (offerErr) {
             console.error('course_offers lookup error:', offerErr.message);
@@ -308,7 +332,7 @@ async function handleLavaWebhook(req, res) {
             return;
         }
         if (!offerRows || offerRows.length === 0) {
-            console.warn(`Lava webhook: unknown offer id ${offerId}`);
+            console.warn(`Lava webhook: unknown offer id ${resolvedOfferId}`);
             sendJson(res, 200, { ignored: true, reason: 'unknown offer' });
             return;
         }
@@ -466,6 +490,27 @@ async function handleCreateInvoice(req, res) {
             console.error('Lava invoice response missing paymentUrl:', text);
             sendJson(res, 502, { error: 'Lava response missing paymentUrl' });
             return;
+        }
+
+        // Stash {contractId -> offerId} so the webhook handler can resolve
+        // which offer was bought (Lava's webhook payload only includes
+        // product.id, not offer.id). Best-effort — don't block payment if
+        // the insert fails; we'll fall back to manual recovery for that one.
+        const contractId = body?.id;
+        if (contractId) {
+            try {
+                const supabase = getSupabaseAdmin();
+                const { error: insErr } = await supabase
+                    .from('lava_invoices')
+                    .insert({ contract_id: contractId, offer_id: offerId, email });
+                if (insErr) {
+                    console.error('lava_invoices insert error:', insErr.message);
+                }
+            } catch (err) {
+                console.error('lava_invoices insert threw:', err?.message || err);
+            }
+        } else {
+            console.error('Lava invoice response missing id:', text);
         }
 
         sendJson(res, 200, { paymentUrl });
