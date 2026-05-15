@@ -783,6 +783,123 @@ async function handleSendWelcomeEmail(req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Manual access grant (phone-friendly) — invite user + grant entitlement
+// in one call. POST /api/admin/grant-access with x-cron-secret.
+//   tier=standard -> vastu-2, expires 2026-11-18
+//   tier=vip      -> vastu-2 + vastu-2-vip, lifetime
+// ---------------------------------------------------------------------------
+
+const STANDARD_EXPIRES_AT = '2026-11-18T00:00:00+00:00';
+
+async function handleGrantAccess(req, res) {
+    if (!CRON_SECRET) {
+        sendJson(res, 500, { error: 'Endpoint not configured' });
+        return;
+    }
+    const headerSecret = req.headers['x-cron-secret'];
+    if (!headerSecret || headerSecret !== CRON_SECRET) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch (err) {
+        sendJson(res, 400, { error: 'Bad body' });
+        return;
+    }
+
+    const email = (payload?.email || '').trim().toLowerCase();
+    const tier = (payload?.tier || 'standard').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) {
+        sendJson(res, 400, { error: 'Invalid email' });
+        return;
+    }
+    if (tier !== 'standard' && tier !== 'vip') {
+        sendJson(res, 400, { error: 'tier must be "standard" or "vip"' });
+        return;
+    }
+
+    try {
+        const supabase = getSupabaseAdmin();
+
+        // Resolve target courses + expiry per tier.
+        const slugs = tier === 'vip' ? ['vastu-2', 'vastu-2-vip'] : ['vastu-2'];
+        const expiresAt = tier === 'vip' ? null : STANDARD_EXPIRES_AT;
+
+        const { data: courseRows, error: courseErr } = await supabase
+            .from('courses')
+            .select('id, slug')
+            .in('slug', slugs);
+        if (courseErr || !courseRows || courseRows.length === 0) {
+            console.error('grant-access course lookup failed:', courseErr?.message);
+            sendJson(res, 500, { error: 'Course lookup failed' });
+            return;
+        }
+
+        // Invite (or find existing) the user.
+        let userId = null;
+        let invited = false;
+        const redirectTo = APP_URL ? `${APP_URL.replace(/\/$/, '')}/update-password` : undefined;
+        const inviteOptions = redirectTo ? { redirectTo } : undefined;
+
+        const { data: inviteData, error: inviteErr } =
+            await supabase.auth.admin.inviteUserByEmail(email, inviteOptions);
+
+        if (!inviteErr && inviteData?.user?.id) {
+            userId = inviteData.user.id;
+            invited = true;
+        } else if (inviteErr) {
+            const msg = (inviteErr.message || '').toLowerCase();
+            const alreadyExists =
+                msg.includes('already registered') ||
+                msg.includes('already been registered') ||
+                msg.includes('already exists') ||
+                inviteErr.status === 422;
+            if (alreadyExists) {
+                userId = await findUserIdByEmail(supabase, email);
+            } else {
+                console.error('grant-access invite error:', inviteErr.message);
+                sendJson(res, 500, { error: inviteErr.message });
+                return;
+            }
+        }
+        if (!userId) {
+            sendJson(res, 500, { error: 'Could not resolve user id' });
+            return;
+        }
+
+        // Upsert one entitlement per target course (VIP-aware merge reused).
+        for (const row of courseRows) {
+            const upsertErr = await upsertEntitlement(
+                supabase,
+                userId,
+                row.id,
+                expiresAt,
+                `manual_${tier}`
+            );
+            if (upsertErr) {
+                console.error('grant-access upsert error:', upsertErr.message);
+                sendJson(res, 500, { error: upsertErr.message });
+                return;
+            }
+        }
+
+        sendJson(res, 200, {
+            granted: true,
+            email,
+            tier,
+            courses: courseRows.map((c) => c.slug),
+            invited
+        });
+    } catch (err) {
+        console.error('handleGrantAccess threw:', err);
+        sendJson(res, 500, { error: err?.message || 'Internal error' });
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Daily expiry-reminder cron
 // ---------------------------------------------------------------------------
 
@@ -1017,6 +1134,15 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && urlPath === '/api/admin/welcome-email') {
         handleSendWelcomeEmail(req, res).catch((err) => {
             console.error('handleSendWelcomeEmail threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // Manual access grant — invite + entitlement in one call (phone-friendly).
+    if (req.method === 'POST' && urlPath === '/api/admin/grant-access') {
+        handleGrantAccess(req, res).catch((err) => {
+            console.error('handleGrantAccess threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
         });
         return;
