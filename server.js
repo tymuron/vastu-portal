@@ -783,6 +783,134 @@ async function handleSendWelcomeEmail(req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Mini admin grant page (GET /grant) — phone-friendly UI for handleGrantAccess
+// ---------------------------------------------------------------------------
+
+const GRANT_PAGE_HTML = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Выдать доступ</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; min-height:100vh; background:#F2EDE2; color:#422326;
+    font-family:Georgia,'Times New Roman',serif; display:flex;
+    align-items:center; justify-content:center; padding:24px; }
+  .card { width:100%; max-width:420px; }
+  h1 { font-size:26px; font-weight:400; font-style:italic; text-align:center;
+    margin:0 0 4px; }
+  .sub { text-align:center; font-size:11px; letter-spacing:.28em;
+    text-transform:uppercase; color:#8a6a3b; margin-bottom:28px; }
+  label { display:block; font-size:11px; letter-spacing:.16em;
+    text-transform:uppercase; color:#8a6a3b; margin:18px 0 6px; }
+  input, select { width:100%; padding:14px; font-size:16px;
+    font-family:inherit; color:#422326; background:#fff;
+    border:1px solid #d9c9a8; border-radius:8px; outline:none; }
+  input:focus, select:focus { border-color:#8a6a3b; }
+  .tiers { display:flex; gap:10px; }
+  .tier { flex:1; text-align:center; padding:14px 8px; border:1px solid #d9c9a8;
+    border-radius:8px; background:#fff; cursor:pointer; font-size:15px; }
+  .tier.on { background:#422326; color:#F2EDE2; border-color:#422326; }
+  button { width:100%; margin-top:28px; padding:16px; font-size:15px;
+    font-family:inherit; letter-spacing:.16em; text-transform:uppercase;
+    color:#F2EDE2; background:#422326; border:1px solid #422326;
+    border-radius:8px; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  .msg { margin-top:20px; padding:14px; border-radius:8px; font-size:15px;
+    text-align:center; display:none; }
+  .ok { background:#e3efe0; color:#2f5a2a; display:block; }
+  .err { background:#f4e0e0; color:#7a2a2a; display:block; }
+  .secret-row { margin-top:24px; font-size:13px; text-align:center; }
+  .secret-row a { color:#8a6a3b; cursor:pointer; text-decoration:underline; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Выдать доступ</h1>
+    <div class="sub">Anna Romeo · Админ</div>
+
+    <div id="setup">
+      <label>Секретный ключ (вводится один раз)</label>
+      <input id="secret" type="password" placeholder="CRON_SECRET" autocomplete="off" />
+      <button onclick="saveSecret()">Сохранить ключ</button>
+    </div>
+
+    <div id="form" style="display:none">
+      <label>Email клиента</label>
+      <input id="email" type="email" placeholder="client@example.com" autocomplete="off" autocapitalize="off" />
+
+      <label>Тариф</label>
+      <div class="tiers">
+        <div class="tier on" data-tier="standard" onclick="pick(this)">Стандарт</div>
+        <div class="tier" data-tier="vip" onclick="pick(this)">VIP</div>
+      </div>
+
+      <button id="go" onclick="grant()">Выдать доступ</button>
+      <div id="msg" class="msg"></div>
+      <div class="secret-row"><a onclick="forgetSecret()">Сменить секретный ключ</a></div>
+    </div>
+  </div>
+
+<script>
+  var KEY = 'vastu_grant_secret';
+  var tier = 'standard';
+
+  function refresh() {
+    var s = localStorage.getItem(KEY);
+    document.getElementById('setup').style.display = s ? 'none' : 'block';
+    document.getElementById('form').style.display = s ? 'block' : 'none';
+  }
+  function saveSecret() {
+    var v = document.getElementById('secret').value.trim();
+    if (!v) return;
+    localStorage.setItem(KEY, v);
+    document.getElementById('secret').value = '';
+    refresh();
+  }
+  function forgetSecret() { localStorage.removeItem(KEY); refresh(); }
+  function pick(el) {
+    tier = el.getAttribute('data-tier');
+    document.querySelectorAll('.tier').forEach(function(t){ t.classList.remove('on'); });
+    el.classList.add('on');
+  }
+  function grant() {
+    var email = document.getElementById('email').value.trim();
+    var msg = document.getElementById('msg');
+    var btn = document.getElementById('go');
+    msg.className = 'msg'; msg.textContent = '';
+    if (!email) { msg.className='msg err'; msg.textContent='Введите email'; return; }
+    btn.disabled = true; btn.textContent = 'Выдаём…';
+    fetch('/api/admin/grant-access', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json',
+        'x-cron-secret': localStorage.getItem(KEY) || '' },
+      body: JSON.stringify({ email: email, tier: tier })
+    }).then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
+    .then(function(x){
+      btn.disabled=false; btn.textContent='Выдать доступ';
+      if (x.s===200 && x.d.granted) {
+        msg.className='msg ok';
+        msg.textContent='✓ Доступ выдан: '+x.d.email+' ('+x.d.tier+') — курсы: '+(x.d.courses||[]).join(', ');
+        document.getElementById('email').value='';
+      } else if (x.s===401) {
+        msg.className='msg err';
+        msg.textContent='Неверный секретный ключ. Смените его ниже.';
+      } else {
+        msg.className='msg err';
+        msg.textContent='Ошибка: '+(x.d.error||('код '+x.s));
+      }
+    }).catch(function(){
+      btn.disabled=false; btn.textContent='Выдать доступ';
+      msg.className='msg err'; msg.textContent='Сбой сети, попробуйте ещё раз';
+    });
+  }
+  refresh();
+</script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
 // Manual access grant (phone-friendly) — invite user + grant entitlement
 // in one call. POST /api/admin/grant-access with x-cron-secret.
 //   tier=standard -> vastu-2, expires 2026-11-18
@@ -1145,6 +1273,15 @@ const server = http.createServer((req, res) => {
             console.error('handleGrantAccess threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
         });
+        return;
+    }
+
+    // Mini admin page: enter email, pick tier, tap Grant. Served before the
+    // SPA fallback so it never touches the React app. The page is harmless
+    // without the secret — the API still validates x-cron-secret server-side.
+    if (req.method === 'GET' && urlPath === '/grant') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(GRANT_PAGE_HTML);
         return;
     }
 
