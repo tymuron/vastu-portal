@@ -7,7 +7,8 @@ import { useCourseContext } from '../../contexts/CourseContext';
 
 // Helper component for dual video player
 const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, rutubeUrl?: string, title: string }) => {
-    const [activeSource, setActiveSource] = useState<'youtube' | 'rutube'>(youtubeUrl ? 'youtube' : 'rutube');
+    // Default to Rutube — audience is in Russia where YouTube is throttled.
+    const [activeSource, setActiveSource] = useState<'youtube' | 'rutube'>(rutubeUrl ? 'rutube' : 'youtube');
 
     // If only one source exists, force that source
     useEffect(() => {
