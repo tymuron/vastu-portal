@@ -741,7 +741,25 @@ export default function CourseEditor() {
     const handleAddDay = async (weekId: string) => {
         const title = window.prompt('Название урока:');
         if (!title) return;
-        const { error } = await supabase.from('days').insert([{ week_id: weekId, title, order_index: 99 }]);
+        // Put the new lesson at the END of the week with a UNIQUE index.
+        // Previously every lesson was inserted with order_index: 99, so all
+        // lessons in a week tied at 99, the sort was arbitrary, and the
+        // up/down reorder buttons (which swap order_index) became no-ops.
+        const { data: existing, error: maxErr } = await supabase
+            .from('days')
+            .select('order_index')
+            .eq('week_id', weekId)
+            .order('order_index', { ascending: false })
+            .limit(1);
+        if (maxErr) {
+            alert('Ошибка при создании урока: ' + maxErr.message);
+            console.error(maxErr);
+            return;
+        }
+        const nextIndex = (existing && existing.length > 0 ? existing[0].order_index : 0) + 1;
+        const { error } = await supabase
+            .from('days')
+            .insert([{ week_id: weekId, title, order_index: nextIndex }]);
         if (error) {
             alert('Ошибка при создании урока: ' + error.message);
             console.error(error);
