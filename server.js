@@ -848,6 +848,11 @@ const GRANT_PAGE_HTML = `<!DOCTYPE html>
 
       <button id="go" onclick="grant()">Выдать доступ</button>
       <div id="msg" class="msg"></div>
+      <div id="share" style="display:none;margin-top:16px;">
+        <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8a6a3b;margin-bottom:6px;">Сообщение для клиента</div>
+        <textarea id="sharetext" readonly style="width:100%;height:150px;padding:12px;font-size:14px;font-family:inherit;color:#422326;background:#fff;border:1px solid #d9c9a8;border-radius:8px;resize:none;"></textarea>
+        <button id="copybtn" onclick="copyShare()" style="margin-top:10px;">Скопировать сообщение</button>
+      </div>
       <div class="secret-row"><a onclick="forgetSecret()">Сменить секретный ключ</a></div>
     </div>
   </div>
@@ -869,6 +874,20 @@ const GRANT_PAGE_HTML = `<!DOCTYPE html>
     refresh();
   }
   function forgetSecret() { localStorage.removeItem(KEY); refresh(); }
+  function copyShare() {
+    var ta=document.getElementById('sharetext');
+    var btn=document.getElementById('copybtn');
+    ta.select(); ta.setSelectionRange(0, 99999);
+    var done=function(){ btn.textContent='Скопировано ✓';
+      setTimeout(function(){ btn.textContent='Скопировать сообщение'; },2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(done, function(){
+        try { document.execCommand('copy'); done(); } catch(e){}
+      });
+    } else {
+      try { document.execCommand('copy'); done(); } catch(e){}
+    }
+  }
   function pick(el) {
     tier = el.getAttribute('data-tier');
     document.querySelectorAll('.tier').forEach(function(t){ t.classList.remove('on'); });
@@ -893,6 +912,18 @@ const GRANT_PAGE_HTML = `<!DOCTYPE html>
         msg.className='msg ok';
         msg.textContent='✓ Доступ выдан: '+x.d.email+' ('+x.d.tier+') — курсы: '+(x.d.courses||[]).join(', ');
         document.getElementById('email').value='';
+        var share=document.getElementById('share');
+        var ta=document.getElementById('sharetext');
+        if (x.d.loginLink) {
+          ta.value='Здравствуйте! Ваш доступ к курсу открыт 🤍\\n\\n'+
+            'Перейдите по ссылке, чтобы задать пароль и войти (ссылка действует 24 часа):\\n'+
+            x.d.loginLink+'\\n\\n'+
+            'Если ссылка перестала работать — напишите мне, пришлю новую. '+
+            'В дальнейшем заходите на vastu-portal-app.onrender.com/login с вашей почтой и паролем.';
+          share.style.display='block';
+        } else {
+          ta.value=''; share.style.display='none';
+        }
       } else if (x.s===401) {
         msg.className='msg err';
         msg.textContent='Неверный секретный ключ. Смените его ниже.';
@@ -1014,12 +1045,37 @@ async function handleGrantAccess(req, res) {
             }
         }
 
+        // Generate a direct password-set / login link so access never
+        // depends on RU email delivery (mail.ru/inbox.ru/yandex frequently
+        // drop or delay our mail, and customers mistype addresses). Tymur
+        // pastes this straight into Telegram. Works for new + existing users.
+        let loginLink = null;
+        try {
+            const appBase = APP_URL
+                ? APP_URL.replace(/\/$/, '')
+                : 'https://vastu-portal-app.onrender.com';
+            const { data: linkData, error: linkErr } =
+                await supabase.auth.admin.generateLink({ type: 'recovery', email });
+            const hashed =
+                linkData?.properties?.hashed_token ||
+                linkData?.properties?.email_otp ||
+                null;
+            if (linkErr) {
+                console.error('grant-access generateLink error:', linkErr.message);
+            } else if (hashed) {
+                loginLink = `${appBase}/update-password?token_hash=${hashed}&type=recovery`;
+            }
+        } catch (err) {
+            console.error('grant-access generateLink threw:', err?.message || err);
+        }
+
         sendJson(res, 200, {
             granted: true,
             email,
             tier,
             courses: courseRows.map((c) => c.slug),
-            invited
+            invited,
+            loginLink
         });
     } catch (err) {
         console.error('handleGrantAccess threw:', err);
