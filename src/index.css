@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap');
+/* No Google Fonts @import — fonts.googleapis.com is throttled/blocked in
+   Russia (Roskomnadzor), and a CSS @import is render-blocking, so it froze
+   the whole app on an infinite spinner for every RU customer without a VPN.
+   System/installed serif + sans stacks instead (full Cyrillic, zero
+   network, instant paint). See tailwind.config.js fontFamily. */
 
 @tailwind base;
 @tailwind components;

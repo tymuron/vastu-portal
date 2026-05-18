@@ -16,8 +16,11 @@ export default {
                 }
             },
             fontFamily: {
-                serif: ['"Cormorant Garamond"', 'serif'],
-                sans: ['"Inter"', 'sans-serif'],
+                // "Cormorant Garamond"/"Inter" kept first in case locally
+                // installed or self-hosted later; robust Cyrillic-capable
+                // fallbacks so nothing depends on Google's (RU-blocked) CDN.
+                serif: ['"Cormorant Garamond"', 'Georgia', '"Times New Roman"', 'serif'],
+                sans: ['"Inter"', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
             },
             backgroundImage: {
                 'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
