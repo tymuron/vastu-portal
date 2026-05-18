@@ -1381,6 +1381,19 @@ const server = http.createServer((req, res) => {
         case '.svg': contentType = 'image/svg+xml'; break;
     }
 
+    // Cache policy. index.html (and every SPA route that serves it) MUST be
+    // revalidated every load — otherwise a returning user keeps a cached
+    // index.html pointing at the OLD fingerprinted bundle and never receives
+    // any deploy/fix until their browser cache randomly expires (this is why
+    // RU customers kept reporting already-fixed bugs). Vite's /assets/* files
+    // are content-hashed in the filename, so they're safe to cache forever.
+    const isIndexHtml = filePath === path.join(distPath, 'index.html');
+    function cacheControlFor() {
+        if (isIndexHtml) return 'no-cache, no-store, must-revalidate';
+        if (req.url.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
+        return 'public, max-age=3600';
+    }
+
     fs.readFile(filePath, (error, content) => {
         if (error) {
             if (error.code == 'ENOENT') {
@@ -1392,7 +1405,10 @@ const server = http.createServer((req, res) => {
                         res.writeHead(500);
                         res.end('Error: index.html not found. Build failed or dist folder empty.');
                     } else {
-                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        res.writeHead(200, {
+                            'Content-Type': 'text/html',
+                            'Cache-Control': 'no-cache, no-store, must-revalidate'
+                        });
                         res.end(indexContent, 'utf-8');
                     }
                 });
@@ -1401,7 +1417,10 @@ const server = http.createServer((req, res) => {
                 res.end(`Server Error: ${error.code}`);
             }
         } else {
-            res.writeHead(200, { 'Content-Type': contentType });
+            res.writeHead(200, {
+                'Content-Type': contentType,
+                'Cache-Control': cacheControlFor()
+            });
             res.end(content, 'utf-8');
         }
     });
