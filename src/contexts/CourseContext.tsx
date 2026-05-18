@@ -159,12 +159,16 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 setCourses(list);
                 setExpiryByCourse(expiryMap);
 
-                const stored = readStoredId();
-                const storedStillValid = stored && list.some((c) => c.id === stored);
+                // Single course → auto-select it (no picker, seamless).
+                // Multiple courses → leave activeCourseId null so StudentLayout
+                // forces the course picker on every fresh login. Previously we
+                // resumed the last-used course from localStorage, which meant
+                // non-technical users who bought a 2nd course silently stayed
+                // in their 1st course and never discovered the new one (they
+                // never noticed the small switcher). Forcing the picker on
+                // login makes multiple courses unmissable.
                 let next: string | null;
-                if (storedStillValid) {
-                    next = stored;
-                } else if (list.length > 0) {
+                if (list.length === 1) {
                     next = list[0].id;
                 } else {
                     next = null;
