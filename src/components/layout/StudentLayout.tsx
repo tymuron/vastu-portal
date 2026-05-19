@@ -393,9 +393,15 @@ export default function StudentLayout() {
                 </div>
             )}
 
-            {/* Main Content */}
-            <main className="flex-1 md:ml-72 min-h-screen pt-[calc(3.5rem_+_env(safe-area-inset-top))] md:pt-0">
-                <div className="container mx-auto px-4 py-8 md:p-12 max-w-5xl">
+            {/* Main Content. min-w-0 is critical: <main> is a flex child, and
+                without it a flex item keeps min-width:auto and refuses to
+                shrink below its content's intrinsic width — any wide lesson
+                content then stretches the whole page past the viewport and
+                clips at the screen edge on mobile. overflow-x-hidden is the
+                belt-and-suspenders guard so nothing can ever cause a
+                horizontal page scroll. */}
+            <main className="flex-1 min-w-0 md:ml-72 min-h-screen pt-[calc(3.5rem_+_env(safe-area-inset-top))] md:pt-0">
+                <div className="container mx-auto px-4 py-8 md:p-12 max-w-5xl min-w-0 overflow-x-hidden">
                     <Outlet />
                 </div>
             </main>

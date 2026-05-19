@@ -118,7 +118,7 @@ export default function StudentDashboard() {
                 <div className="p-6 md:p-8">
                     <div className="grid md:grid-cols-3 gap-8">
                         {/* Lessons List */}
-                        <div className="md:col-span-2 space-y-4">
+                        <div className="md:col-span-2 space-y-4 min-w-0">
                             <h3 className="font-serif text-xl text-vastu-dark mb-4 flex items-center gap-2">
                                 <PlayCircle className="text-vastu-gold" />
                                 Уроки
@@ -150,7 +150,7 @@ export default function StudentDashboard() {
                         </div>
 
                         {/* Materials Sidebar */}
-                        <div className="space-y-6">
+                        <div className="space-y-6 min-w-0">
                             <div>
                                 <h3 className="font-serif text-xl text-vastu-dark mb-4 flex items-center gap-2">
                                     <FileText className="text-vastu-gold" />
