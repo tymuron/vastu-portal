@@ -84,10 +84,10 @@ export default function Library() {
                                 </div>
                             </div>
 
-                            <h3 className="font-serif text-lg text-[#422326] mb-2">
+                            <h3 className="font-serif text-lg text-[#422326] mb-2 break-words">
                                 {item.title}
                             </h3>
-                            <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1">
+                            <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1 break-words">
                                 {item.description}
                             </p>
 

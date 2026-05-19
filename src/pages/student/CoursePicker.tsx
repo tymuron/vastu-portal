@@ -75,7 +75,7 @@ export default function CoursePicker() {
                                         className="text-gray-300 group-hover:text-vastu-gold transition-colors"
                                     />
                                 </div>
-                                <h2 className="font-serif text-xl md:text-2xl text-vastu-dark mb-2 group-hover:text-vastu-gold transition-colors">
+                                <h2 className="font-serif text-xl md:text-2xl text-vastu-dark mb-2 group-hover:text-vastu-gold transition-colors break-words">
                                     {course.title}
                                 </h2>
                                 {course.description && (

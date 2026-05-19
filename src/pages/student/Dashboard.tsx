@@ -128,22 +128,22 @@ export default function StudentDashboard() {
                                     <Link
                                         key={day.id}
                                         to={`/student/week/${activeWeek.id}/day/${day.id}`}
-                                        className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
+                                        className="flex items-center justify-between gap-3 p-4 rounded-xl border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                     >
-                                        <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-4 min-w-0 flex-1">
                                             <div className="w-8 h-8 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold group-hover:bg-vastu-gold group-hover:text-vastu-dark transition-colors shrink-0">
                                                 <Play size={14} fill="currentColor" />
                                             </div>
-                                            <div>
-                                                <h4 className="font-medium text-vastu-dark group-hover:text-vastu-gold transition-colors">
+                                            <div className="min-w-0">
+                                                <h4 className="font-medium text-vastu-dark group-hover:text-vastu-gold transition-colors line-clamp-2 break-words">
                                                     {day.title}
                                                 </h4>
-                                                <p className="text-xs text-vastu-text-light line-clamp-2 mt-0.5">
+                                                <p className="text-xs text-vastu-text-light line-clamp-2 mt-0.5 break-words">
                                                     {stripHtml(day.description || '')}
                                                 </p>
                                             </div>
                                         </div>
-                                        <ChevronRight size={18} className="text-gray-300 group-hover:text-vastu-gold transition-colors" />
+                                        <ChevronRight size={18} className="text-gray-300 group-hover:text-vastu-gold transition-colors shrink-0" />
                                     </Link>
                                 ))}
                             </div>

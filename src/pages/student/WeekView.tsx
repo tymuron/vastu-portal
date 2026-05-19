@@ -73,27 +73,27 @@ export default function WeekView() {
                                 <Link
                                     key={day.id}
                                     to={`/student/week/${week.id}/day/${day.id}`}
-                                    className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
+                                    className="flex items-center justify-between gap-3 p-4 rounded-xl border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold group-hover:bg-vastu-gold group-hover:text-vastu-dark transition-colors">
+                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                        <div className="w-10 h-10 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold group-hover:bg-vastu-gold group-hover:text-vastu-dark transition-colors shrink-0">
                                             <Play size={18} fill="currentColor" />
                                         </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-medium text-lg text-vastu-dark">{day.title}</h3>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-medium text-lg text-vastu-dark break-words">{day.title}</h3>
                                                 {day.date && (
-                                                    <span className="text-xs font-medium text-vastu-gold bg-vastu-gold/10 px-2 py-0.5 rounded-full">
+                                                    <span className="text-xs font-medium text-vastu-gold bg-vastu-gold/10 px-2 py-0.5 rounded-full shrink-0">
                                                         {new Date(day.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-vastu-text-light line-clamp-1">
+                                            <p className="text-sm text-vastu-text-light line-clamp-2 break-words">
                                                 {day.description ? day.description.replace(/<[^>]+>/g, '') : ''}
                                             </p>
                                         </div>
                                     </div>
-                                    <ChevronRight size={20} className="text-gray-300 group-hover:text-vastu-gold transition-colors" />
+                                    <ChevronRight size={20} className="text-gray-300 group-hover:text-vastu-gold transition-colors shrink-0" />
                                 </Link>
                             ))}
                         </div>

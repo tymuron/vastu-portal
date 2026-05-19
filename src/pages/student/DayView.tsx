@@ -159,9 +159,9 @@ export default function DayView() {
                     />
 
                     <div>
-                        <h1 className="text-3xl font-serif text-vastu-dark mb-4">{day.title}</h1>
+                        <h1 className="text-2xl md:text-3xl font-serif text-vastu-dark mb-4 break-words">{day.title}</h1>
                         <div
-                            className="text-vastu-text-light leading-relaxed text-base font-light prose prose-stone max-w-none [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-4"
+                            className="text-vastu-text-light leading-relaxed text-base font-light prose prose-stone max-w-none break-words [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-4 [&_img]:max-w-full [&_img]:h-auto [&_table]:block [&_table]:overflow-x-auto [&_pre]:overflow-x-auto"
                             dangerouslySetInnerHTML={{ __html: day.description || '' }}
                         />
                     </div>
@@ -312,7 +312,7 @@ export default function DayView() {
                         {day.homeworkDescription ? (
                             <div className="space-y-4">
                                 <div
-                                    className="text-sm text-vastu-text-light prose prose-sm max-w-none [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-2"
+                                    className="text-sm text-vastu-text-light prose prose-sm max-w-none break-words [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-2 [&_img]:max-w-full [&_img]:h-auto [&_table]:block [&_table]:overflow-x-auto [&_pre]:overflow-x-auto"
                                     dangerouslySetInnerHTML={{ __html: day.homeworkDescription }}
                                 />
 
