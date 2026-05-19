@@ -25,7 +25,12 @@ export default function StudentLayout() {
     const displayName = user?.user_metadata?.full_name || user?.email || 'Студент';
     const activeCourse = courses.find((c) => c.id === activeCourseId) ?? null;
     const hasMultipleCourses = courses.length > 1;
-    const isOnPicker = location.pathname === '/student/courses';
+    // Pages that don't belong to a specific course — must stay reachable
+    // even when a multi-course user hasn't picked a course yet, otherwise
+    // the picker guard below bounces them away.
+    const isCourseAgnostic =
+        location.pathname === '/student/courses' ||
+        location.pathname === '/student/install';
 
     // Auto-select the only course when there's exactly one
     useEffect(() => {
@@ -75,7 +80,7 @@ export default function StudentLayout() {
         );
     }
 
-    if (hasMultipleCourses && !activeCourseId && !isOnPicker) {
+    if (hasMultipleCourses && !activeCourseId && !isCourseAgnostic) {
         return <Navigate to="/student/courses" replace />;
     }
 
