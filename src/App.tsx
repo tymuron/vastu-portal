@@ -61,7 +61,6 @@ function App() {
                     <Route path="/update-password" element={<UpdatePasswordPage />} />
                     <Route path="/welcome" element={<WelcomePage />} />
                     <Route path="/buy/:offerId" element={<BuyPage />} />
-                    <Route path="/install" element={<InstallApp />} />
 
                     {/* Student Routes */}
                     <Route path="/student" element={<CourseProvider><StudentLayout /></CourseProvider>}>
@@ -71,6 +70,7 @@ function App() {
                         <Route path="week/:weekId/day/:dayId" element={<DayView />} />
                         <Route path="streams" element={<LiveStreams />} />
                         <Route path="library" element={<Library />} />
+                        <Route path="install" element={<InstallApp />} />
                         <Route path="profile" element={<Profile />} />
                     </Route>
 

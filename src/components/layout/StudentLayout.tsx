@@ -221,10 +221,10 @@ export default function StudentLayout() {
                     />
 
                     <NavItem
-                        to="/install"
+                        to="/student/install"
                         icon={Smartphone}
                         label="Установить приложение"
-                        isActive={location.pathname === '/install'}
+                        isActive={location.pathname.includes('/install')}
                     />
                 </nav>
 
@@ -355,10 +355,10 @@ export default function StudentLayout() {
                                     onClick={() => setIsMobileMenuOpen(false)}
                                 />
                                 <NavItem
-                                    to="/install"
+                                    to="/student/install"
                                     icon={Smartphone}
                                     label="Установить приложение"
-                                    isActive={location.pathname === '/install'}
+                                    isActive={location.pathname.includes('/install')}
                                     onClick={() => setIsMobileMenuOpen(false)}
                                 />
                             </div>
