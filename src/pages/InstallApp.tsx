@@ -1,5 +1,21 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Smartphone, Share, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Smartphone, Share, MoreVertical, ArrowRight } from 'lucide-react';
+
+// True when the page is running as an installed home-screen app
+// (iOS Safari pins the CURRENT url and ignores manifest start_url, so an
+// install done on this page would otherwise re-open these instructions
+// forever — detect that and bounce straight into the platform).
+function isInstalledApp(): boolean {
+    try {
+        return (
+            (window.navigator as any).standalone === true ||
+            window.matchMedia('(display-mode: standalone)').matches
+        );
+    } catch {
+        return false;
+    }
+}
 
 const Step = ({ n, title, text }: { n: number; title: string; text: string }) => (
     <div className="flex gap-4 bg-[#ECE7DC] rounded-xl p-5">
@@ -16,16 +32,36 @@ const Step = ({ n, title, text }: { n: number; title: string; text: string }) =>
 export default function InstallApp() {
     const navigate = useNavigate();
 
+    // If opened as the installed app (iOS pins this very page), never show
+    // the instructions — go straight into the platform.
+    useEffect(() => {
+        if (isInstalledApp()) {
+            navigate('/login', { replace: true });
+        }
+    }, [navigate]);
+
+    // Don't flash the instructions while the installed-app redirect runs.
+    if (isInstalledApp()) return null;
+
     return (
         <div className="min-h-screen bg-vastu-light">
             <div className="max-w-2xl mx-auto px-5 py-8">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-2 text-vastu-text-light hover:text-vastu-dark transition-colors mb-8"
-                >
-                    <ArrowLeft size={18} />
-                    <span>Назад</span>
-                </button>
+                <div className="flex items-center justify-between mb-8">
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="flex items-center gap-2 text-vastu-text-light hover:text-vastu-dark transition-colors"
+                    >
+                        <ArrowLeft size={18} />
+                        <span>Назад</span>
+                    </button>
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="flex items-center gap-2 bg-vastu-dark text-vastu-light text-sm px-4 py-2.5 rounded-lg hover:opacity-90 transition-opacity"
+                    >
+                        <span>Войти на платформу</span>
+                        <ArrowRight size={16} />
+                    </button>
+                </div>
 
                 <div className="bg-vastu-dark rounded-2xl p-8 mb-10">
                     <div className="flex items-center gap-3 mb-3">
@@ -72,9 +108,18 @@ export default function InstallApp() {
                     </div>
                 </div>
 
-                <div className="mt-12 text-center text-vastu-text-light text-sm">
-                    После установки просто открывайте иконку на экране телефона —
-                    вход по вашей почте и паролю сохранится.
+                <div className="mt-12 text-center">
+                    <p className="text-vastu-text-light text-sm mb-5">
+                        После установки просто открывайте иконку на экране телефона —
+                        вход по вашей почте и паролю сохранится.
+                    </p>
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="inline-flex items-center gap-2 bg-vastu-dark text-vastu-light px-7 py-3.5 rounded-lg hover:opacity-90 transition-opacity font-serif"
+                    >
+                        <span>Войти на платформу</span>
+                        <ArrowRight size={18} />
+                    </button>
                 </div>
             </div>
         </div>
