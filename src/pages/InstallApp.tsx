@@ -27,12 +27,12 @@ export default function InstallApp() {
                     <span>Назад</span>
                 </button>
 
-                <div className="bg-[#A8B5A0] rounded-2xl p-8 mb-10">
+                <div className="bg-vastu-dark rounded-2xl p-8 mb-10">
                     <div className="flex items-center gap-3 mb-3">
-                        <Smartphone size={28} className="text-vastu-dark" />
-                        <h1 className="font-serif text-3xl text-vastu-dark">Установить приложение</h1>
+                        <Smartphone size={28} className="text-vastu-gold" />
+                        <h1 className="font-serif text-3xl text-vastu-light">Установить приложение</h1>
                     </div>
-                    <p className="text-vastu-dark/80 leading-relaxed">
+                    <p className="text-vastu-light/80 leading-relaxed">
                         Добавьте платформу как приложение на главный экран телефона —
                         и заходите в один тап, без писем и ссылок.
                     </p>
