@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock, Home } from 'lucide-react';
+import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock, Home, Smartphone } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -219,6 +219,13 @@ export default function StudentLayout() {
                         label="Библиотека"
                         isActive={location.pathname.includes('/library')}
                     />
+
+                    <NavItem
+                        to="/install"
+                        icon={Smartphone}
+                        label="Установить приложение"
+                        isActive={location.pathname === '/install'}
+                    />
                 </nav>
 
                 <div className="p-4 border-t border-white/10">
@@ -345,6 +352,13 @@ export default function StudentLayout() {
                                     icon={Library}
                                     label="Библиотека"
                                     isActive={location.pathname.includes('/library')}
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                />
+                                <NavItem
+                                    to="/install"
+                                    icon={Smartphone}
+                                    label="Установить приложение"
+                                    isActive={location.pathname === '/install'}
                                     onClick={() => setIsMobileMenuOpen(false)}
                                 />
                             </div>
