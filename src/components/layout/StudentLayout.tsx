@@ -254,7 +254,7 @@ export default function StudentLayout() {
             </aside>
 
             {/* Mobile Header */}
-            <header className="md:hidden bg-vastu-dark text-vastu-light fixed top-0 w-full z-50 shadow-md h-16 flex items-center justify-between px-4">
+            <header className="md:hidden bg-vastu-dark text-vastu-light fixed top-0 w-full z-50 shadow-md flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem_+_env(safe-area-inset-top))]">
                 <Link to="/student" className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-vastu-gold rounded-full flex items-center justify-center text-vastu-dark font-serif font-bold text-lg">
                         V
@@ -272,7 +272,7 @@ export default function StudentLayout() {
             {/* Mobile Menu Overlay */}
             {isMobileMenuOpen && (
                 <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
-                    <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 pt-20 overflow-y-auto pb-10" onClick={e => e.stopPropagation()}>
+                    <div className="bg-vastu-dark w-64 h-full shadow-2xl p-4 overflow-y-auto pb-10 pt-[calc(1.5rem_+_env(safe-area-inset-top))]" onClick={e => e.stopPropagation()}>
                         <nav className="space-y-2">
                             <NavItem
                                 to="/welcome"
@@ -394,7 +394,7 @@ export default function StudentLayout() {
             )}
 
             {/* Main Content */}
-            <main className="flex-1 md:ml-72 min-h-screen pt-16 md:pt-0">
+            <main className="flex-1 md:ml-72 min-h-screen pt-[calc(3.5rem_+_env(safe-area-inset-top))] md:pt-0">
                 <div className="container mx-auto px-4 py-8 md:p-12 max-w-5xl">
                     <Outlet />
                 </div>
