@@ -79,15 +79,31 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
             let filePath: string | null = existing?.file_url ?? null;
             let fileName: string | null = existing?.file_name ?? null;
 
-            // Upload new file if selected (overwrites previous at the deterministic path).
+            // Upload new file if selected. Supabase Storage object keys must
+            // be ASCII-safe (no Cyrillic, no em dashes, no spaces) — so we
+            // generate a UUID-based key and preserve the original filename in
+            // the file_name DB column for display.
             if (file) {
-                // Sanitize filename — keep extension, strip path separators.
-                const safe = file.name.replace(/[/\\]+/g, '_');
-                const path = `${user.id}/${dayId}/${Date.now()}_${safe}`;
+                const extMatch = file.name.match(/\.[A-Za-z0-9]+$/);
+                const ext = extMatch ? extMatch[0].toLowerCase() : '';
+                const safeId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                const path = `${user.id}/${dayId}/${safeId}${ext}`;
                 const { error: upErr } = await supabase
                     .storage.from('homework_files')
-                    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+                    .upload(path, file, { upsert: false, contentType: file.type || undefined });
                 if (upErr) throw upErr;
+
+                // Best-effort cleanup of the previous file (different key, so
+                // upsert wouldn't have replaced it) so storage doesn't bloat.
+                if (existing?.file_url && existing.file_url !== path) {
+                    try {
+                        await supabase.storage.from('homework_files').remove([existing.file_url]);
+                    } catch (e) {
+                        console.warn('homework: failed to remove previous file', e);
+                    }
+                }
                 filePath = path;
                 fileName = file.name;
             }
