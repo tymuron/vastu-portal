@@ -82,6 +82,8 @@ export default function StudentDashboard() {
     }
 
     const activeWeek = weeks.find(w => w.id === activeWeekId);
+    const currentIdx = weeks.findIndex(w => w.id === activeWeekId);
+    const nextWeek = currentIdx >= 0 ? weeks[currentIdx + 1] : null;
 
     if (!activeWeek) return null;
 
@@ -147,6 +149,32 @@ export default function StudentDashboard() {
                                     </Link>
                                 ))}
                             </div>
+
+                            {/* Next module CTA — Anna asked for this; without it
+                                students finish a module's lessons and have no
+                                obvious way forward (sidebar switcher is too subtle). */}
+                            {nextWeek && (
+                                nextWeek.isLocked ? (
+                                    <div className="mt-2 flex items-center justify-between gap-3 p-4 rounded-xl border border-dashed border-gray-200 bg-gray-50/50 text-vastu-text-light">
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Следующий модуль</div>
+                                            <div className="font-medium break-words">{nextWeek.title}</div>
+                                        </div>
+                                        <Lock size={16} className="text-gray-300 shrink-0" />
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => navigate(`/student?week=${nextWeek.id}`)}
+                                        className="mt-2 w-full flex items-center justify-between gap-3 p-4 rounded-xl bg-vastu-dark text-vastu-light hover:opacity-90 transition-opacity group"
+                                    >
+                                        <div className="min-w-0 text-left">
+                                            <div className="text-[10px] uppercase tracking-widest text-vastu-gold/80 mb-0.5">Перейти к следующему модулю</div>
+                                            <div className="font-serif text-lg break-words">{nextWeek.title}</div>
+                                        </div>
+                                        <ChevronRight size={20} className="text-vastu-gold shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                                    </button>
+                                )
+                            )}
                         </div>
 
                         {/* Materials Sidebar */}
