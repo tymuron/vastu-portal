@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
+import HomeworkSubmission from '../../components/HomeworkSubmission';
 
 // Helper component for dual video player (reused logic)
 const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, rutubeUrl?: string, title: string }) => {
@@ -359,6 +360,11 @@ export default function DayView() {
                                 Нет домашнего задания для этого урока.
                             </p>
                         )}
+
+                        {/* Student homework submission — always shown so students
+                            can also leave notes/questions on lessons without an
+                            explicit homework prompt. */}
+                        <HomeworkSubmission dayId={day.id} />
                     </div>
                 </div>
             </div>

@@ -14,6 +14,7 @@ import CourseEditor from './pages/teacher/CourseEditor';
 import Students from './pages/teacher/Students';
 import ManageStreams from './pages/teacher/ManageStreams';
 import ManageLibrary from './pages/teacher/ManageLibrary';
+import Submissions from './pages/teacher/Submissions';
 
 import { AuthProvider } from './contexts/AuthContext';
 import { CourseProvider } from './contexts/CourseContext';
@@ -81,6 +82,7 @@ function App() {
                         <Route path="students" element={<Students />} />
                         <Route path="streams" element={<ManageStreams />} />
                         <Route path="library" element={<ManageLibrary />} />
+                        <Route path="submissions" element={<Submissions />} />
                         <Route path="settings" element={<div className="text-center p-10">Настройки (В разработке)</div>} />
                     </Route>
 

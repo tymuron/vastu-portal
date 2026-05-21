@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, Navigate } from 'react-router-dom';
-import { LogOut, Layout, Users, Loader2, Video, FileText } from 'lucide-react';
+import { LogOut, Layout, Users, Loader2, Video, FileText, ClipboardCheck } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -21,6 +21,7 @@ export default function TeacherLayout() {
     const navItems = [
         { path: '/teacher', label: 'Курс', icon: Layout },
         { path: '/teacher/students', label: 'Студенты', icon: Users },
+        { path: '/teacher/submissions', label: 'Домашки', icon: ClipboardCheck },
         { path: '/teacher/streams', label: 'Эфиры', icon: Video },
         { path: '/teacher/library', label: 'Библиотека', icon: FileText },
     ];
