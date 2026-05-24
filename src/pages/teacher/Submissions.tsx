@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Download, FileText, Search, Paperclip, Send, Check } from 'lucide-react';
+import { Loader2, Download, FileText, Search, Paperclip, Send, Check, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)$/i;
+const isImageFile = (name: string | null | undefined) =>
+    !!name && IMAGE_EXT.test(name);
 
 interface Row {
     id: string;
@@ -103,6 +107,12 @@ export default function Submissions() {
     const [rows, setRows] = useState<Row[]>([]);
     const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
     const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
+    const [expandedImages, setExpandedImages] = useState<Set<string>>(new Set());
+    const toggleImage = (id: string) => setExpandedImages((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
@@ -260,22 +270,50 @@ export default function Submissions() {
                                                 {r.content}
                                             </div>
                                         )}
-                                        {r.file_url && (
-                                            <div className="flex items-center gap-2 p-2 rounded-lg bg-vastu-light border border-vastu-gold/30">
-                                                <Paperclip size={14} className="text-vastu-gold shrink-0" />
-                                                <div className="flex-1 min-w-0 text-sm text-vastu-dark truncate">
-                                                    {r.file_name || 'файл'}
+                                        {r.file_url && (() => {
+                                            const isImg = isImageFile(r.file_name);
+                                            const isOpen = expandedImages.has(r.id);
+                                            return (
+                                                <div className="rounded-lg bg-vastu-light border border-vastu-gold/30 overflow-hidden">
+                                                    <div className="flex items-center gap-2 p-2">
+                                                        <Paperclip size={14} className="text-vastu-gold shrink-0" />
+                                                        <div className="flex-1 min-w-0 text-sm text-vastu-dark truncate">
+                                                            {r.file_name || 'файл'}
+                                                        </div>
+                                                        {isImg && signed && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleImage(r.id)}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-vastu-gold hover:text-vastu-dark hover:bg-vastu-gold/10 rounded transition-colors"
+                                                                title={isOpen ? 'Скрыть' : 'Показать'}
+                                                            >
+                                                                {isOpen ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                                <span>{isOpen ? 'Скрыть' : 'Показать'}</span>
+                                                            </button>
+                                                        )}
+                                                        {signed ? (
+                                                            <a href={signed} target="_blank" rel="noreferrer"
+                                                               className="p-1 text-vastu-gold hover:text-vastu-dark" title="Открыть в новой вкладке / скачать">
+                                                                <Download size={14} />
+                                                            </a>
+                                                        ) : (
+                                                            <FileText size={14} className="text-gray-300" />
+                                                        )}
+                                                    </div>
+                                                    {isImg && isOpen && signed && (
+                                                        <a href={signed} target="_blank" rel="noreferrer"
+                                                           className="block border-t border-vastu-gold/20 bg-black/5">
+                                                            <img
+                                                                src={signed}
+                                                                alt={r.file_name || ''}
+                                                                loading="lazy"
+                                                                className="block w-full max-h-[600px] object-contain"
+                                                            />
+                                                        </a>
+                                                    )}
                                                 </div>
-                                                {signed ? (
-                                                    <a href={signed} target="_blank" rel="noreferrer"
-                                                       className="p-1 text-vastu-gold hover:text-vastu-dark" title="Открыть">
-                                                        <Download size={14} />
-                                                    </a>
-                                                ) : (
-                                                    <FileText size={14} className="text-gray-300" />
-                                                )}
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         <FeedbackEditor
                                             row={r}
