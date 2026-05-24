@@ -10,6 +10,8 @@ interface Submission {
     file_name: string | null;
     submitted_at: string;
     updated_at: string;
+    teacher_feedback: string | null;
+    teacher_feedback_at: string | null;
 }
 
 const formatWhen = (iso: string) => {
@@ -41,7 +43,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
             setLoading(true);
             const { data, error } = await supabase
                 .from('homework_submissions')
-                .select('id, content, file_url, file_name, submitted_at, updated_at')
+                .select('id, content, file_url, file_name, submitted_at, updated_at, teacher_feedback, teacher_feedback_at')
                 .eq('user_id', user.id)
                 .eq('day_id', dayId)
                 .maybeSingle();
@@ -130,7 +132,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                         file_url: filePath,
                         file_name: fileName
                     })
-                    .select('id, content, file_url, file_name, submitted_at, updated_at')
+                    .select('id, content, file_url, file_name, submitted_at, updated_at, teacher_feedback, teacher_feedback_at')
                     .single();
                 if (insErr) throw insErr;
                 if (data) setExisting(data as Submission);
@@ -185,6 +187,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
     }
 
     return (
+        <>
         <form onSubmit={handleSave} className="mt-6 pt-6 border-t border-gray-100 space-y-3">
             <div className="flex items-center justify-between gap-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ваш ответ</h4>
@@ -261,5 +264,25 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                 <span>{existing ? 'Сохранить изменения' : 'Отправить'}</span>
             </button>
         </form>
+
+        {/* Teacher reply — shown to the student when Anna has written feedback. */}
+        {existing?.teacher_feedback && existing.teacher_feedback.trim() && (
+            <div className="mt-4 p-4 rounded-xl bg-vastu-light border border-vastu-gold/40">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="text-[10px] uppercase tracking-widest text-vastu-gold/80">
+                        Ответ Анны
+                    </div>
+                    {existing.teacher_feedback_at && (
+                        <span className="text-xs text-vastu-text-light">
+                            {formatWhen(existing.teacher_feedback_at)}
+                        </span>
+                    )}
+                </div>
+                <div className="text-sm text-vastu-dark whitespace-pre-wrap break-words">
+                    {existing.teacher_feedback}
+                </div>
+            </div>
+        )}
+        </>
     );
 }

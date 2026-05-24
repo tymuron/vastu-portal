@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Download, FileText, Search, Paperclip } from 'lucide-react';
+import { Loader2, Download, FileText, Search, Paperclip, Send, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Row {
@@ -10,6 +10,8 @@ interface Row {
     file_name: string | null;
     submitted_at: string;
     updated_at: string;
+    teacher_feedback: string | null;
+    teacher_feedback_at: string | null;
     days: {
         id: string;
         title: string;
@@ -32,6 +34,71 @@ const formatWhen = (iso: string) => {
     } catch { return ''; }
 };
 
+function FeedbackEditor({ row, onSaved }: {
+    row: Row;
+    onSaved: (id: string, feedback: string, savedAt: string) => void;
+}) {
+    const [draft, setDraft] = useState(row.teacher_feedback || '');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const hasUnsaved = (draft.trim() || '') !== (row.teacher_feedback || '').trim();
+
+    const save = async () => {
+        const trimmed = draft.trim();
+        setSaving(true);
+        setError(null);
+        try {
+            const nowIso = new Date().toISOString();
+            const { error: updErr } = await supabase
+                .from('homework_submissions')
+                .update({ teacher_feedback: trimmed, teacher_feedback_at: nowIso })
+                .eq('id', row.id);
+            if (updErr) throw updErr;
+            onSaved(row.id, trimmed, nowIso);
+        } catch (err: any) {
+            console.error('feedback save error:', err);
+            setError(err?.message || 'Не удалось сохранить ответ.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+            <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="text-[10px] uppercase tracking-widest text-vastu-gold/80">Ваш ответ ученику</div>
+                {row.teacher_feedback_at && !hasUnsaved && (
+                    <span className="text-xs text-vastu-text-light inline-flex items-center gap-1">
+                        <Check size={12} className="text-green-600" />
+                        Отправлено · {formatWhen(row.teacher_feedback_at)}
+                    </span>
+                )}
+            </div>
+            <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Напишите комментарий или ответ ученику…"
+                rows={3}
+                disabled={saving}
+                className="w-full px-3 py-2 text-sm text-vastu-dark bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-vastu-gold focus:border-vastu-gold resize-y min-h-[64px]"
+            />
+            {error && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-2">{error}</div>
+            )}
+            <button
+                type="button"
+                onClick={save}
+                disabled={saving || !hasUnsaved}
+                className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-vastu-dark text-vastu-light text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                <span>{row.teacher_feedback ? 'Сохранить ответ' : 'Отправить ответ'}</span>
+            </button>
+        </div>
+    );
+}
+
 export default function Submissions() {
     const [rows, setRows] = useState<Row[]>([]);
     const [profiles, setProfiles] = useState<Map<string, Profile>>(new Map());
@@ -50,6 +117,7 @@ export default function Submissions() {
                     .from('homework_submissions')
                     .select(`
                         id, user_id, content, file_url, file_name, submitted_at, updated_at,
+                        teacher_feedback, teacher_feedback_at,
                         days ( id, title, weeks ( id, title ) )
                     `)
                     .order('updated_at', { ascending: false });
@@ -208,6 +276,17 @@ export default function Submissions() {
                                                 )}
                                             </div>
                                         )}
+
+                                        <FeedbackEditor
+                                            row={r}
+                                            onSaved={(id, feedback, savedAt) => {
+                                                setRows((prev) => prev.map((x) =>
+                                                    x.id === id
+                                                        ? { ...x, teacher_feedback: feedback, teacher_feedback_at: savedAt }
+                                                        : x
+                                                ));
+                                            }}
+                                        />
                                     </article>
                                 );
                             })}
