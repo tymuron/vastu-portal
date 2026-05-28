@@ -8,6 +8,7 @@ import LiveStreams from './pages/student/LiveStreams';
 import Library from './pages/student/Library';
 import Profile from './pages/student/Profile';
 import CoursePicker from './pages/student/CoursePicker';
+import Modules from './pages/student/Modules';
 
 import TeacherLayout from './components/layout/TeacherLayout';
 import CourseEditor from './pages/teacher/CourseEditor';
@@ -67,6 +68,7 @@ function App() {
                     <Route path="/student" element={<CourseProvider><StudentLayout /></CourseProvider>}>
                         <Route index element={<StudentDashboard />} />
                         <Route path="courses" element={<CoursePicker />} />
+                        <Route path="modules" element={<Modules />} />
                         <Route path="week/:weekId" element={<WeekView />} />
                         <Route path="week/:weekId/day/:dayId" element={<DayView />} />
                         <Route path="streams" element={<LiveStreams />} />
