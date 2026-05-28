@@ -36,13 +36,12 @@ export default function StudentDashboard() {
 
     useEffect(() => {
         if (!loading && weeks.length > 0) {
-            // If no week selected or invalid week, redirect to first unlocked week
+            // No week / invalid week → bounce to the modules picker so the
+            // student consciously chooses a module instead of always landing
+            // in the first one. Asked for by Anna 2026-05.
             const isValidWeek = weeks.some(w => w.id === activeWeekId);
-
             if (!activeWeekId || !isValidWeek) {
-                const firstUnlocked = weeks.find(w => !w.isLocked);
-                const targetWeekId = firstUnlocked?.id || weeks[0].id;
-                navigate(`/student?week=${targetWeekId}`, { replace: true });
+                navigate('/student/modules', { replace: true });
             }
         }
     }, [weeks, loading, activeWeekId, navigate]);
