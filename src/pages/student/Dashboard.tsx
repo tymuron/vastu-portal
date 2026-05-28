@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { PlayCircle, ChevronRight, FileText, Loader2, Play, BookOpen, AlertCircle, Lock, LayoutGrid } from 'lucide-react';
+import { PlayCircle, ChevronRight, ChevronLeft, FileText, Loader2, Play, BookOpen, AlertCircle, Lock } from 'lucide-react';
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
@@ -112,10 +112,10 @@ export default function StudentDashboard() {
                         <button
                             type="button"
                             onClick={() => navigate('/student/modules')}
-                            className="inline-flex items-center gap-1.5 mb-3 text-[10px] uppercase tracking-widest text-vastu-gold/90 hover:text-vastu-gold transition-colors"
+                            className="inline-flex items-center gap-1.5 mb-3 text-sm text-vastu-gold/80 hover:text-vastu-gold transition-colors"
                         >
-                            <LayoutGrid size={12} />
-                            <span>Все модули</span>
+                            <ChevronLeft size={16} />
+                            <span>К списку модулей</span>
                         </button>
                         <h2 className="text-3xl md:text-5xl font-serif mb-6 break-words">{activeWeek.title}</h2>
                         <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed text-lg">
