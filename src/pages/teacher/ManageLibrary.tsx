@@ -219,7 +219,10 @@ export default function ManageLibrary() {
                         title: title,
                         category: 'checklist', // Default category
                         file_url: publicUrl,
-                        description: 'Загружено перетаскиванием',
+                        // No description — leave it empty so the student card
+                        // doesn't show "Загружено перетаскиванием" as if it
+                        // were meaningful copy. Anna can edit later if needed.
+                        description: '',
                         course_id: activeCourseId
                     }]);
 
