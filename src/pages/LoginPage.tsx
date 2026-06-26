@@ -7,6 +7,28 @@ import { LogOut, ArrowRight, User } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 
+// Supabase returns terse English errors. New students almost always hit
+// "Invalid login credentials" because they go straight to the login form and
+// type a password they never set — accounts are created via an emailed invite /
+// password-set link (see server.js grant-access flow). Translate the common
+// cases into Russian guidance so first-timers can unblock themselves instead of
+// writing to support.
+function friendlyAuthError(message?: string): string {
+    const msg = (message || '').toLowerCase();
+
+    if (msg.includes('invalid login credentials')) {
+        return 'Неверный email или пароль. Если вы входите впервые — сначала задайте пароль по ссылке из письма-приглашения (проверьте папку «Спам»), либо нажмите «Забыли пароль?», чтобы получить новую ссылку.';
+    }
+    if (msg.includes('email not confirmed')) {
+        return 'Email ещё не подтверждён. Откройте ссылку из письма-приглашения, чтобы задать пароль и войти. Если письма нет — воспользуйтесь «Забыли пароль?».';
+    }
+    if (msg.includes('failed to fetch') || msg.includes('network')) {
+        return 'Не удалось связаться с сервером. Проверьте интернет-соединение и попробуйте ещё раз.';
+    }
+
+    return message || 'Ошибка входа. Попробуйте ещё раз или воспользуйтесь «Забыли пароль?».';
+}
+
 export default function LoginPage() {
     const navigate = useNavigate();
     const { user, role: authRole, signOut } = useAuth();
@@ -56,7 +78,7 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
-            setError(err.message || 'Ошибка входа');
+            setError(friendlyAuthError(err?.message));
         }
     };
 
