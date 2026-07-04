@@ -1398,6 +1398,25 @@ const server = http.createServer((req, res) => {
     fs.readFile(filePath, (error, content) => {
         if (error) {
             if (error.code == 'ENOENT') {
+                // A request for a real, extensioned asset (e.g. a hashed
+                // /assets/index-<hash>.js) that no longer exists means the caller
+                // is running a STALE cached index.html pointing at a bundle we
+                // deleted on redeploy. Return a genuine 404 so it fails loudly and
+                // the browser recovers on reload — do NOT hand back index.html,
+                // which the browser would try to execute as JavaScript (SyntaxError,
+                // blank page, "can't log in on my laptop"). Only extensionless SPA
+                // routes fall through to index.html below.
+                const reqPath = req.url.split('?')[0];
+                const reqExt = path.extname(reqPath);
+                if (reqPath.startsWith('/assets/') || (reqExt && reqExt !== '.html')) {
+                    console.log(`Stale/missing asset requested: ${reqPath} -> 404`);
+                    res.writeHead(404, {
+                        'Content-Type': 'text/plain',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate'
+                    });
+                    res.end('Not found');
+                    return;
+                }
                 console.log(`File not found: ${filePath}, falling back to index.html`);
                 // Fallback to index.html for SPA routing
                 fs.readFile(path.join(distPath, 'index.html'), (err, indexContent) => {

@@ -3,9 +3,32 @@ import { useNavigate, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
-import { LogOut, ArrowRight, User } from 'lucide-react';
+import { LogOut, ArrowRight, User, Eye, EyeOff } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
+
+// Turn Supabase's raw English auth errors into a clear Russian message so a
+// non-technical user (and we, when they report it) can tell *which* failure
+// happened — a wrong password reads very differently from a blocked network.
+function authErrorToRu(err: any): string {
+    const msg = (err?.message || '').toLowerCase();
+    const status = err?.status;
+    // Network / transport failure: antivirus HTTPS scan, VPN, ad-blocker, ISP
+    // block, or plain offline. Surfaces as "Failed to fetch" / AuthRetryableFetchError.
+    if (err?.name === 'AuthRetryableFetchError' || /failed to fetch|networkerror|fetch|network/.test(msg)) {
+        return 'Не удаётся связаться с сервером. Проверьте интернет, отключите VPN / блокировщик рекламы / антивирус (защита HTTPS-соединений) или попробуйте другую сеть.';
+    }
+    if (/invalid login credentials/.test(msg)) {
+        return 'Неверный email или пароль. Проверьте раскладку клавиатуры (должна быть EN), Caps Lock и регистр букв.';
+    }
+    if (/email not confirmed/.test(msg)) {
+        return 'Email не подтверждён. Откройте письмо от портала и перейдите по ссылке подтверждения.';
+    }
+    if (status === 429 || /rate limit|for security purposes/.test(msg)) {
+        return 'Слишком много попыток входа. Подождите минуту и попробуйте снова.';
+    }
+    return err?.message || 'Ошибка входа';
+}
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -14,11 +37,28 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
+        // If the browser blocks local storage (private mode, "block site data",
+        // strict tracking protection, some privacy extensions), Supabase silently
+        // keeps the session in memory only — login appears to work, then bounces
+        // back to /login on the next reload. Catch it up front and explain, so the
+        // user isn't stuck in a loop. This is a classic desktop-only failure.
+        try {
+            const k = '__vastu_storage_test__';
+            localStorage.setItem(k, '1');
+            localStorage.removeItem(k);
+        } catch {
+            setError('Браузер блокирует сохранение входа, поэтому вход не удержится. Отключите приватный режим или разрешите файлы cookie и данные сайта для этого адреса, затем повторите.');
+            return;
+        }
+
+        setSubmitting(true);
         try {
             if (!import.meta.env.VITE_SUPABASE_URL) {
                 // Mock fallback
@@ -28,7 +68,7 @@ export default function LoginPage() {
             }
 
             const { data: { user }, error } = await supabase.auth.signInWithPassword({
-                email,
+                email: email.trim().toLowerCase(),
                 password,
             });
 
@@ -56,7 +96,11 @@ export default function LoginPage() {
             }
 
         } catch (err: any) {
-            setError(err.message || 'Ошибка входа');
+            // Log the discriminating details so a future bug report is diagnosable.
+            console.error('[login] signIn failed', { name: err?.name, status: err?.status, message: err?.message }, err);
+            setError(authErrorToRu(err));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -158,19 +202,31 @@ export default function LoginPage() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                autoComplete="email"
                                 className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
                                 placeholder="name@example.com"
                             />
                         </div>
                         <div>
                             <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Пароль</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
-                                placeholder="••••••••"
-                            />
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    autoComplete="current-password"
+                                    className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 pr-12 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
+                                    placeholder="••••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                                    className="absolute inset-y-0 right-0 flex items-center pr-4 text-vastu-light/50 hover:text-vastu-gold transition-colors"
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                             <div className="flex justify-end mt-1">
                                 <Link to="/forgot-password" className="text-xs text-vastu-gold/70 hover:text-vastu-gold transition-colors">
                                     Забыли пароль?
@@ -181,9 +237,10 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20"
+                        disabled={submitting}
+                        className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
-                        Войти
+                        {submitting ? 'Вход…' : 'Войти'}
                     </button>
                 </form>
             </div>
