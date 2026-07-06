@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -11,6 +11,7 @@ interface FileUploaderProps {
 
 export default function FileUploader({ onUploadComplete, folder = 'general', label, compact = false }: FileUploaderProps) {
     const [uploading, setUploading] = useState(false);
+    const inputId = `file-upload-${useId()}`;
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
@@ -60,13 +61,13 @@ export default function FileUploader({ onUploadComplete, folder = 'general', lab
             <div className="relative inline-block">
                 <input
                     type="file"
-                    id={`file-upload-${folder}-${Math.floor(Math.random() * 1000)}`}
+                    id={inputId}
                     className="hidden"
                     onChange={handleFileChange}
                     disabled={uploading}
                 />
                 <label
-                    htmlFor={`file-upload-${folder}-${Math.floor(Math.random() * 1000)}`} // Unique ID
+                    htmlFor={inputId}
                     className="px-3 py-2 bg-white border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-vastu-gold hover:text-vastu-gold cursor-pointer flex items-center gap-2 transition-colors"
                 >
                     {uploading ? <Loader2 className="animate-spin" size={14} /> : <Upload size={14} />}
@@ -80,13 +81,13 @@ export default function FileUploader({ onUploadComplete, folder = 'general', lab
         <div className="relative">
             <input
                 type="file"
-                id={`file-upload-${folder}`}
+                id={inputId}
                 className="hidden"
                 onChange={handleFileChange}
                 disabled={uploading}
             />
             <label
-                htmlFor={`file-upload-${folder}`} // Unique ID
+                htmlFor={inputId}
                 className="flex flex-col items-center justify-center gap-3 px-6 py-8 bg-gray-50 hover:bg-vastu-gold/5 border-2 border-dashed border-gray-300 hover:border-vastu-gold/50 rounded-xl cursor-pointer transition-all group w-full"
             >
                 <div className="p-3 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
