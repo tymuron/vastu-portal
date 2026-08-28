@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Course } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
 import { useAuth } from './AuthContext';
+import { serverNow } from '../lib/authDiagnostics';
 
 interface CourseContextType {
     courses: Course[];
@@ -140,7 +141,11 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
                     const rows = (data ?? []) as unknown as EntitlementRow[];
                     const mapped: Course[] = [];
-                    const now = Date.now();
+                    // Server time, not Date.now(): expires_at comes from the
+                    // server, so comparing it against a machine whose clock runs
+                    // days fast would hide a course the student has paid for and
+                    // show them "У вас пока нет доступа к курсам" instead.
+                    const now = serverNow();
                     for (const row of rows) {
                         // skip rows whose expires_at is non-null AND already past
                         if (row.expires_at && new Date(row.expires_at).getTime() <= now) continue;
@@ -205,7 +210,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
 
     let expiresInDays: number | null = null;
     if (activeCourseExpiresAt) {
-        const diffMs = new Date(activeCourseExpiresAt).getTime() - Date.now();
+        const diffMs = new Date(activeCourseExpiresAt).getTime() - serverNow();
         if (diffMs > 0) {
             expiresInDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
         }

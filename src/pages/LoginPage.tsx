@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
-import { LogOut, ArrowRight, User, Eye, EyeOff } from 'lucide-react';
+import { LogOut, ArrowRight, User, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
+import { getStorageTier } from '../lib/browserStorage';
+import {
+    inspectAuthEnvironment,
+    describeEnvironment,
+    supportSummary,
+    type AuthEnvironment,
+} from '../lib/authDiagnostics';
 
 // Turn Supabase's raw English auth errors into a clear Russian message so a
 // non-technical user (and we, when they report it) can tell *which* failure
@@ -32,28 +39,40 @@ function authErrorToRu(err: any): string {
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const { user, role: authRole, signOut } = useAuth();
+    const { user, role: authRole, signOut, authIssue } = useAuth();
     const [role, setRole] = useState<UserRole>('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [environment, setEnvironment] = useState<AuthEnvironment | null>(null);
+
+    // Check the machine, not the account. Every "I can't log in on my laptop but
+    // it works on my phone" report so far has been a machine-level problem —
+    // blocked site data or a wrong system clock — and the user has no way to
+    // guess that. Probe on mount so the answer is on screen before they retry
+    // in a fourth browser.
+    useEffect(() => {
+        let cancelled = false;
+        inspectAuthEnvironment()
+            .then((env) => { if (!cancelled) setEnvironment(env); })
+            .catch(() => { /* diagnostics are best-effort */ });
+        return () => { cancelled = true; };
+    }, []);
+
+    const environmentProblem = environment ? describeEnvironment(environment) : null;
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        // If the browser blocks local storage (private mode, "block site data",
-        // strict tracking protection, some privacy extensions), Supabase silently
-        // keeps the session in memory only — login appears to work, then bounces
-        // back to /login on the next reload. Catch it up front and explain, so the
-        // user isn't stuck in a loop. This is a classic desktop-only failure.
-        try {
-            const k = '__vastu_storage_test__';
-            localStorage.setItem(k, '1');
-            localStorage.removeItem(k);
-        } catch {
+        // If nothing on this machine can hold the session — a security suite or
+        // a privacy setting that drops site data — login "succeeds" and then
+        // bounces straight back here. Say so instead of letting them loop.
+        // sessionStorage / cookie fallbacks are good enough to continue, so only
+        // the memory-only tier is a hard stop.
+        if (getStorageTier() === 'memory') {
             setError('Браузер блокирует сохранение входа, поэтому вход не удержится. Отключите приватный режим или разрешите файлы cookie и данные сайта для этого адреса, затем повторите.');
             return;
         }
@@ -189,9 +208,38 @@ export default function LoginPage() {
                         </button>
                     </div>
 
+                    {authIssue === 'session-lost' && (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-100 text-sm leading-relaxed">
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-300" />
+                                <div>
+                                    <div className="font-medium mb-1">Вход сбросился</div>
+                                    <p className="text-amber-100/80">
+                                        {environmentProblem ??
+                                            'Этот браузер не удержал вход. Разрешите файлы cookie и данные сайта для этого адреса и проверьте, что дата и время на компьютере выставлены автоматически.'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {authIssue !== 'session-lost' && environmentProblem && (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-100 text-sm leading-relaxed">
+                            <div className="flex items-start gap-2">
+                                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-300" />
+                                <p className="text-amber-100/80">{environmentProblem}</p>
+                            </div>
+                        </div>
+                    )}
+
                     {error && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
                             {error}
+                            {environment && (
+                                <div className="mt-2 font-mono text-[10px] text-red-200/50 break-all">
+                                    {supportSummary(environment)}
+                                </div>
+                            )}
                         </div>
                     )}
 

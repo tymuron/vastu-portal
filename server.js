@@ -1341,9 +1341,18 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Health Check
-    if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
+    // Health check. Also the frontend's clock reference: the browser reads the
+    // `Date` response header off this endpoint to work out how far the user's
+    // system clock is from real time (see src/lib/authDiagnostics.ts). A clock
+    // more than an hour fast makes every access token look expired the instant
+    // it is issued, which is why some laptops get thrown back to the login page
+    // a second after logging in. Matched on the path so the cache-busting query
+    // string the probe appends still lands here, and never cached.
+    if (urlPath === '/health') {
+        res.writeHead(200, {
+            'Content-Type': 'text/plain',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+        });
         res.end('OK');
         return;
     }
