@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_CURRENCIES = ['EUR', 'RUB', 'USD'] as const;
 type Currency = (typeof ALLOWED_CURRENCIES)[number];
+const CURRENCY_SIGN: Record<Currency, string> = { RUB: '₽', EUR: '€', USD: '$' };
+
+type OfferInfo = { title: string; prices: Partial<Record<Currency, number>> };
+
+// 55 000 ₽ · 599,50 € · 671 $ — Russian number style, sign after.
+function formatPrice(amount: number, currency: Currency) {
+    const cents = amount % 1 !== 0 ? 2 : 0;
+    const n = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: cents, maximumFractionDigits: 2 }).format(amount);
+    return `${n} ${CURRENCY_SIGN[currency]}`;
+}
 
 export default function BuyPage() {
     const { offerId } = useParams<{ offerId: string }>();
@@ -18,7 +28,23 @@ export default function BuyPage() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const offerIsValid = !!offerId && UUID_RE.test(offerId);
+    // null = loading or catalog unreachable (checkout still works), 'missing' = lava doesn't know this offer.
+    const [offer, setOffer] = useState<OfferInfo | 'missing' | null>(null);
+
+    const offerIsValid = !!offerId && UUID_RE.test(offerId) && offer !== 'missing';
+
+    useEffect(() => {
+        if (!offerId || !UUID_RE.test(offerId)) return;
+        let cancelled = false;
+        fetch(`/api/lava/offer/${offerId}`)
+            .then((r) => (r.status === 404 ? 'missing' : r.ok ? r.json() : null))
+            .then((data) => { if (!cancelled) setOffer(data); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [offerId]);
+
+    const offerInfo = offer && offer !== 'missing' ? offer : null;
+    const price = offerInfo?.prices[currency];
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -70,9 +96,17 @@ export default function BuyPage() {
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        {offerInfo && (
+                            <div className="text-center border-y border-vastu-gold/20 py-4">
+                                <p className="text-vastu-light font-serif text-lg leading-snug">{offerInfo.title}</p>
+                                {price != null && (
+                                    <p className="text-vastu-gold font-serif text-2xl mt-2">{formatPrice(price, currency)}</p>
+                                )}
+                            </div>
+                        )}
                         <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
                             Введите email, на который придёт доступ к курсу.
-                            После оплаты вы получите письмо с приглашением в личный кабинет.
+                            Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.
                         </p>
 
                         {error && (
@@ -97,7 +131,7 @@ export default function BuyPage() {
                         <div>
                             <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Валюта</label>
                             <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
-                                {ALLOWED_CURRENCIES.map((c) => (
+                                {ALLOWED_CURRENCIES.filter((c) => !offerInfo || offerInfo.prices[c] != null).map((c) => (
                                     <button
                                         type="button"
                                         key={c}

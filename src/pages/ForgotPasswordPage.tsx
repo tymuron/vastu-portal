@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft } from 'lucide-react';
 
+// Why the visitor landed here from an /access link (see fulfilment.js).
+const ARRIVAL_NOTICE: Record<string, string> = {
+    expired: 'Ссылка из письма устарела. Отправим новую — нажмите кнопку ниже.',
+    failed: 'Не получилось открыть ссылку. Отправим новую — нажмите кнопку ниже.',
+    invalid: 'Ссылка повреждена. Введите почту, и мы пришлём новую.',
+};
+
 export default function ForgotPasswordPage() {
-    const [email, setEmail] = useState('');
+    const [searchParams] = useSearchParams();
+    const [email, setEmail] = useState(searchParams.get('email') || '');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const arrival = ['expired', 'failed', 'invalid'].find((k) => searchParams.get(k) === '1');
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -16,13 +25,36 @@ export default function ForgotPasswordPage() {
         setMessage(null);
 
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/update-password`,
-            });
+            // Our own endpoint sends the link through Resend from
+            // hello@annaromeo.design, with the course's Telegram links.
+            // Supabase's mailer is only the fallback if our server is down.
+            let sent = false;
+            try {
+                const resp = await fetch('/api/access/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email.trim() }),
+                });
+                if (resp.status === 429) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data?.error || 'Слишком много запросов. Подождите 15 минут.');
+                }
+                sent = resp.ok;
+            } catch (err: any) {
+                if (err?.message?.startsWith('Слишком')) throw err;
+            }
 
-            if (error) throw error;
+            if (!sent) {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/update-password`,
+                });
+                if (error) throw error;
+            }
 
-            setMessage('Ссылка для сброса пароля отправлена на ваш Email. Пожалуйста, проверьте почту.');
+            setMessage(
+                'Если этот адрес есть на платформе, письмо со ссылкой для входа уже в пути — от Anna Romeo (hello@annaromeo.design). ' +
+                'Проверьте также «Спам» и «Промоакции». Не пришло за 10 минут — напишите @tymuron в Telegram.'
+            );
         } catch (err: any) {
             setError(err.message || 'Ошибка отправки ссылки');
         } finally {
@@ -45,6 +77,11 @@ export default function ForgotPasswordPage() {
                 </div>
 
                 <form onSubmit={handleReset} className="space-y-6">
+                    {arrival && !message && (
+                        <div className="p-3 bg-vastu-gold/10 border border-vastu-gold/30 rounded-lg text-vastu-light/90 text-sm text-center">
+                            {ARRIVAL_NOTICE[arrival]}
+                        </div>
+                    )}
                     {error && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
                             {error}
@@ -73,7 +110,7 @@ export default function ForgotPasswordPage() {
                         disabled={loading}
                         className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {loading ? 'Отправка...' : 'Отправить ссылку'}
+                        {loading ? 'Отправка...' : 'Прислать ссылку для входа'}
                     </button>
 
                     <div className="text-center">

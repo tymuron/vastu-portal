@@ -1,8 +1,20 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
+import {
+    EMAIL_RE,
+    GRANT_TIERS,
+    TG_GENERAL_CHAT_URL,
+    TG_STANDARD_CHANNEL_URL,
+    TG_VIP_CHANNEL_URL,
+    TG_VIP_CHAT_URL,
+    createFulfilment,
+    makeResendSender,
+    normEmail,
+} from './fulfilment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +32,25 @@ const LAVA_API_KEY = process.env.LAVA_API_KEY;
 const APP_URL = process.env.APP_URL;
 const CRON_SECRET = process.env.CRON_SECRET;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// Where failure alerts go (a paid buyer who didn't get access/email).
+const ALERT_EMAIL = process.env.ALERT_EMAIL;
+// Signs the durable /access links in welcome emails. Falls back to a key
+// derived from CRON_SECRET so a missing env var can't break checkout.
+const ACCESS_LINK_SECRET =
+    process.env.ACCESS_LINK_SECRET ||
+    crypto.createHash('sha256').update(`access-link:${CRON_SECRET || SUPABASE_SERVICE_ROLE_KEY || ''}`).digest('hex');
+// lava.top sales poll: only sales created at/after this ISO date are
+// fulfilled (unset = poll off), every RECONCILE_INTERVAL_MIN minutes.
+const RECONCILE_SINCE = process.env.RECONCILE_SINCE;
+const RECONCILE_INTERVAL_MIN = Number(process.env.RECONCILE_INTERVAL_MIN || 3);
+// Overridable only so the local test harness can stand in for both APIs.
+const LAVA_API_BASE = process.env.LAVA_API_BASE || 'https://gate.lava.top';
+const RESEND_API_BASE = process.env.RESEND_API_BASE || 'https://api.resend.com';
+
+// Verified sender for Resend (annaromeo.design DKIM/SPF/DMARC live since
+// 2026-05-13). Anna doesn't need a real mailbox at hello@ — Resend just
+// uses this string in the From header.
+const RESEND_FROM = 'Anna Romeo <hello@annaromeo.design>';
 
 // Lazy-init: only create the admin client when the webhook actually fires,
 // so the static server still boots if envs are missing in dev.
@@ -124,111 +155,18 @@ function pickPaymentId(payload) {
     );
 }
 
-async function findUserIdByEmail(supabase, email) {
-    // Preferred: hit the profiles table (auto-populated by trigger).
-    const { data: profile, error: profileErr } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
-
-    if (profileErr) {
-        console.error('profiles lookup error:', profileErr.message);
-    }
-    if (profile?.id) return profile.id;
-
-    // Fallback: list users from auth and filter client-side.
-    // Acceptable since traffic is low; paginates 1000 at a time.
-    let page = 1;
-    const perPage = 1000;
-    // Cap iterations to avoid runaway loops.
-    for (let i = 0; i < 10; i++) {
-        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
-        if (error) {
-            console.error('listUsers error:', error.message);
-            return null;
-        }
-        const match = data?.users?.find(
-            (u) => (u.email || '').toLowerCase() === email.toLowerCase()
-        );
-        if (match) return match.id;
-        if (!data?.users || data.users.length < perPage) return null;
-        page += 1;
-    }
-    return null;
-}
-
-// Compute expires_at for one course_offers row joined with its course.
-// Returns an ISO string, or null for "lifetime" (no expiry).
-//   - is_lifetime offer  -> null
-//   - course not configured for time-limit -> null (default to lifetime)
-//   - otherwise: starts_at + access_duration_months months
-function computeExpiresAt(offerRow) {
-    if (!offerRow) return null;
-    if (offerRow.is_lifetime) return null;
-    const course = offerRow.courses || null;
-    const startsAt = course?.starts_at || null;
-    const months = course?.access_duration_months;
-    if (!startsAt || months == null) return null;
-    const d = new Date(startsAt);
-    if (Number.isNaN(d.getTime())) return null;
-    d.setUTCMonth(d.getUTCMonth() + Number(months));
-    return d.toISOString();
-}
-
-// Manual per-row upsert into public.user_entitlements with VIP-aware merge.
-// Merge rules:
-//   - No existing row                  -> INSERT with computed expires_at
-//   - Existing expires_at is null      -> keep null (lifetime stays lifetime)
-//   - Incoming expires_at is null      -> UPDATE to null  (VIP/lifetime overrides standard)
-//   - Both non-null                    -> UPDATE to GREATEST(existing, incoming)
-// source / source_payment_id are NEVER overwritten on conflict — first record wins.
-// Returns null on success, or a {message} error-shaped object on failure.
-async function upsertEntitlement(supabase, userId, courseId, expiresAt, sourcePaymentId) {
-    const { data: existing, error: selErr } = await supabase
-        .from('user_entitlements')
-        .select('id, expires_at')
-        .eq('user_id', userId)
-        .eq('course_id', courseId)
-        .maybeSingle();
-
-    if (selErr) return selErr;
-
-    if (!existing) {
-        const { error: insErr } = await supabase.from('user_entitlements').insert({
-            user_id: userId,
-            course_id: courseId,
-            source: 'lava.top',
-            source_payment_id: sourcePaymentId,
-            expires_at: expiresAt
-        });
-        return insErr || null;
-    }
-
-    // Existing already lifetime -> nothing to change.
-    if (existing.expires_at === null) return null;
-
-    // Incoming is lifetime -> upgrade to lifetime.
-    if (expiresAt === null) {
-        const { error: updErr } = await supabase
-            .from('user_entitlements')
-            .update({ expires_at: null })
-            .eq('id', existing.id);
-        return updErr || null;
-    }
-
-    // Both non-null -> keep the latest expiry.
-    const existingMs = new Date(existing.expires_at).getTime();
-    const incomingMs = new Date(expiresAt).getTime();
-    if (incomingMs > existingMs) {
-        const { error: updErr } = await supabase
-            .from('user_entitlements')
-            .update({ expires_at: expiresAt })
-            .eq('id', existing.id);
-        return updErr || null;
-    }
-    return null;
-}
+// One fulfilment service for the webhook, the sales poll and /grant — see
+// fulfilment.js for why buyers never depend on Supabase's mailer.
+const fulfilment = createFulfilment({
+    getSupabase: getSupabaseAdmin,
+    sendEmail: makeResendSender({ apiKey: RESEND_API_KEY, from: RESEND_FROM, base: RESEND_API_BASE }),
+    appUrl: APP_URL,
+    accessSecret: ACCESS_LINK_SECRET,
+    alertEmail: ALERT_EMAIL,
+    lavaApiKey: LAVA_API_KEY,
+    lavaBase: LAVA_API_BASE,
+    reconcileSince: RECONCILE_SINCE
+});
 
 async function handleLavaWebhook(req, res) {
     // 1. Authenticate
@@ -273,6 +211,13 @@ async function handleLavaWebhook(req, res) {
     const offerId = pickOfferId(payload);
     const paymentId = pickPaymentId(payload);
 
+    // Money going back out: access stays (Anna decides), but Tymur hears.
+    if (eventType === 'refund.success' || eventType === 'chargeback.initiated') {
+        await fulfilment.alert(`${eventType} от lava.top (${email || 'без почты'})`, payload);
+        sendJson(res, 200, { noted: true, eventType });
+        return;
+    }
+
     // 4. Only act on success events
     const successEvents = new Set([
         'payment.success',
@@ -285,6 +230,7 @@ async function handleLavaWebhook(req, res) {
 
     if (!email || !offerId) {
         console.warn('Lava webhook missing email or offer id', { email, offerId });
+        await fulfilment.alert('вебхук lava.top без почты или продукта', payload);
         sendJson(res, 200, { ignored: true, reason: 'missing email or offer id' });
         return;
     }
@@ -292,122 +238,48 @@ async function handleLavaWebhook(req, res) {
     try {
         const supabase = getSupabaseAdmin();
 
-        // 4.5. Lava's webhook payload only includes product.id (the picked-by
-        //    pickOfferId function above), not the actual offer.id under that
-        //    product. To resolve the real offer, look up our lava_invoices
-        //    table by contractId — we stashed {contractId -> offerId} when
-        //    we generated the invoice in handleCreateInvoice.
-        let resolvedOfferId = offerId;
+        // 5. Lava's webhook payload only includes product.id, not the offer
+        //    under it. Purchases that went through /buy/<offerId> stashed
+        //    {contractId -> offerId} in lava_invoices; that offer is the more
+        //    specific match (Стандарт vs VIP share one product). Storefront
+        //    purchases have no invoice row and map by product.id instead.
+        let invoiceOfferId = null;
         if (paymentId) {
             const { data: invoiceRow, error: invErr } = await supabase
                 .from('lava_invoices')
                 .select('offer_id')
                 .eq('contract_id', paymentId)
                 .maybeSingle();
-            if (invErr) {
-                console.error('lava_invoices lookup error:', invErr.message);
-            } else if (invoiceRow?.offer_id) {
-                resolvedOfferId = invoiceRow.offer_id;
-            } else {
-                console.warn(
-                    `Lava webhook: no lava_invoices row for contractId ${paymentId} — ` +
-                    `falling back to product.id ${offerId} (will likely be ignored)`
-                );
-            }
+            if (invErr) console.error('lava_invoices lookup error:', invErr.message);
+            invoiceOfferId = invoiceRow?.offer_id || null;
         }
 
-        // 5. Look up the course(s) by lava offer id. One offer can map
-        //    to multiple courses (e.g. a VIP offer grants access to both
-        //    the base course and the VIP bonus course). Also pull
-        //    is_lifetime from the offer + starts_at / access_duration_months
-        //    from the joined course so we can compute expires_at per row.
-        const { data: offerRows, error: offerErr } = await supabase
-            .from('course_offers')
-            .select('course_id, is_lifetime, courses(starts_at, access_duration_months)')
-            .eq('lava_offer_id', resolvedOfferId);
+        const result = await fulfilment.fulfil({
+            contractId: paymentId || `webhook-${offerId}-${normEmail(email)}-${payload?.timestamp || Date.now()}`,
+            email,
+            lavaIds: [invoiceOfferId, offerId],
+            source: 'webhook',
+            amount: payload?.amount ?? null,
+            currency: payload?.currency ?? null
+        });
 
-        if (offerErr) {
-            console.error('course_offers lookup error:', offerErr.message);
-            sendJson(res, 500, { error: 'course_offers lookup failed' });
-            return;
-        }
-        if (!offerRows || offerRows.length === 0) {
-            console.warn(`Lava webhook: unknown offer id ${resolvedOfferId}`);
+        if (result.status === 'unmapped') {
+            // Retrying can't help; the alert has gone out.
             sendJson(res, 200, { ignored: true, reason: 'unknown offer' });
             return;
         }
-        const courseIds = offerRows.map((r) => r.course_id);
-
-        // 6. Invite or look up the user
-        let userId = null;
-        let invited = false;
-        const redirectTo = APP_URL ? `${APP_URL.replace(/\/$/, '')}/update-password` : undefined;
-        const inviteOptions = redirectTo ? { redirectTo } : undefined;
-
-        const { data: inviteData, error: inviteErr } =
-            await supabase.auth.admin.inviteUserByEmail(email, inviteOptions);
-
-        if (!inviteErr && inviteData?.user?.id) {
-            userId = inviteData.user.id;
-            invited = true;
-        } else if (inviteErr) {
-            const msg = (inviteErr.message || '').toLowerCase();
-            const status = inviteErr.status;
-            const alreadyExists =
-                msg.includes('already registered') ||
-                msg.includes('already been registered') ||
-                msg.includes('already exists') ||
-                status === 422;
-
-            if (alreadyExists) {
-                userId = await findUserIdByEmail(supabase, email);
-                if (!userId) {
-                    console.error(`Lava webhook: existing user not found for ${email}`);
-                    sendJson(res, 500, { error: 'User exists but id not found' });
-                    return;
-                }
-            } else {
-                console.error('inviteUserByEmail error:', inviteErr.message);
-                sendJson(res, 500, { error: inviteErr.message });
-                return;
-            }
-        }
-
-        if (!userId) {
-            console.error('Lava webhook: failed to resolve user id');
-            sendJson(res, 500, { error: 'Could not resolve user id' });
+        if (result.status !== 'granted') {
+            sendJson(res, 200, { ignored: true, reason: result.error || result.status });
             return;
         }
-
-        // 7. Compute expires_at per offer row and upsert one entitlement
-        //    per mapped course. Merge rules are encoded in upsertEntitlement().
-        const expiresAtPerCourse = [];
-        for (const row of offerRows) {
-            const expiresAt = computeExpiresAt(row);
-            expiresAtPerCourse.push(expiresAt);
-            const upsertErr = await upsertEntitlement(
-                supabase,
-                userId,
-                row.course_id,
-                expiresAt,
-                paymentId
-            );
-            if (upsertErr) {
-                console.error('user_entitlements upsert error:', upsertErr.message);
-                sendJson(res, 500, { error: upsertErr.message });
-                return;
-            }
-        }
-
-        // 8. Done
         sendJson(res, 200, {
             success: true,
-            user_id: userId,
-            course_ids: courseIds,
-            expires_at: expiresAtPerCourse,
-            invited
+            user_id: result.userId,
+            course_slugs: result.courseSlugs,
+            email_sent: !!result.email?.sent || !!result.already
         });
     } catch (err) {
+        // 5xx makes lava retry (19 times over ~5h); the poll retries too.
         console.error('Lava webhook unexpected error:', err);
         sendJson(res, 500, { error: err?.message || 'Internal error' });
     }
@@ -418,7 +290,6 @@ async function handleLavaWebhook(req, res) {
 // ---------------------------------------------------------------------------
 
 const ALLOWED_CURRENCIES = new Set(['RUB', 'EUR', 'USD']);
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function handleCreateInvoice(req, res) {
@@ -462,7 +333,7 @@ async function handleCreateInvoice(req, res) {
     }
 
     try {
-        const lavaResp = await fetch('https://gate.lava.top/api/v3/invoice', {
+        const lavaResp = await fetch(`${LAVA_API_BASE}/api/v3/invoice`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -521,26 +392,12 @@ async function handleCreateInvoice(req, res) {
 }
 
 // ---------------------------------------------------------------------------
-// Community welcome email (Telegram channel + chat invite)
+// Legacy «Васту для бизнеса» welcome email (Telegram channel + chat invite)
 //
-// Sent on top of the standard Supabase invite (the password-setup one) so
-// buyers also get the curated Telegram links matching Anna's brand voice.
-// Triggered manually for now via the /api/admin/welcome-email endpoint;
-// we'll wire it into the webhook flow once both VIP and Standard variants
-// are finalized with Anna.
+// Manual only, via /api/admin/welcome-email. Purchases no longer need it:
+// fulfil() sends one email with access + Telegram links (COURSE_WELCOME in
+// fulfilment.js). Kept for re-sending the May-stream text verbatim.
 // ---------------------------------------------------------------------------
-
-// Verified sender for Resend (annaromeo.design DKIM/SPF/DMARC live since
-// 2026-05-13). Anna doesn't need a real mailbox at hello@ — Resend just
-// uses this string in the From header.
-const RESEND_FROM = 'Anna Romeo <hello@annaromeo.design>';
-
-// TODO: move these to env vars once Anna confirms they're stable.
-const TG_VIP_CHANNEL_URL = 'https://t.me/+pMxLYn9BUac1Zjky';
-const TG_VIP_CHAT_URL = 'https://t.me/+NOF9mWBLLSI2OWEy';
-const TG_STANDARD_CHANNEL_URL = 'https://t.me/+Nql1v_FqMvpiMWYy';
-// "Чат потока" for Standard = "Общий чат потока" for VIP — same Telegram chat.
-const TG_GENERAL_CHAT_URL = 'https://t.me/+7I610xAqeeVjZmJi';
 
 function tgButton(href, label) {
     return `<a href="${href}" style="display:inline-block;background-color:#422326;color:#F2EDE2;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;padding:13px 24px;border:1px solid #422326;margin:6px 4px;">${label}</a>`;
@@ -756,7 +613,7 @@ async function handleSendWelcomeEmail(req, res) {
             : 'Добро пожаловать на курс «Васту для бизнеса»';
 
     try {
-        const resp = await fetch('https://api.resend.com/emails', {
+        const resp = await fetch(`${RESEND_API_BASE}/emails`, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${RESEND_API_KEY}`,
@@ -783,183 +640,33 @@ async function handleSendWelcomeEmail(req, res) {
 }
 
 // ---------------------------------------------------------------------------
-// Mini admin grant page (GET /grant) — phone-friendly UI for handleGrantAccess
+// Admin console (GET /grant) and its API. Every /api/admin/* and
+// /api/cron/* call needs x-cron-secret. The page itself is harmless without
+// the secret — it is only a form.
 // ---------------------------------------------------------------------------
 
-const GRANT_PAGE_HTML = `<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<title>Выдать доступ</title>
-<style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin:0; min-height:100vh; background:#F2EDE2; color:#422326;
-    font-family:Georgia,'Times New Roman',serif; display:flex;
-    align-items:center; justify-content:center; padding:24px; }
-  .card { width:100%; max-width:420px; }
-  h1 { font-size:26px; font-weight:400; font-style:italic; text-align:center;
-    margin:0 0 4px; }
-  .sub { text-align:center; font-size:11px; letter-spacing:.28em;
-    text-transform:uppercase; color:#8a6a3b; margin-bottom:28px; }
-  label { display:block; font-size:11px; letter-spacing:.16em;
-    text-transform:uppercase; color:#8a6a3b; margin:18px 0 6px; }
-  input, select { width:100%; padding:14px; font-size:16px;
-    font-family:inherit; color:#422326; background:#fff;
-    border:1px solid #d9c9a8; border-radius:8px; outline:none; }
-  input:focus, select:focus { border-color:#8a6a3b; }
-  .tiers { display:flex; gap:10px; }
-  .tier { flex:1; text-align:center; padding:14px 8px; border:1px solid #d9c9a8;
-    border-radius:8px; background:#fff; cursor:pointer; font-size:15px; }
-  .tier.on { background:#422326; color:#F2EDE2; border-color:#422326; }
-  button { width:100%; margin-top:28px; padding:16px; font-size:15px;
-    font-family:inherit; letter-spacing:.16em; text-transform:uppercase;
-    color:#F2EDE2; background:#422326; border:1px solid #422326;
-    border-radius:8px; cursor:pointer; }
-  button:disabled { opacity:.5; }
-  .msg { margin-top:20px; padding:14px; border-radius:8px; font-size:15px;
-    text-align:center; display:none; }
-  .ok { background:#e3efe0; color:#2f5a2a; display:block; }
-  .err { background:#f4e0e0; color:#7a2a2a; display:block; }
-  .secret-row { margin-top:24px; font-size:13px; text-align:center; }
-  .secret-row a { color:#8a6a3b; cursor:pointer; text-decoration:underline; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>Выдать доступ</h1>
-    <div class="sub">Anna Romeo · Админ</div>
+const GRANT_PAGE_HTML = fs.readFileSync(path.join(__dirname, 'grant.html'), 'utf8');
 
-    <div id="setup">
-      <label>Секретный ключ (вводится один раз)</label>
-      <input id="secret" type="password" placeholder="CRON_SECRET" autocomplete="off" />
-      <button onclick="saveSecret()">Сохранить ключ</button>
-    </div>
-
-    <div id="form" style="display:none">
-      <label>Email клиента</label>
-      <input id="email" type="email" placeholder="client@example.com" autocomplete="off" autocapitalize="off" />
-
-      <label>Тариф</label>
-      <div class="tiers">
-        <div class="tier on" data-tier="standard" onclick="pick(this)">Стандарт</div>
-        <div class="tier" data-tier="vip" onclick="pick(this)">VIP</div>
-      </div>
-
-      <button id="go" onclick="grant()">Выдать доступ</button>
-      <div id="msg" class="msg"></div>
-      <div id="share" style="display:none;margin-top:16px;">
-        <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8a6a3b;margin-bottom:6px;">Сообщение для клиента</div>
-        <textarea id="sharetext" readonly style="width:100%;height:150px;padding:12px;font-size:14px;font-family:inherit;color:#422326;background:#fff;border:1px solid #d9c9a8;border-radius:8px;resize:none;"></textarea>
-        <button id="copybtn" onclick="copyShare()" style="margin-top:10px;">Скопировать сообщение</button>
-      </div>
-      <div class="secret-row"><a onclick="forgetSecret()">Сменить секретный ключ</a></div>
-    </div>
-  </div>
-
-<script>
-  var KEY = 'vastu_grant_secret';
-  var tier = 'standard';
-
-  function refresh() {
-    var s = localStorage.getItem(KEY);
-    document.getElementById('setup').style.display = s ? 'none' : 'block';
-    document.getElementById('form').style.display = s ? 'block' : 'none';
-  }
-  function saveSecret() {
-    var v = document.getElementById('secret').value.trim();
-    if (!v) return;
-    localStorage.setItem(KEY, v);
-    document.getElementById('secret').value = '';
-    refresh();
-  }
-  function forgetSecret() { localStorage.removeItem(KEY); refresh(); }
-  function copyShare() {
-    var ta=document.getElementById('sharetext');
-    var btn=document.getElementById('copybtn');
-    ta.select(); ta.setSelectionRange(0, 99999);
-    var done=function(){ btn.textContent='Скопировано ✓';
-      setTimeout(function(){ btn.textContent='Скопировать сообщение'; },2000); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(ta.value).then(done, function(){
-        try { document.execCommand('copy'); done(); } catch(e){}
-      });
-    } else {
-      try { document.execCommand('copy'); done(); } catch(e){}
-    }
-  }
-  function pick(el) {
-    tier = el.getAttribute('data-tier');
-    document.querySelectorAll('.tier').forEach(function(t){ t.classList.remove('on'); });
-    el.classList.add('on');
-  }
-  function grant() {
-    var email = document.getElementById('email').value.trim();
-    var msg = document.getElementById('msg');
-    var btn = document.getElementById('go');
-    msg.className = 'msg'; msg.textContent = '';
-    if (!email) { msg.className='msg err'; msg.textContent='Введите email'; return; }
-    btn.disabled = true; btn.textContent = 'Выдаём…';
-    fetch('/api/admin/grant-access', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json',
-        'x-cron-secret': localStorage.getItem(KEY) || '' },
-      body: JSON.stringify({ email: email, tier: tier })
-    }).then(function(r){ return r.json().then(function(d){ return {s:r.status,d:d}; }); })
-    .then(function(x){
-      btn.disabled=false; btn.textContent='Выдать доступ';
-      if (x.s===200 && x.d.granted) {
-        msg.className='msg ok';
-        msg.textContent='✓ Доступ выдан: '+x.d.email+' ('+x.d.tier+') — курсы: '+(x.d.courses||[]).join(', ');
-        document.getElementById('email').value='';
-        var share=document.getElementById('share');
-        var ta=document.getElementById('sharetext');
-        if (x.d.loginLink) {
-          ta.value='Здравствуйте! Ваш доступ к курсу открыт 🤍\\n\\n'+
-            'Перейдите по ссылке, чтобы задать пароль и войти (ссылка действует 24 часа):\\n'+
-            x.d.loginLink+'\\n\\n'+
-            'Если ссылка перестала работать — напишите мне, пришлю новую. '+
-            'В дальнейшем заходите на vastu-portal-app.onrender.com/login с вашей почтой и паролем.';
-          share.style.display='block';
-        } else {
-          ta.value=''; share.style.display='none';
-        }
-      } else if (x.s===401) {
-        msg.className='msg err';
-        msg.textContent='Неверный секретный ключ. Смените его ниже.';
-      } else {
-        msg.className='msg err';
-        msg.textContent='Ошибка: '+(x.d.error||('код '+x.s));
-      }
-    }).catch(function(){
-      btn.disabled=false; btn.textContent='Выдать доступ';
-      msg.className='msg err'; msg.textContent='Сбой сети, попробуйте ещё раз';
-    });
-  }
-  refresh();
-</script>
-</body>
-</html>`;
-
-// ---------------------------------------------------------------------------
-// Manual access grant (phone-friendly) — invite user + grant entitlement
-// in one call. POST /api/admin/grant-access with x-cron-secret.
-//   tier=standard -> vastu-2, expires 2026-11-18
-//   tier=vip      -> vastu-2 + vastu-2-vip, lifetime
-// ---------------------------------------------------------------------------
-
-const STANDARD_EXPIRES_AT = '2026-11-18T00:00:00+00:00';
-
-async function handleGrantAccess(req, res) {
+function checkCronSecret(req, res) {
     if (!CRON_SECRET) {
         sendJson(res, 500, { error: 'Endpoint not configured' });
-        return;
+        return false;
     }
     const headerSecret = req.headers['x-cron-secret'];
     if (!headerSecret || headerSecret !== CRON_SECRET) {
         sendJson(res, 401, { error: 'Unauthorized' });
-        return;
+        return false;
     }
+    return true;
+}
+
+// POST /api/admin/grant-access {email, tier, sendEmail}
+// Grants exactly what buying that tier grants (same course_offers mapping),
+// logs it in purchases, and by default sends the same welcome email. Also
+// returns a durable login link to paste into Telegram, so access never
+// depends on the email arriving.
+async function handleGrantAccess(req, res) {
+    if (!checkCronSecret(req, res)) return;
 
     let payload;
     try {
@@ -969,118 +676,134 @@ async function handleGrantAccess(req, res) {
         return;
     }
 
-    const email = (payload?.email || '').trim().toLowerCase();
-    const tier = (payload?.tier || 'standard').trim().toLowerCase();
+    const email = normEmail(payload?.email);
+    const tierKey = String(payload?.tier || '').trim().toLowerCase();
+    const tier = GRANT_TIERS.find((t) => t.key === tierKey);
     if (!EMAIL_RE.test(email)) {
         sendJson(res, 400, { error: 'Invalid email' });
         return;
     }
-    if (tier !== 'standard' && tier !== 'vip') {
-        sendJson(res, 400, { error: 'tier must be "standard" or "vip"' });
+    if (!tier) {
+        sendJson(res, 400, { error: `tier must be one of: ${GRANT_TIERS.map((t) => t.key).join(', ')}` });
         return;
     }
 
     try {
-        const supabase = getSupabaseAdmin();
-
-        // Resolve target courses + expiry per tier.
-        const slugs = tier === 'vip' ? ['vastu-2', 'vastu-2-vip'] : ['vastu-2'];
-        const expiresAt = tier === 'vip' ? null : STANDARD_EXPIRES_AT;
-
-        const { data: courseRows, error: courseErr } = await supabase
-            .from('courses')
-            .select('id, slug')
-            .in('slug', slugs);
-        if (courseErr || !courseRows || courseRows.length === 0) {
-            console.error('grant-access course lookup failed:', courseErr?.message);
-            sendJson(res, 500, { error: 'Course lookup failed' });
+        const result = await fulfilment.fulfil({
+            contractId: `manual-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+            email,
+            lavaIds: [tier.lavaId],
+            source: 'manual',
+            sendEmail: payload?.sendEmail !== false
+        });
+        if (result.status !== 'granted') {
+            sendJson(res, 500, { error: result.error || `Не удалось: ${result.status}` });
             return;
         }
-
-        // Invite (or find existing) the user.
-        let userId = null;
-        let invited = false;
-        const redirectTo = APP_URL ? `${APP_URL.replace(/\/$/, '')}/update-password` : undefined;
-        const inviteOptions = redirectTo ? { redirectTo } : undefined;
-
-        const { data: inviteData, error: inviteErr } =
-            await supabase.auth.admin.inviteUserByEmail(email, inviteOptions);
-
-        if (!inviteErr && inviteData?.user?.id) {
-            userId = inviteData.user.id;
-            invited = true;
-        } else if (inviteErr) {
-            const msg = (inviteErr.message || '').toLowerCase();
-            const alreadyExists =
-                msg.includes('already registered') ||
-                msg.includes('already been registered') ||
-                msg.includes('already exists') ||
-                inviteErr.status === 422;
-            if (alreadyExists) {
-                userId = await findUserIdByEmail(supabase, email);
-            } else {
-                console.error('grant-access invite error:', inviteErr.message);
-                sendJson(res, 500, { error: inviteErr.message });
-                return;
-            }
-        }
-        if (!userId) {
-            sendJson(res, 500, { error: 'Could not resolve user id' });
-            return;
-        }
-
-        // Upsert one entitlement per target course (VIP-aware merge reused).
-        for (const row of courseRows) {
-            const upsertErr = await upsertEntitlement(
-                supabase,
-                userId,
-                row.id,
-                expiresAt,
-                `manual_${tier}`
-            );
-            if (upsertErr) {
-                console.error('grant-access upsert error:', upsertErr.message);
-                sendJson(res, 500, { error: upsertErr.message });
-                return;
-            }
-        }
-
-        // Generate a direct password-set / login link so access never
-        // depends on RU email delivery (mail.ru/inbox.ru/yandex frequently
-        // drop or delay our mail, and customers mistype addresses). Tymur
-        // pastes this straight into Telegram. Works for new + existing users.
-        let loginLink = null;
-        try {
-            const appBase = APP_URL
-                ? APP_URL.replace(/\/$/, '')
-                : 'https://vastu-portal-app.onrender.com';
-            const { data: linkData, error: linkErr } =
-                await supabase.auth.admin.generateLink({ type: 'recovery', email });
-            const hashed =
-                linkData?.properties?.hashed_token ||
-                linkData?.properties?.email_otp ||
-                null;
-            if (linkErr) {
-                console.error('grant-access generateLink error:', linkErr.message);
-            } else if (hashed) {
-                loginLink = `${appBase}/update-password?token_hash=${hashed}&type=recovery`;
-            }
-        } catch (err) {
-            console.error('grant-access generateLink threw:', err?.message || err);
-        }
-
         sendJson(res, 200, {
             granted: true,
             email,
-            tier,
-            courses: courseRows.map((c) => c.slug),
-            invited,
-            loginLink
+            tier: tier.key,
+            courses: result.courseSlugs,
+            created: result.created,
+            emailSent: !!result.email?.sent,
+            emailError: result.email?.error || null,
+            loginLink: result.accessUrl
         });
     } catch (err) {
         console.error('handleGrantAccess threw:', err);
         sendJson(res, 500, { error: err?.message || 'Internal error' });
     }
+}
+
+async function handleAdminPurchases(req, res) {
+    if (!checkCronSecret(req, res)) return;
+    const { data, error } = await getSupabaseAdmin()
+        .from('purchases')
+        .select('contract_id, email, source, status, course_slugs, amount, currency, error, email_sent_at, email_error, email_skipped_reason, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+    if (error) {
+        sendJson(res, 500, { error: error.message });
+        return;
+    }
+    sendJson(res, 200, { purchases: data || [] });
+}
+
+// POST /api/admin/purchases/retry {contractId} — run fulfilment again and
+// (re)send the welcome email.
+async function handleAdminRetry(req, res) {
+    if (!checkCronSecret(req, res)) return;
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch {
+        sendJson(res, 400, { error: 'Bad body' });
+        return;
+    }
+    const contractId = String(payload?.contractId || '');
+    const { data: p, error } = await getSupabaseAdmin()
+        .from('purchases')
+        .select('contract_id, email, lava_ids, source')
+        .eq('contract_id', contractId)
+        .maybeSingle();
+    if (error || !p) {
+        sendJson(res, 404, { error: 'purchase not found' });
+        return;
+    }
+    try {
+        const result = await fulfilment.fulfil({
+            contractId: p.contract_id,
+            email: p.email,
+            lavaIds: p.lava_ids || [],
+            source: p.source,
+            resend: true
+        });
+        sendJson(res, 200, result);
+    } catch (err) {
+        sendJson(res, 500, { error: err?.message || 'Internal error' });
+    }
+}
+
+// POST /api/access/request {email} — the "forgot password / no email"
+// button. Always answers the same, whether or not the address exists.
+const accessRequestLog = new Map(); // key -> [timestamps]
+function rateLimited(key, max, windowMs) {
+    const now = Date.now();
+    const hits = (accessRequestLog.get(key) || []).filter((t) => now - t < windowMs);
+    if (hits.length >= max) return true;
+    hits.push(now);
+    accessRequestLog.set(key, hits);
+    if (accessRequestLog.size > 5000) accessRequestLog.clear();
+    return false;
+}
+async function handleAccessRequest(req, res) {
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch {
+        sendJson(res, 400, { error: 'Bad body' });
+        return;
+    }
+    const email = normEmail(payload?.email);
+    if (!EMAIL_RE.test(email)) {
+        sendJson(res, 400, { error: 'Invalid email' });
+        return;
+    }
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (rateLimited(`e:${email}`, 3, 15 * 60 * 1000) || rateLimited(`i:${ip}`, 20, 60 * 60 * 1000)) {
+        sendJson(res, 429, { error: 'Слишком много запросов. Подождите 15 минут.' });
+        return;
+    }
+    try {
+        await fulfilment.requestAccessEmail(email);
+    } catch (err) {
+        console.error('access request failed:', err?.message || err);
+        await fulfilment.alert(`не удалось отправить ссылку для входа (${email})`, String(err?.message || err));
+        sendJson(res, 502, { error: 'Не удалось отправить письмо' });
+        return;
+    }
+    sendJson(res, 200, { ok: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,7 +956,7 @@ async function handleExpiryReminders(req, res) {
             };
 
             try {
-                const resp = await fetch('https://api.resend.com/emails', {
+                const resp = await fetch(`${RESEND_API_BASE}/emails`, {
                     method: 'POST',
                     headers: {
                         Authorization: `Bearer ${RESEND_API_KEY}`,
@@ -1281,10 +1004,11 @@ async function handleExpiryReminders(req, res) {
 }
 
 const server = http.createServer((req, res) => {
-    console.log(`Request: ${req.method} ${req.url}`);
+    const urlPath = req.url.split('?')[0];
+    // /access?t= carries a login-capable token — keep it out of the logs.
+    console.log(`Request: ${req.method} ${urlPath === '/access' ? urlPath : req.url}`);
 
     // Lava.top payment webhook (must short-circuit before static logic)
-    const urlPath = req.url.split('?')[0];
     if (req.method === 'POST' && urlPath === '/api/lava/webhook') {
         handleLavaWebhook(req, res).catch((err) => {
             console.error('handleLavaWebhook threw:', err);
@@ -1323,7 +1047,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Manual access grant — invite + entitlement in one call (phone-friendly).
+    // Manual access grant — same fulfilment as a purchase (phone-friendly).
     if (req.method === 'POST' && urlPath === '/api/admin/grant-access') {
         handleGrantAccess(req, res).catch((err) => {
             console.error('handleGrantAccess threw:', err);
@@ -1332,11 +1056,95 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Mini admin page: enter email, pick tier, tap Grant. Served before the
-    // SPA fallback so it never touches the React app. The page is harmless
-    // without the secret — the API still validates x-cron-secret server-side.
+    if (req.method === 'GET' && urlPath === '/api/admin/tiers') {
+        if (!checkCronSecret(req, res)) return;
+        sendJson(res, 200, { tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })) });
+        return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/admin/status') {
+        if (!checkCronSecret(req, res)) return;
+        sendJson(res, 200, fulfilment.status());
+        return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/admin/purchases') {
+        handleAdminPurchases(req, res).catch((err) => {
+            console.error('handleAdminPurchases threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/admin/purchases/retry') {
+        handleAdminRetry(req, res).catch((err) => {
+            console.error('handleAdminRetry threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // lava.top sales poll on demand; ?dryRun=1 only reports what it would do.
+    if (req.method === 'POST' && urlPath === '/api/cron/reconcile') {
+        if (!checkCronSecret(req, res)) return;
+        const dryRun = /(?:^|[?&])dryRun=1(?:&|$)/.test(req.url.split('?')[1] || '');
+        fulfilment.reconcile({ dryRun }).then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    // Tariff name + prices for the /buy page.
+    const offerMatch = req.method === 'GET' && urlPath.match(/^\/api\/lava\/offer\/([0-9a-f-]{36})$/i);
+    if (offerMatch) {
+        fulfilment.offerInfo(offerMatch[1].toLowerCase()).then(
+            (info) => (info ? sendJson(res, 200, info) : sendJson(res, 404, { error: 'unknown offer' })),
+            (err) => {
+                console.error('offer info failed:', err?.message || err);
+                sendJson(res, 502, { error: 'catalog unavailable' });
+            }
+        );
+        return;
+    }
+
+    // "Send me my login link" from /forgot-password.
+    if (req.method === 'POST' && urlPath === '/api/access/request') {
+        handleAccessRequest(req, res).catch((err) => {
+            console.error('handleAccessRequest threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // Durable access link from the welcome email -> fresh recovery token ->
+    // /update-password. HEAD (link preview / mail scanners) mints nothing.
+    if ((req.method === 'GET' || req.method === 'HEAD') && urlPath === '/access') {
+        if (req.method === 'HEAD') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+            res.end();
+            return;
+        }
+        const t = new URL(req.url, 'http://x').searchParams.get('t');
+        fulfilment.accessRedirect(t).then(
+            (location) => {
+                res.writeHead(302, { Location: location, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+                res.end();
+            },
+            (err) => {
+                console.error('access redirect failed:', err?.message || err);
+                res.writeHead(302, { Location: '/forgot-password?failed=1', 'Cache-Control': 'no-store' });
+                res.end();
+            }
+        );
+        return;
+    }
+
+    // Admin console: grant access, see every payment and whether its email
+    // went out. Served before the SPA fallback so it never touches the React
+    // app. Harmless without the secret — the API validates it server-side.
     if (req.method === 'GET' && urlPath === '/grant') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(GRANT_PAGE_HTML);
         return;
     }
@@ -1459,3 +1267,24 @@ server.listen(port, () => {
     console.log(`Server running on port ${port}`);
     console.log(`Serving files from ${distPath}`);
 });
+
+// lava.top sales poll. The service is always on (starter plan), so an
+// in-process timer is enough. First run shortly after boot so a deploy
+// catches up on anything sold while it was restarting.
+if (RECONCILE_SINCE && LAVA_API_KEY && SUPABASE_SERVICE_ROLE_KEY) {
+    const runReconcile = () =>
+        fulfilment.reconcile().then(
+            (r) => {
+                if (r.skipped) return;
+                console.log(
+                    `reconcile: ${r.paidInvoices} paid invoices since ${RECONCILE_SINCE}, ` +
+                    `${r.fulfilled.length} fulfilled, ${r.retried.length} retried, ${r.errors.length} errors`
+                );
+            },
+            (err) => console.error('reconcile threw:', err)
+        );
+    setTimeout(runReconcile, 20 * 1000);
+    setInterval(runReconcile, Math.max(1, RECONCILE_INTERVAL_MIN) * 60 * 1000);
+} else {
+    console.warn('lava.top sales poll is OFF (needs RECONCILE_SINCE, LAVA_API_KEY, SUPABASE_SERVICE_ROLE_KEY)');
+}

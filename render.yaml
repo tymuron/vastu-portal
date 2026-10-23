@@ -18,3 +18,16 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      # Purchase fulfilment (fulfilment.js)
+      - key: LAVA_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: ALERT_EMAIL
+        sync: false
+      - key: ACCESS_LINK_SECRET
+        sync: false
+      - key: RECONCILE_SINCE
+        sync: false
