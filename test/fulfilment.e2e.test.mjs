@@ -148,6 +148,24 @@ test('the whole customer journey: /buy -> lava checkout -> paid -> access + welc
     assert.equal(purchase(contractId).matched_lava_id, T.discount[1]);
 });
 
+test('/buy can pay by СБП, and sends lava return links back to /buy', async () => {
+    const make = (method, currency = 'RUB') => fetch(`${app}/api/lava/invoice`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'sbp@example.com', offerId: T.discount[1], currency, method }),
+    });
+    assert.equal((await make('sbp')).status, 200);
+    let sentToLava = fake.control.lastInvoiceRequest;
+    assert.equal(sentToLava.paymentProvider, 'PAY2ME');
+    assert.equal(sentToLava.paymentMethod, 'SBP');
+    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks`);
+    assert.equal(sentToLava.failure_return_url, `${app}/buy/${T.discount[1]}?currency=RUB&failed=1`);
+
+    await make('card');
+    assert.equal(fake.control.lastInvoiceRequest.paymentMethod, undefined, 'card = lava default');
+    await make('sbp', 'EUR');
+    assert.equal(fake.control.lastInvoiceRequest.paymentMethod, undefined, 'СБП only exists for rubles');
+});
+
 test('webhook rejects a wrong API key', async () => {
     const r = await webhook(paid(BASE_PRODUCT, 'x@example.com'), 'nope');
     assert.equal(r.status, 401);

@@ -8,6 +8,14 @@ const CURRENCY_SIGN: Record<Currency, string> = { RUB: '₽', EUR: '€', USD: '
 
 type OfferInfo = { title: string; prices: Partial<Record<Currency, number>> };
 
+// Rubles: СБП or a card. Card-only checkouts were declined a lot on the
+// masterclass day (14 of 16 failed or abandoned), so СБП is offered first.
+type Method = 'sbp' | 'card';
+const METHODS: { key: Method; label: string }[] = [
+    { key: 'sbp', label: 'СБП' },
+    { key: 'card', label: 'Картой' },
+];
+
 // 55 000 ₽ · 599,50 € · 671 $ — Russian number style, sign after.
 function formatPrice(amount: number, currency: Currency) {
     const cents = amount % 1 !== 0 ? 2 : 0;
@@ -17,7 +25,55 @@ function formatPrice(amount: number, currency: Currency) {
 
 export default function BuyPage() {
     const { offerId } = useParams<{ offerId: string }>();
+    // lava sends the buyer back to /buy/thanks after a successful payment.
+    return offerId === 'thanks' ? <BuyThanks /> : <BuyForm offerId={offerId} />;
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-vastu-dark relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
+            </div>
+
+            <div className="w-full max-w-md p-8 bg-vastu-light/5 backdrop-blur-sm border border-vastu-gold/20 rounded-2xl shadow-2xl relative z-10">
+                <div className="text-center mb-10">
+                    <h1 className="text-4xl font-serif text-vastu-gold mb-2">ANNA ROMEO</h1>
+                    <p className="text-vastu-light/60 font-light tracking-widest text-sm uppercase">Васту & Дизайн Портал</p>
+                </div>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+function BuyThanks() {
+    return (
+        <Shell>
+            <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
+                <p className="text-vastu-gold font-serif text-2xl">Спасибо! Оплата прошла</p>
+                <p>
+                    В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой
+                    в личный кабинет, в Telegram-канал и чат курса.
+                </p>
+                <p className="text-vastu-light/60">
+                    Не видите письма через 10 минут — загляните в «Спам» и «Промоакции» или запросите ссылку ещё раз.
+                </p>
+                <a
+                    href="/forgot-password"
+                    className="block w-full border border-vastu-gold/40 text-vastu-gold font-serif text-lg py-3 rounded-lg hover:bg-vastu-gold/10 transition-all"
+                >
+                    Прислать ссылку для входа
+                </a>
+            </div>
+        </Shell>
+    );
+}
+
+function BuyForm({ offerId }: { offerId?: string }) {
     const [searchParams] = useSearchParams();
+    const paymentFailed = searchParams.get('failed') === '1';
     const queryCurrency = (searchParams.get('currency') || '').toUpperCase();
     const initialCurrency: Currency = (ALLOWED_CURRENCIES as readonly string[]).includes(queryCurrency)
         ? (queryCurrency as Currency)
@@ -25,6 +81,7 @@ export default function BuyPage() {
 
     const [email, setEmail] = useState('');
     const [currency, setCurrency] = useState<Currency>(initialCurrency);
+    const [method, setMethod] = useState<Method>('sbp');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +113,7 @@ export default function BuyPage() {
             const resp = await fetch('/api/lava/invoice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim(), offerId, currency })
+                body: JSON.stringify({ email: email.trim(), offerId, currency, method })
             });
             const data = await resp.json().catch(() => ({}));
 
@@ -77,89 +134,91 @@ export default function BuyPage() {
         }
     };
 
+    const toggle = (active: boolean) =>
+        'flex-1 py-2 text-sm font-medium rounded-md transition-all duration-300 ' +
+        (active ? 'bg-vastu-gold text-vastu-dark shadow-lg' : 'text-vastu-light/50 hover:text-vastu-light');
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-vastu-dark relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-vastu-gold blur-[100px]" />
-            </div>
-
-            <div className="w-full max-w-md p-8 bg-vastu-light/5 backdrop-blur-sm border border-vastu-gold/20 rounded-2xl shadow-2xl relative z-10">
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-serif text-vastu-gold mb-2">ANNA ROMEO</h1>
-                    <p className="text-vastu-light/60 font-light tracking-widest text-sm uppercase">Васту & Дизайн Портал</p>
+        <Shell>
+            {!offerIsValid ? (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
+                    Неверная ссылка на оплату. Проверьте URL или свяжитесь с автором.
                 </div>
-
-                {!offerIsValid ? (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                        Неверная ссылка на оплату. Проверьте URL или свяжитесь с автором.
-                    </div>
-                ) : (
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {offerInfo && (
-                            <div className="text-center border-y border-vastu-gold/20 py-4">
-                                <p className="text-vastu-light font-serif text-lg leading-snug">{offerInfo.title}</p>
-                                {price != null && (
-                                    <p className="text-vastu-gold font-serif text-2xl mt-2">{formatPrice(price, currency)}</p>
-                                )}
-                            </div>
-                        )}
-                        <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
-                            Введите email, на который придёт доступ к курсу.
-                            Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.
-                        </p>
-
-                        {error && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                                {error}
-                            </div>
-                        )}
-
-                        <div>
-                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Email</label>
-                            <input
-                                type="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
-                                placeholder="name@example.com"
-                                disabled={submitting}
-                            />
+            ) : (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {offerInfo && (
+                        <div className="text-center border-y border-vastu-gold/20 py-4">
+                            <p className="text-vastu-light font-serif text-lg leading-snug">{offerInfo.title}</p>
+                            {price != null && (
+                                <p className="text-vastu-gold font-serif text-2xl mt-2">{formatPrice(price, currency)}</p>
+                            )}
                         </div>
+                    )}
+                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
+                        Введите email, на который придёт доступ к курсу.
+                        Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.
+                    </p>
 
+                    {paymentFailed && !error && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
+                            Оплата не прошла. Чаще всего банк отклоняет карту — попробуйте через СБП или другой картой.
+                        </div>
+                    )}
+                    {error && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
+                            {error}
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Email</label>
+                        <input
+                            type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-vastu-light/10 border border-vastu-gold/30 rounded-lg px-4 py-3 text-vastu-light placeholder-vastu-light/30 focus:outline-none focus:border-vastu-gold focus:ring-1 focus:ring-vastu-gold transition-all"
+                            placeholder="name@example.com"
+                            disabled={submitting}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Валюта</label>
+                        <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
+                            {ALLOWED_CURRENCIES.filter((c) => !offerInfo || offerInfo.prices[c] != null).map((c) => (
+                                <button type="button" key={c} onClick={() => setCurrency(c)} disabled={submitting} className={toggle(currency === c)}>
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {currency === 'RUB' && (
                         <div>
-                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Валюта</label>
+                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Способ оплаты</label>
                             <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
-                                {ALLOWED_CURRENCIES.filter((c) => !offerInfo || offerInfo.prices[c] != null).map((c) => (
-                                    <button
-                                        type="button"
-                                        key={c}
-                                        onClick={() => setCurrency(c)}
-                                        disabled={submitting}
-                                        className={
-                                            'flex-1 py-2 text-sm font-medium rounded-md transition-all duration-300 ' +
-                                            (currency === c
-                                                ? 'bg-vastu-gold text-vastu-dark shadow-lg'
-                                                : 'text-vastu-light/50 hover:text-vastu-light')
-                                        }
-                                    >
-                                        {c}
+                                {METHODS.map((m) => (
+                                    <button type="button" key={m.key} onClick={() => setMethod(m.key)} disabled={submitting} className={toggle(method === m.key)}>
+                                        {m.label}
                                     </button>
                                 ))}
                             </div>
+                            {method === 'sbp' && (
+                                <p className="text-vastu-light/50 text-xs mt-1.5 ml-1">Через приложение вашего банка — по QR-коду или ссылке</p>
+                            )}
                         </div>
+                    )}
 
-                        <button
-                            type="submit"
-                            disabled={submitting || !email}
-                            className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                        >
-                            {submitting ? 'Создаём счёт…' : 'Перейти к оплате'}
-                        </button>
-                    </form>
-                )}
-            </div>
-        </div>
+                    <button
+                        type="submit"
+                        disabled={submitting || !email}
+                        className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                        {submitting ? 'Создаём счёт…' : 'Перейти к оплате'}
+                    </button>
+                </form>
+            )}
+        </Shell>
     );
 }

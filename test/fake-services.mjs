@@ -255,6 +255,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
     // the webhook the way lava does: product id only, no offer id.
     function lavaCreateInvoice(req, res, body) {
         if (req.headers['x-api-key'] !== lavaApiKey) return send(res, 401, { error: 'unauthorized' });
+        control.lastInvoiceRequest = body;
         const product = products.find((p) => p.offers.some((o) => o.id === body.offerId));
         if (!product) return send(res, 404, { error: 'Offer not found' });
         const id = crypto.randomUUID();

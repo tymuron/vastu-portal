@@ -319,6 +319,10 @@ async function handleCreateInvoice(req, res) {
     const email = (payload?.email || '').trim();
     const offerId = (payload?.offerId || '').trim();
     const currency = (payload?.currency || 'RUB').trim().toUpperCase();
+    // 'sbp' or 'card'. Without a method lava falls back to card only (RUB via
+    // SMART_GLOCAL), and Russian cards are declined there a lot: on the
+    // masterclass day 14 of 16 checkouts failed or were abandoned.
+    const method = String(payload?.method || 'card').toLowerCase() === 'sbp' && currency === 'RUB' ? 'sbp' : 'card';
 
     if (!EMAIL_RE.test(email)) {
         sendJson(res, 400, { error: 'Invalid email' });
@@ -333,6 +337,7 @@ async function handleCreateInvoice(req, res) {
         return;
     }
 
+    const appBase = APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com';
     try {
         const lavaResp = await fetch(`${LAVA_API_BASE}/api/v3/invoice`, {
             method: 'POST',
@@ -341,7 +346,17 @@ async function handleCreateInvoice(req, res) {
                 Accept: 'application/json',
                 'X-Api-Key': LAVA_API_KEY
             },
-            body: JSON.stringify({ email, offerId, currency })
+            body: JSON.stringify({
+                email,
+                offerId,
+                currency,
+                ...(method === 'sbp' ? { paymentProvider: 'PAY2ME', paymentMethod: 'SBP' } : {}),
+                // Back to us after paying: a page that says what happens next,
+                // or the same tariff with a hint to try СБП / another card.
+                successful_return_url: `${appBase}/buy/thanks`,
+                failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1`,
+                cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}`
+            })
         });
 
         const text = await lavaResp.text();
