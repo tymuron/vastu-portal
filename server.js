@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import {
+    EMAIL_LIGHT_ONLY_HEAD,
     EMAIL_RE,
     GRANT_TIERS,
     TG_GENERAL_CHAT_URL,
@@ -428,6 +429,7 @@ function buildVipWelcomeEmailHtml({ firstName, loginUrl }) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+${EMAIL_LIGHT_ONLY_HEAD}
 <title>Добро пожаловать на VIP-поток</title>
 </head>
 <body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">
@@ -509,6 +511,7 @@ function buildStandardWelcomeEmailHtml({ firstName, loginUrl }) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+${EMAIL_LIGHT_ONLY_HEAD}
 <title>Добро пожаловать на курс «Васту для бизнеса»</title>
 </head>
 <body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">
@@ -843,6 +846,7 @@ function buildExpiryEmailHtml({ courseTitle, expiresAtIso, loginUrl }) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+${EMAIL_LIGHT_ONLY_HEAD}
 <title>Ваш доступ скоро закончится</title>
 </head>
 <body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">

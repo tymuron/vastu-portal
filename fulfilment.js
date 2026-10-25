@@ -293,6 +293,14 @@ export async function ensureUser(supabase, email) {
 // Welcome email
 // ---------------------------------------------------------------------------
 
+// Every email is designed light (cream + burgundy). Without this, the Gmail
+// apps' dark mode repaints it themselves: cream turns olive, burgundy text
+// pink, the button inverts. "light only" makes Gmail iOS/Android (since
+// Oct 2026) and Apple Mail show it as designed.
+export const EMAIL_LIGHT_ONLY_HEAD = `<meta name="color-scheme" content="light only" />
+<meta name="supported-color-schemes" content="light only" />
+<style>:root{color-scheme:light only;supported-color-schemes:light only;}</style>`;
+
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -369,6 +377,7 @@ export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, returni
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+${EMAIL_LIGHT_ONLY_HEAD}
 <title>${esc(subject)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">

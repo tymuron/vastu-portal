@@ -189,6 +189,7 @@ test('«Основной» bought via /buy: account, 6-month access, one welcome
     assert.equal(mails.length, 1);
     const m = mails[0];
     assert.equal(m.from, 'Anna Romeo <hello@annaromeo.design>');
+    assert.match(m.html, /<meta name="color-scheme" content="light only" \/>/, 'Gmail dark mode must not repaint it');
     assert.equal(m.subject, 'Добро пожаловать на курс «Васту-дизайн»');
     assert.match(m.html, /Задать пароль и войти/);
     assert.match(m.html, /Старт потока — 9 ноября/);
