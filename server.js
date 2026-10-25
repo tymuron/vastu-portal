@@ -47,10 +47,11 @@ const RECONCILE_INTERVAL_MIN = Number(process.env.RECONCILE_INTERVAL_MIN || 3);
 const LAVA_API_BASE = process.env.LAVA_API_BASE || 'https://gate.lava.top';
 const RESEND_API_BASE = process.env.RESEND_API_BASE || 'https://api.resend.com';
 
-// Verified sender for Resend (annaromeo.design DKIM/SPF/DMARC live since
-// 2026-05-13). Anna doesn't need a real mailbox at hello@ — Resend just
-// uses this string in the From header.
-const RESEND_FROM = 'Anna Romeo <hello@annaromeo.design>';
+// Sender for every Resend email. Its domain MUST be verified in Resend
+// (DKIM/SPF in DNS) or every send fails with 403 — that happened when
+// annaromeo.design expired (2026-09-02): buyers got access but no email.
+// Anna doesn't need a real mailbox at hello@; Resend only uses the header.
+const RESEND_FROM = process.env.RESEND_FROM || 'Anna Romeo <hello@annaromeo.design>';
 
 // Lazy-init: only create the admin client when the webhook actually fires,
 // so the static server still boots if envs are missing in dev.
