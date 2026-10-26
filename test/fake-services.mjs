@@ -2,6 +2,8 @@
 //   /rest/v1/*  — a small PostgREST (eq / in / is / lt / gte / lte / order / limit,
 //                 insert, upsert-ignore, patch) over in-memory tables
 //   /auth/v1/*  — the GoTrue admin + user endpoints the server and SPA use
+//   /storage/v1/* — the Storage calls scripts/import-lesson.mjs makes (bucket
+//                 info, upload, list, remove, public download)
 //   /api/v1/invoices, /api/v2/products — lava.top (shapes as observed live)
 //   /emails     — Resend
 //   /__*        — test controls (seed, inspect, inject failures)
@@ -21,7 +23,9 @@ const UNIQUE = {
 };
 
 export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
-    const db = { courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [] };
+    const db = { courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [], weeks: [], days: [], materials: [] };
+    // bucket id -> { id, name, public, file_size_limit, objects: Map(key -> { bytes, contentType }) }
+    const buckets = new Map([['course-content', { id: 'course-content', name: 'course-content', public: true, file_size_limit: null, objects: new Map() }]]);
     const users = new Map(); // id -> user
     const tokens = new Map(); // hashed_token -> { userId, type }
     const sessions = new Map(); // access_token -> userId
@@ -108,15 +112,25 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
         }
         if (table === 'user_entitlements') { r.granted_at ??= nowIso(); r.expires_at ??= null; r.reminder_sent_at ??= null; }
         if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; }
+        if (table === 'weeks') { r.order_index ??= 0; r.available_from ??= null; r.description ??= null; r.created_at ??= nowIso(); }
+        if (table === 'days') { r.order_index ??= 0; r.created_at ??= nowIso(); }
+        if (table === 'materials') { r.week_id ??= null; r.day_id ??= null; r.is_homework ??= false; r.created_at ??= nowIso(); }
         return r;
+    }
+    // materials.week_or_day_check: a material hangs on a week or a lesson, never both.
+    function checkViolation(table, row) {
+        if (table === 'materials' && (row.week_id == null) === (row.day_id == null)) {
+            return { code: '23514', message: 'new row for relation "materials" violates check constraint "week_or_day_check"' };
+        }
+        return null;
     }
 
     function rest(req, res, table, url, body) {
         const params = url.searchParams;
         const prefer = String(req.headers['prefer'] || '');
         const wantObject = String(req.headers['accept'] || '').includes('vnd.pgrst.object');
-        // Tables the server never touches (weeks, days, …) read as empty so
-        // the SPA renders; writing to an unknown table is still an error.
+        // Tables nothing here writes (live_streams, user_progress, …) read as
+        // empty so the SPA renders; writing to an unknown table is an error.
         if (!db[table] && req.method === 'GET') return send(res, 200, wantObject ? null : []);
         if (!db[table]) return send(res, 404, { message: `relation ${table} does not exist`, code: '42P01' });
 
@@ -134,6 +148,8 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             const inserted = [];
             for (const raw of list) {
                 const row = withDefaults(table, raw);
+                const bad = checkViolation(table, row);
+                if (bad) return send(res, 400, bad);
                 const v = violates(table, row);
                 if (v) {
                     if (ignoreDup) continue;
@@ -148,6 +164,8 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
         if (req.method === 'PATCH') {
             const filters = parseFilters(params);
             const rows = db[table].filter((r) => filters.every((f) => matches(r, f)));
+            const bad = rows.map((r) => checkViolation(table, { ...r, ...body })).find(Boolean);
+            if (bad) return send(res, 400, bad);
             for (const r of rows) Object.assign(r, body);
             return prefer.includes('return=representation') ? send(res, 200, rows) : send(res, 204, null);
         }
@@ -290,6 +308,66 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
         return send(res, 200, { items: products, nextPage: null });
     }
 
+    // --------------------------------------------------------------- storage
+    // Keys are checked like the real service does: Cyrillic is "Invalid key".
+    const VALID_KEY = /^(\w|\/|!|-|\.|\*|'|\(|\)| |&|\$|@|=|;|:|\+|,|\?)*$/;
+    const notFound = { statusCode: '404', error: 'not_found', message: 'Object not found' };
+    function storage(req, res, p, buf) {
+        let m;
+        if ((m = p.match(/^\/bucket\/([^/]+)$/)) && req.method === 'GET') {
+            const b = buckets.get(m[1]);
+            if (!b) return send(res, 400, { statusCode: '404', error: 'Bucket not found', message: 'Bucket not found' });
+            const { objects, ...info } = b;
+            return send(res, 200, info);
+        }
+        if ((m = p.match(/^\/object\/list\/([^/]+)$/)) && req.method === 'POST') {
+            const b = buckets.get(m[1]);
+            const { prefix = '', search = '', limit = 100, offset = 0 } = JSON.parse(buf.toString('utf8') || '{}');
+            const folder = prefix ? `${prefix.replace(/\/+$/, '')}/` : '';
+            const seen = new Map();
+            for (const [key, o] of b?.objects || []) {
+                if (!key.startsWith(folder)) continue;
+                const rest = key.slice(folder.length);
+                const name = rest.split('/')[0];
+                if (seen.has(name) || !name.toLowerCase().startsWith(String(search).toLowerCase())) continue;
+                seen.set(name, rest.includes('/')
+                    ? { name, id: null, metadata: null }
+                    : { name, id: o.id, metadata: { size: o.bytes.length, mimetype: o.contentType } });
+            }
+            return send(res, 200, [...seen.values()].slice(offset, offset + limit));
+        }
+        if ((m = p.match(/^\/object\/public\/([^/]+)\/(.+)$/)) && (req.method === 'GET' || req.method === 'HEAD')) {
+            const b = buckets.get(m[1]);
+            const o = b?.public ? b.objects.get(decodeURIComponent(m[2])) : null;
+            if (!o) return send(res, 400, notFound);
+            res.writeHead(200, { 'Content-Type': o.contentType, 'Content-Length': o.bytes.length });
+            return res.end(req.method === 'HEAD' ? undefined : o.bytes);
+        }
+        if ((m = p.match(/^\/object\/([^/]+)$/)) && req.method === 'DELETE') {
+            const b = buckets.get(m[1]);
+            const removed = [];
+            for (const key of JSON.parse(buf.toString('utf8') || '{}').prefixes || []) {
+                if (b?.objects.delete(key)) removed.push({ name: key, bucket_id: m[1] });
+            }
+            return send(res, 200, removed);
+        }
+        if ((m = p.match(/^\/object\/([^/]+)\/(.+)$/)) && (req.method === 'POST' || req.method === 'PUT')) {
+            const b = buckets.get(m[1]);
+            const key = decodeURIComponent(m[2]);
+            if (!b) return send(res, 400, { statusCode: '404', error: 'Bucket not found', message: 'Bucket not found' });
+            if (!VALID_KEY.test(key)) return send(res, 400, { statusCode: '400', error: 'InvalidKey', message: `Invalid key: ${key}` });
+            if (b.file_size_limit && buf.length > b.file_size_limit) {
+                return send(res, 413, { statusCode: '413', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' });
+            }
+            const upsert = req.method === 'PUT' || req.headers['x-upsert'] === 'true';
+            if (b.objects.has(key) && !upsert) return send(res, 409, { statusCode: '409', error: 'Duplicate', message: 'The resource already exists' });
+            const id = uuid();
+            b.objects.set(key, { id, bytes: buf, contentType: String(req.headers['content-type'] || 'application/octet-stream') });
+            return send(res, 200, { Id: id, Key: `${m[1]}/${key}` });
+        }
+        return send(res, 404, { message: `fake storage: no route ${req.method} ${p}` });
+    }
+
     // ---------------------------------------------------------------- resend
     function resend(req, res, body) {
         if (control.resendFailures > 0) {
@@ -303,7 +381,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
 
     // --------------------------------------------------------------- control
     const api = {
-        db, users, sent, invoices, products, control,
+        db, users, sent, invoices, products, control, buckets,
         createUser,
         seed(table, rows) { for (const r of rows) db[table].push(withDefaults(table, r)); },
         // A contract created through /buy: lava's invoice + our lava_invoices row.
@@ -320,9 +398,11 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
     }
 
     const server = http.createServer((req, res) => {
-        let raw = '';
-        req.on('data', (c) => (raw += c));
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
         req.on('end', () => {
+            const buf = Buffer.concat(chunks);
+            const raw = buf.toString('utf8');
             if (req.method === 'OPTIONS') {
                 res.writeHead(204, {
                     'Access-Control-Allow-Origin': '*',
@@ -331,10 +411,18 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
                 });
                 return res.end();
             }
-            let body = null;
-            try { body = raw ? JSON.parse(raw) : null; } catch { return send(res, 400, { message: 'bad json' }); }
             const url = new URL(req.url, 'http://x');
             const p = url.pathname;
+            // Uploads are binary: route Storage before the JSON parse.
+            if (p.startsWith('/storage/v1/')) {
+                try {
+                    return storage(req, res, p.slice('/storage/v1'.length), buf);
+                } catch (err) {
+                    return send(res, 500, { message: String(err?.stack || err) });
+                }
+            }
+            let body = null;
+            try { body = raw ? JSON.parse(raw) : null; } catch { return send(res, 400, { message: 'bad json' }); }
             try {
                 if (p.startsWith('/rest/v1/')) return rest(req, res, p.slice('/rest/v1/'.length), url, body);
                 if (p.startsWith('/auth/v1')) return auth(req, res, p.slice('/auth/v1'.length), url, body || {});
