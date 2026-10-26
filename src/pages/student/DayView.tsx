@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
+import { useCourseFileLinks, freshCourseFileLink } from '../../hooks/useCourseFileLinks';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
 import HomeworkSubmission from '../../components/HomeworkSubmission';
+import CourseFileLink from '../../components/CourseFileLink';
 
 // Helper component for dual video player (reused logic)
 const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, rutubeUrl?: string, title: string }) => {
@@ -81,6 +83,7 @@ export default function DayView() {
     // We need weeks to find prev/next day
     const { weeks } = useWeeks();
     const { day, loading } = useDay(weekId, dayId);
+    const fileLink = useCourseFileLinks((day?.materials ?? []).map((m) => m.url));
 
     const week = weeks.find(w => w.id === weekId);
 
@@ -109,8 +112,15 @@ export default function DayView() {
 
         setDownloadingId(material.id);
 
+        let fileUrl: string | null = null;
         try {
-            const response = await fetch(material.url);
+            // A fresh link: the one on the page may be close to expiring.
+            fileUrl = await freshCourseFileLink(material.url);
+            if (!fileUrl) {
+                alert('Файл сейчас недоступен. Обновите страницу и попробуйте ещё раз.');
+                return;
+            }
+            const response = await fetch(fileUrl);
             if (!response.ok) throw new Error('Download failed');
 
             const blob = await response.blob();
@@ -132,7 +142,7 @@ export default function DayView() {
             console.error('Download error:', error);
             alert('Ошибка при скачивании файла. Попробуйте открыть его в новой вкладке.');
             // Fallback: Just open in new tab if JS download fails
-            window.open(material.url, '_blank');
+            if (fileUrl) window.open(fileUrl, '_blank');
         } finally {
             setDownloadingId(null);
         }
@@ -256,10 +266,8 @@ export default function DayView() {
                                         key={material.id}
                                         className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                     >
-                                        <a
-                                            href={material.url}
-                                            target="_blank"
-                                            rel="noreferrer"
+                                        <CourseFileLink
+                                            href={fileLink(material.url)}
                                             className="flex-1 flex items-center gap-3 min-w-0"
                                         >
                                             <div className="w-8 h-8 rounded bg-vastu-light flex items-center justify-center text-vastu-text-light group-hover:text-vastu-gold transition-colors">
@@ -267,9 +275,11 @@ export default function DayView() {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="text-sm font-medium text-vastu-dark truncate">{material.title}</div>
-                                                <div className="text-xs text-vastu-text-light uppercase">{material.type}</div>
+                                                <div className="text-xs text-vastu-text-light uppercase">
+                                                    {fileLink(material.url) === null ? 'недоступен' : material.type}
+                                                </div>
                                             </div>
-                                        </a>
+                                        </CourseFileLink>
                                         {isDownloadable(material.type) && (
                                             <button
                                                 onClick={(e) => handleDownload(e, material)}
@@ -325,17 +335,15 @@ export default function DayView() {
                                                 key={material.id}
                                                 className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-100 hover:bg-orange-100 transition-colors group"
                                             >
-                                                <a
-                                                    href={material.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
+                                                <CourseFileLink
+                                                    href={fileLink(material.url)}
                                                     className="flex-1 flex items-center gap-2 min-w-0"
                                                 >
                                                     <FileText size={14} className="text-orange-500" />
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-sm font-medium text-orange-900 truncate">{material.title}</div>
                                                     </div>
-                                                </a>
+                                                </CourseFileLink>
                                                 {isDownloadable(material.type) && (
                                                     <button
                                                         onClick={(e) => handleDownload(e, material)}

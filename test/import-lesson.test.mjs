@@ -32,6 +32,7 @@ test.beforeEach(() => {
     const bucket = fake.buckets.get('course-content');
     bucket.objects.clear();
     bucket.file_size_limit = null;
+    bucket.public = true;
 });
 
 function pdf(name, text) {
@@ -83,6 +84,16 @@ test('first run creates the week and lesson, uploads the file and adds one mater
     assert.equal(got.status, 200);
     assert.equal(got.headers.get('content-type'), 'application/pdf');
     assert.equal(await got.text(), fs.readFileSync(file, 'utf8'));
+});
+
+test('with a private bucket the upload is checked through a signed link; the stored URL is portal-only', async () => {
+    fake.buckets.get('course-content').public = false;
+    const r = await run([...lesson('--file', pdf('lesson.pdf', 'private')), ...newWeekAndDay]);
+    assert.equal(r.code, 0, r.out);
+    assert.doesNotMatch(r.out, /doesn't open/);
+    assert.doesNotMatch(r.out, /public bucket/);
+    assert.match(r.out, /private bucket: opens only through the portal/);
+    assert.equal((await fetch(fake.db.materials[0].url)).status, 400);
 });
 
 test('--dry-run shows the plan and writes nothing', async () => {

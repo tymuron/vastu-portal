@@ -1,8 +1,10 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, FileText, Download, ChevronRight, Loader2 } from 'lucide-react';
 import { useWeeks } from '../../hooks/useCourse';
+import { useCourseFileLinks } from '../../hooks/useCourseFileLinks';
 import { useState } from 'react';
 import { cn } from '../../lib/utils';
+import CourseFileLink from '../../components/CourseFileLink';
 
 export default function WeekView() {
     const { weekId } = useParams();
@@ -11,6 +13,7 @@ export default function WeekView() {
     const { weeks, loading } = useWeeks();
 
     const week = weeks.find(w => w.id === weekId);
+    const fileLink = useCourseFileLinks((week?.weekMaterials ?? []).map((m) => m.url));
 
     if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
     if (!week) return <div>Неделя не найдена</div>;
@@ -108,15 +111,13 @@ export default function WeekView() {
                                         <div className="flex-1 min-w-0">
                                             <h4 className="font-medium text-vastu-dark truncate">{material.title}</h4>
                                             <p className="text-xs text-vastu-text-light uppercase tracking-wider mb-2">{material.type}</p>
-                                            <a
-                                                href={material.url}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                            <CourseFileLink
+                                                href={fileLink(material.url)}
                                                 className="text-sm text-vastu-gold hover:text-vastu-dark font-medium flex items-center gap-1 transition-colors"
                                             >
                                                 <Download size={14} />
-                                                Скачать
-                                            </a>
+                                                {fileLink(material.url) === null ? 'Недоступен' : 'Скачать'}
+                                            </CourseFileLink>
                                         </div>
                                     </div>
                                 ))

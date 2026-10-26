@@ -2,13 +2,15 @@
 //   /rest/v1/*  — a small PostgREST (eq / in / is / lt / gte / lte / order / limit,
 //                 insert, upsert-ignore, patch) over in-memory tables
 //   /auth/v1/*  — the GoTrue admin + user endpoints the server and SPA use
-//   /storage/v1/* — the Storage calls scripts/import-lesson.mjs makes (bucket
-//                 info, upload, list, remove, public download)
+//   /storage/v1/* — the Storage calls scripts/import-lesson.mjs and the lesson
+//                 pages make (bucket info, upload, list, remove, public and
+//                 signed downloads, with the course-content read rule)
 //   /api/v1/invoices, /api/v2/products — lava.top (shapes as observed live)
 //   /emails     — Resend
 //   /__*        — test controls (seed, inspect, inject failures)
 // Good enough to run the real server.js and the real built SPA against it.
-// Not a faithful Postgres: no RLS, no joins in select.
+// Not a faithful Postgres: no RLS (only the course-content read rule), and
+// select embeds only along <name>_id columns.
 
 import http from 'http';
 import crypto from 'crypto';
@@ -92,9 +94,40 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
         }
         const limit = params.get('limit');
         if (limit) rows = rows.slice(0, Number(limit));
-        // The one embed the SPA uses: `courses(...)` next to a course_id.
-        const embedCourses = /(^|,)\s*courses(!inner)?\(/.test(params.get('select') || '');
-        return rows.map((r) => (embedCourses && r.course_id ? { ...r, courses: db.courses.find((c) => c.id === r.course_id) || null } : { ...r }));
+        return rows.map((r) => embed(table, r, params.get('select') || ''));
+    }
+    // `a,b(c,d(e)),f(*)` -> its top-level items, parentheses respected.
+    function splitSelect(select) {
+        const items = [];
+        let depth = 0, cur = '';
+        for (const ch of select) {
+            if (ch === ',' && depth === 0) { items.push(cur); cur = ''; continue; }
+            if (ch === '(') depth++;
+            if (ch === ')') depth--;
+            cur += ch;
+        }
+        if (cur) items.push(cur);
+        return items;
+    }
+    // Resource embedding for the shapes the SPA asks for: a parent through
+    // the row's <name>_id (courses(...) next to course_id), or the children
+    // whose <table>_id points back at the row (weeks -> days(...), materials(...)).
+    function embed(table, row, select) {
+        const out = { ...row };
+        for (const item of splitSelect(select)) {
+            const m = item.match(/^(\w+)(?:!\w+)?\((.*)\)$/);
+            if (!m || !db[m[1]]) continue;
+            const [, name, inner] = m;
+            const parentKey = `${name.replace(/s$/, '')}_id`;
+            if (parentKey in row) {
+                const parent = db[name].find((r) => r.id === row[parentKey]);
+                out[name] = parent ? embed(name, parent, inner) : null;
+            } else {
+                const backKey = `${table.replace(/s$/, '')}_id`;
+                out[name] = db[name].filter((r) => r[backKey] === row.id).map((r) => embed(name, r, inner));
+            }
+        }
+        return out;
     }
     function violates(table, row, except) {
         for (const cols of UNIQUE[table] || []) {
@@ -312,7 +345,43 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
     // Keys are checked like the real service does: Cyrillic is "Invalid key".
     const VALID_KEY = /^(\w|\/|!|-|\.|\*|'|\(|\)| |&|\$|@|=|;|:|\+|,|\?)*$/;
     const notFound = { statusCode: '404', error: 'not_found', message: 'Object not found' };
-    function storage(req, res, p, buf) {
+    const signed = new Map(); // token -> { bucket, key, exp }
+
+    function jwtRole(req) {
+        const t = String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+        try {
+            return JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString('utf8')).role || null;
+        } catch {
+            return null;
+        }
+    }
+    // Who may read (and so sign) a file — for course-content the rule of
+    // 20261028_private_course_files_1_policy.sql: the service role, a teacher,
+    // or a student with current access to the course that owns the file's
+    // days/<id>, homework/<id> or weeks/<id> folder.
+    function mayRead(req, bucketId, key) {
+        if (jwtRole(req) === 'service_role') return true;
+        const user = bearerUser(req);
+        if (!user) return false;
+        if (bucketId !== 'course-content') return true;
+        if (db.profiles.find((p) => p.id === user.id)?.role === 'teacher') return true;
+        const [folder, id] = key.split('/');
+        const weekId = folder === 'weeks' ? id : ['days', 'homework'].includes(folder) ? db.days.find((d) => d.id === id)?.week_id : null;
+        const courseId = db.weeks.find((w) => w.id === weekId)?.course_id;
+        return !!courseId && db.user_entitlements.some((e) =>
+            e.user_id === user.id && e.course_id === courseId && (!e.expires_at || Date.parse(e.expires_at) > Date.now()));
+    }
+    function sign(bucketId, key, expiresIn) {
+        const token = crypto.randomBytes(16).toString('hex');
+        signed.set(token, { bucket: bucketId, key, exp: Date.now() + Number(expiresIn) * 1000 });
+        return `/object/sign/${bucketId}/${key}?token=${token}`;
+    }
+    function serveObject(req, res, o) {
+        res.writeHead(200, { 'Content-Type': o.contentType, 'Content-Length': o.bytes.length, 'Access-Control-Allow-Origin': '*' });
+        return res.end(req.method === 'HEAD' ? undefined : o.bytes);
+    }
+
+    function storage(req, res, p, buf, url) {
         let m;
         if ((m = p.match(/^\/bucket\/([^/]+)$/)) && req.method === 'GET') {
             const b = buckets.get(m[1]);
@@ -340,8 +409,31 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             const b = buckets.get(m[1]);
             const o = b?.public ? b.objects.get(decodeURIComponent(m[2])) : null;
             if (!o) return send(res, 400, notFound);
-            res.writeHead(200, { 'Content-Type': o.contentType, 'Content-Length': o.bytes.length });
-            return res.end(req.method === 'HEAD' ? undefined : o.bytes);
+            return serveObject(req, res, o);
+        }
+        // Signed links: one (POST /object/sign/<bucket>/<key>), many
+        // (POST /object/sign/<bucket> {paths}), and the download itself.
+        if ((m = p.match(/^\/object\/sign\/([^/]+)$/)) && req.method === 'POST') {
+            const b = buckets.get(m[1]);
+            const { expiresIn, paths = [] } = JSON.parse(buf.toString('utf8') || '{}');
+            return send(res, 200, paths.map((key) => (b?.objects.has(key) && mayRead(req, m[1], key)
+                ? { path: key, signedURL: sign(m[1], key, expiresIn), error: null }
+                : { path: key, signedURL: null, error: 'Either the object does not exist or you do not have access to it' })));
+        }
+        if ((m = p.match(/^\/object\/sign\/([^/]+)\/(.+)$/))) {
+            const b = buckets.get(m[1]);
+            const key = decodeURIComponent(m[2]);
+            if (req.method === 'POST') {
+                if (!b?.objects.has(key) || !mayRead(req, m[1], key)) return send(res, 400, notFound);
+                return send(res, 200, { signedURL: sign(m[1], key, JSON.parse(buf.toString('utf8') || '{}').expiresIn) });
+            }
+            if (req.method === 'GET' || req.method === 'HEAD') {
+                const t = signed.get(url.searchParams.get('token'));
+                if (!t || t.bucket !== m[1] || t.key !== key) return send(res, 400, { statusCode: '400', error: 'InvalidJWT', message: 'invalid signature' });
+                if (t.exp < Date.now()) return send(res, 400, { statusCode: '400', error: 'InvalidJWT', message: '"exp" claim timestamp check failed' });
+                const o = b?.objects.get(key);
+                return o ? serveObject(req, res, o) : send(res, 400, notFound);
+            }
         }
         if ((m = p.match(/^\/object\/([^/]+)$/)) && req.method === 'DELETE') {
             const b = buckets.get(m[1]);
@@ -416,7 +508,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             // Uploads are binary: route Storage before the JSON parse.
             if (p.startsWith('/storage/v1/')) {
                 try {
-                    return storage(req, res, p.slice('/storage/v1'.length), buf);
+                    return storage(req, res, p.slice('/storage/v1'.length), buf, url);
                 } catch (err) {
                     return send(res, 500, { message: String(err?.stack || err) });
                 }

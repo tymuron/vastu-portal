@@ -2,7 +2,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { PlayCircle, ChevronRight, ChevronLeft, FileText, Loader2, Play, BookOpen, AlertCircle, Lock } from 'lucide-react';
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
+import { useCourseFileLinks } from '../../hooks/useCourseFileLinks';
 import { useCourseContext } from '../../contexts/CourseContext';
+import CourseFileLink from '../../components/CourseFileLink';
 
 // Helper to strip HTML
 const stripHtml = (html: string) => {
@@ -33,6 +35,9 @@ export default function StudentDashboard() {
     // Get week from URL
     const searchParams = new URLSearchParams(location.search);
     const activeWeekId = searchParams.get('week');
+    const fileLink = useCourseFileLinks(
+        (weeks.find(w => w.id === activeWeekId)?.weekMaterials ?? []).map((m) => m.url)
+    );
 
     useEffect(() => {
         if (!loading && weeks.length > 0) {
@@ -194,11 +199,9 @@ export default function StudentDashboard() {
                                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-3">
                                     {activeWeek.weekMaterials && activeWeek.weekMaterials.length > 0 ? (
                                         activeWeek.weekMaterials.map((material) => (
-                                            <a
+                                            <CourseFileLink
                                                 key={material.id}
-                                                href={material.url}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                                href={fileLink(material.url)}
                                                 className="flex items-start gap-3 p-2 rounded-lg hover:bg-white transition-colors group"
                                             >
                                                 <FileText size={16} className="text-vastu-text-light mt-0.5 group-hover:text-vastu-gold" />
@@ -207,10 +210,10 @@ export default function StudentDashboard() {
                                                         {material.title}
                                                     </div>
                                                     <div className="text-[10px] text-vastu-text-light uppercase">
-                                                        {material.type}
+                                                        {fileLink(material.url) === null ? 'недоступен' : material.type}
                                                     </div>
                                                 </div>
-                                            </a>
+                                            </CourseFileLink>
                                         ))
                                     ) : (
                                         <div className="text-sm text-vastu-text-light italic text-center py-4">

@@ -19,6 +19,10 @@
 // The storage key carries a hash of the bytes, so a replaced file gets a new
 // URL and nobody is served a stale cached copy.
 //
+// materials.url is the file's public-URL form either way, like the editor
+// stores it; once the bucket is private the portal opens it through a
+// signed link (src/lib/courseFiles.ts).
+//
 // Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (env, or .env next to
 // package.json — .env is gitignored). The service-role key bypasses RLS:
 // keep it out of chats and git.
@@ -368,12 +372,15 @@ export async function importLesson(opts, { supabase, log = console.log }) {
     }
     if (oldKey) await deleteIfUnused(current.url, oldKey);
 
-    // Students open materials by this URL directly, so it has to answer.
-    const head = await fetch(url, { method: 'HEAD' }).catch(() => null);
-    if (!head?.ok) log(`! the file's URL answered ${head ? head.status : 'nothing'} — students may not be able to open it`);
+    // Check the file opens the way the portal opens it: by this URL while
+    // the bucket is public, by a signed link once it is private.
+    const isPrivate = bucket?.public === false;
+    const probe = isPrivate ? (await store.createSignedUrl(key, 60)).data?.signedUrl : url;
+    const head = probe ? await fetch(probe, { method: 'HEAD' }).catch(() => null) : null;
+    if (!head?.ok) log(`! the uploaded file doesn't open (${head ? `HTTP ${head.status}` : 'no answer'}) — check it in the portal`);
 
     log(`✓ ${current ? 'replaced' : 'added'} «${opts.title}» on ${where}`);
-    log(`  ${url}`);
+    log(`  ${url}${isPrivate ? '  (private bucket: opens only through the portal)' : ''}`);
     return { action: current ? 'replaced' : 'inserted', materialId, url, key, weekId: week.id, dayId: day?.id || null };
 }
 
