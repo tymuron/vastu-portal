@@ -5,10 +5,11 @@
 -- ===========================================================================
 --
 -- Why. Probes with the public anon key (the one in the JS bundle) on
--- 2026-10-26, which wrote nothing, showed:
+-- 2026-10-26, which wrote nothing (scripts/check-anon-access.mjs), showed:
 --   * anyone, without logging in, passes the row-level check for INSERT on
 --     weeks, days, materials and live_streams;
---   * anyone may upload into the course-content bucket and list its files.
+--   * anyone may upload into the course-content bucket and list its files,
+--     and list the library_files bucket.
 -- Both come from supabase_schema.sql ("Enable insert/update/delete for all
 -- users", "Anyone can upload/update/delete course content"). Every later
 -- migration replaced only the SELECT policies and left these alone. The same
@@ -24,9 +25,13 @@
 --   * only teachers write weeks, days, materials, live_streams and
 --     course-content files; the service role (server.js,
 --     scripts/import-lesson.mjs) bypasses RLS as before;
---   * course-content stays a public bucket, so the file URLs students open
---     keep working, but nobody can list or overwrite them any more;
+--   * course-content and library_files stay public buckets, so the file
+--     URLs students open keep working, but only teachers can list them, and
+--     nobody else can overwrite course-content files;
 --   * profiles.role changes only from the SQL editor or the service role.
+--
+-- After applying, `node scripts/check-anon-access.mjs` should report
+-- "nothing open".
 --
 -- Check what exists, before and after:
 --   select schemaname, tablename, policyname, cmd, roles, qual, with_check
@@ -99,6 +104,16 @@ create policy "Teachers manage course content"
          and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher'))
   with check (bucket_id = 'course-content'
               and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher'));
+
+-- library_files (storage_fix.sql) already limits writes to teachers, but its
+-- "Public Access" read policy lets anyone list the bucket. Teachers keep
+-- read access: the upload's insert ... returning needs it.
+drop policy if exists "Public Access" on storage.objects;
+drop policy if exists "Teachers read library files" on storage.objects;
+create policy "Teachers read library files"
+  on storage.objects for select
+  using (bucket_id = 'library_files'
+         and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'teacher'));
 
 -- ---------------------------------------------------------------------------
 -- 3. profiles.role is set by an admin only. SECURITY INVOKER on purpose:
