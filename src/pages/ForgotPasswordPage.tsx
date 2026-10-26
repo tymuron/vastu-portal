@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
 
         try {
             // Our own endpoint sends the link through Resend from
-            // hello@annaromeo.design, with the course's Telegram links.
+            // hello@annaromeovastu.com (RESEND_FROM), with the course's Telegram links.
             // Supabase's mailer is only the fallback if our server is down.
             let sent = false;
             try {
@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
             }
 
             setMessage(
-                'Если этот адрес есть на платформе, письмо со ссылкой для входа уже в пути — от Anna Romeo (hello@annaromeo.design). ' +
+                'Если этот адрес есть на платформе, письмо со ссылкой для входа уже в пути — от Anna Romeo (hello@annaromeovastu.com). ' +
                 'Проверьте также «Спам» и «Промоакции». Не пришло за 10 минут — напишите @tymuron в Telegram.'
             );
         } catch (err: any) {
