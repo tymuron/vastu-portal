@@ -21,7 +21,9 @@
 -- Anything else in the bucket stays teacher-only.
 --
 -- Safe while the bucket is still public: the old app keeps opening public
--- URLs, the new one signs. Idempotent.
+-- URLs, the new one signs. Run it right after the lock-down migration: in
+-- between, nobody but teachers can sign, so if the signed-link app is
+-- already live, students see every file as unavailable. Idempotent.
 
 do $$
 begin

@@ -31,7 +31,9 @@
 --   * profiles.role changes only from the SQL editor or the service role.
 --
 -- After applying, `node scripts/check-anon-access.mjs` should report
--- "nothing open".
+-- "nothing open". Then run 20261028_private_course_files_1_policy.sql right
+-- away: without it, an app that opens lesson files by signed link
+-- (src/lib/courseFiles.ts) can't open any.
 --
 -- Check what exists, before and after:
 --   select schemaname, tablename, policyname, cmd, roles, qual, with_check
