@@ -79,6 +79,7 @@ export default function MonoBuyPage() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [orderId, setOrderId] = useState<string | null>(null);
+    const [isTest, setIsTest] = useState(false);
     const startedAt = useRef(0);
 
     useEffect(() => {
@@ -111,7 +112,7 @@ export default function MonoBuyPage() {
                 const r = await fetch(`/api/mono/order/${orderId}`, { cache: 'no-store' });
                 const s = await r.json().catch(() => ({}));
                 if (stop) return;
-                if (s.granted || s.state === 'SUCCESS') { setStage('done'); return; }
+                if (s.granted || s.state === 'SUCCESS') { setIsTest(!!s.test); setStage('done'); return; }
                 if (s.state === 'FAIL') { setError(s.message || 'monobank не схвалив заявку.'); setStage('failed'); return; }
             } catch { /* network blip: keep waiting */ }
             if (Date.now() - startedAt.current > GIVE_UP_MS) {
@@ -191,6 +192,19 @@ export default function MonoBuyPage() {
                     <div className="flex justify-center pt-2" aria-hidden="true">
                         <div className="w-8 h-8 border-2 border-vastu-gold/30 border-t-vastu-gold rounded-full animate-spin" />
                     </div>
+                </div>
+            </Shell>
+        );
+    }
+
+    if (stage === 'done' && isTest) {
+        return (
+            <Shell>
+                {header}
+                <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
+                    <p className="text-vastu-gold font-serif text-2xl">Тест пройдено ✓</p>
+                    <p>Договір оформлено й підтверджено магазином — інтеграцію перевірено. Доступ до курсу за тестове замовлення не видається.</p>
+                    <p className="text-vastu-light/60">Тепер скасуйте цей договір у бізнес-кабінеті monobank.</p>
                 </div>
             </Shell>
         );

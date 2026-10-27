@@ -38,7 +38,15 @@ export const MONO_PLANS = {
     'design-base': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний»' },
     'design-base-mk': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний» для учасниць майстер-класу' },
     'design-pro': { tier: 'design-pro', title: '«Васту-дизайн» · тариф «Наставництво»' },
+    // Hidden 2-hryvnia order to test the whole chain with a real monobank
+    // client before selling (monobank: the store can't buy from itself — ask
+    // someone close). Approved and confirmed like a sale, but it grants no
+    // access; Tymur gets an email that it passed. Cancel it afterwards in
+    // web.monobank.ua. Linked from nowhere.
+    test: { tier: null, title: 'Тестове замовлення (перевірка інтеграції)', uah: 2 },
 };
+// lava_invoices.offer_id of a test order (the column is NOT NULL).
+const TEST_OFFER = 'mono-test';
 
 // How many payments the buyer may choose (MONO_PARTS, e.g. "3,4,5,6"). The
 // store pays monobank's fee, which grows with the count, and monobank refuses
@@ -112,9 +120,11 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
     const partsList = parseParts(parts);
 
     function plan(key) {
-        const p = MONO_PLANS[key];
-        const tier = p && GRANT_TIERS.find((t) => t.key === p.tier);
-        if (!p || !tier || !priceOf[key]) return null;
+        const p = Object.hasOwn(MONO_PLANS, key) ? MONO_PLANS[key] : null;
+        if (!p) return null;
+        if (!p.tier) return { key, title: p.title, uah: p.uah, parts: partsList, lavaId: null, test: true };
+        const tier = GRANT_TIERS.find((t) => t.key === p.tier);
+        if (!tier || !priceOf[key]) return null;
         return { key, title: p.title, uah: priceOf[key], parts: partsList, lavaId: tier.lavaId };
     }
 
@@ -168,7 +178,7 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
         // an order we can't remember is withdrawn before the buyer approves it.
         const { error } = await getSupabase()
             .from('lava_invoices')
-            .insert({ contract_id: `mono-${created.order_id}`, offer_id: p.lavaId, email });
+            .insert({ contract_id: `mono-${created.order_id}`, offer_id: p.lavaId || TEST_OFFER, email });
         if (error) {
             await call('/api/order/reject', { order_id: created.order_id }).catch(() => {});
             await alert('заявка monobank отменена: не удалось её сохранить', { email, orderId: created.order_id, error: error.message });
@@ -229,6 +239,13 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
                 sub = c.order_sub_state || 'ACTIVE';
             }
 
+            if (state === 'SUCCESS' && (sub === 'ACTIVE' || sub === 'DONE') && row.offer_id === TEST_OFFER) {
+                if (!finished.has(orderId)) {
+                    finished.add(orderId);
+                    await alert('monobank: тестовий договір пройшов ✓ (скасуйте його в web.monobank.ua)', { orderId, email: row.email, state, subState: sub });
+                }
+                return { state, subState: sub, granted: false, test: true };
+            }
             if (state === 'SUCCESS' && (sub === 'ACTIVE' || sub === 'DONE')) {
                 const r = await fulfil({
                     contractId,

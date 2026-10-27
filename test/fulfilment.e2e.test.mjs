@@ -653,6 +653,25 @@ test('monobank: approved but no callback and the tab closed — the sweep grants
     assert.ok(!again.granted.includes(`mono-${orderId}`));
 });
 
+test('monobank test order: 2 ₴, approved and confirmed, grants nothing, Tymur hears it passed', async () => {
+    const plan = await (await fetch(`${app}/api/mono/plan/test`)).json();
+    assert.equal(plan.uah, 2);
+    const alertsBefore = mailsTo(ALERTS).length;
+    const { orderId } = await (await monoOrder({ plan: 'test', email: 'tester@example.com', phone: '0671234500', parts: 3 })).json();
+    const o = fake.monoOrders.get(orderId);
+    assert.equal(o.total_sum, 2);
+    assert.equal(await fake.monoApprove(orderId), 200);
+    assert.equal(o.confirms, 1, 'confirmed like a sale');
+    assert.deepEqual(entitlements('tester@example.com'), [], 'no course access');
+    assert.equal(purchase(`mono-${orderId}`), undefined);
+    const s = await monoState(orderId);
+    assert.equal(s.test, true);
+    assert.equal(s.state, 'SUCCESS');
+    assert.ok(mailsTo(ALERTS).slice(alertsBefore).some((m) => /тестовий договір пройшов/.test(m.subject)));
+    assert.equal(mailsTo('tester@example.com').length, 0);
+    assert.equal((await fetch(`${app}/api/mono/plan/constructor`)).status, 404, 'no prototype keys as plans');
+});
+
 test('monobank says no: the buyer reads why, nothing is granted; a refused setup alerts Tymur', async () => {
     const { orderId } = await (await monoOrder({ plan: 'design-base', email: 'mono-limit@example.com', phone: '0661234567', parts: 4 })).json();
     await fake.monoFail(orderId, 'EXCEEDED_SUM_LIMIT');
