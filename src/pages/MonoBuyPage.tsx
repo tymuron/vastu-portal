@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 // /buy/mono/<plan> — the course in installments through monobank
-// «Покупка частинами» (server: mono.js). The buyer approves the agreement in
+// «Покупка Частинами» (server: mono.js). The buyer approves the agreement in
 // the monobank app; this page waits for that and says what happened.
+// The service name and the legal block below are monobank's requirements
+// (knowledge-base/chast/marketing), not copy to rewrite.
 
 type Plan = { title: string; uah: number; parts: number[] };
 type Stage = 'form' | 'waiting' | 'done' | 'failed';
@@ -21,6 +23,30 @@ function payments(n: number) {
     return n % 10 >= 2 && n % 10 <= 4 && (tail < 12 || tail > 14) ? `${n} платежа` : `${n} платежей`;
 }
 
+// Verbatim from monobank's product page — must be published wherever the
+// service is offered. Ukrainian on purpose: it is the bank's legal text.
+function MonoLegal() {
+    return (
+        <div className="mt-8 pt-5 border-t border-vastu-gold/15 text-[11px] leading-relaxed text-vastu-light/45 space-y-1.5" lang="uk">
+            <p className="text-vastu-light/60">Покупка частинами monobank | Universal Bank</p>
+            <p>
+                Надавач послуг: АТ «УНІВЕРСАЛ БАНК» ліцензія НБУ №92 від 20.01.1994, номер у держреєстрі банків № 226.
+            </p>
+            <p>
+                Мінімальна сума розстрочки: 2 грн. Максимальна сума розстрочки: 400 000 грн. Реальна річна процентна
+                ставка: 0,000001%. Доступний строк, платежів: 3 — 25. Порядок погашення: щомісячні платежі рівними
+                частинами. Перший платіж у момент оформлення покупки.
+            </p>
+            <p>
+                Інформація про істотні характеристики продукту та попередження розміщені на сайті продукту{' '}
+                <a href="https://chast.monobank.ua" target="_blank" rel="noopener noreferrer" className="underline hover:text-vastu-gold">
+                    chast.monobank.ua
+                </a>
+            </p>
+        </div>
+    );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-vastu-dark relative overflow-hidden px-4 py-10">
@@ -35,6 +61,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                     <p className="text-vastu-light/60 font-light tracking-widest text-sm uppercase">Васту & Дизайн Портал</p>
                 </div>
                 {children}
+                <MonoLegal />
             </div>
         </div>
     );
@@ -124,7 +151,7 @@ export default function MonoBuyPage() {
         return (
             <Shell>
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                    Этот тариф сейчас нельзя оплатить частями. Вернитесь на страницу курса и выберите другой способ оплаты.
+                    Этот тариф сейчас нельзя оформить через «Покупку Частинами». Вернитесь на страницу курса и выберите другой способ оплаты.
                 </div>
             </Shell>
         );
@@ -150,7 +177,7 @@ export default function MonoBuyPage() {
                     <p className="text-vastu-gold font-serif text-2xl">Подтвердите в приложении monobank</p>
                     <p>
                         Мы отправили заявку на номер <span className="text-vastu-light whitespace-nowrap">{phone}</span>.
-                        Откройте приложение monobank — там уже ждёт уведомление о «Покупке частями».
+                        Откройте приложение monobank — там уже ждёт уведомление о «Покупке Частинами».
                         Подтвердите его в течение 15 минут.
                     </p>
                     <p className="text-vastu-light/60">Эту страницу не закрывайте — она обновится сама.</p>
@@ -197,7 +224,7 @@ export default function MonoBuyPage() {
             {header}
             <form onSubmit={submit} className="space-y-6">
                 <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
-                    «Покупка частями» от monobank — для клиентов monobank в Украине.
+                    «Покупка Частинами monobank» — для клиентов monobank в Украине. Цена та же, что при оплате сразу.
                     Первый платёж спишется, когда вы подтвердите заявку в приложении, и сразу после этого
                     на почту придёт доступ к курсу.
                 </p>
@@ -237,7 +264,7 @@ export default function MonoBuyPage() {
                     disabled={submitting || !email || !parts}
                     className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                    {submitting ? 'Отправляем заявку…' : stage === 'failed' ? 'Попробовать ещё раз' : 'Оформить частями'}
+                    {submitting ? 'Отправляем заявку…' : stage === 'failed' ? 'Попробовать ещё раз' : 'Оформить Покупку Частинами'}
                 </button>
             </form>
         </Shell>

@@ -1,6 +1,11 @@
 // ---------------------------------------------------------------------------
-// monobank «Покупка частинами» — Anna's course in installments, in hryvnias,
+// monobank «Покупка Частинами» — Anna's course in installments, in hryvnias,
 // for buyers with a Ukrainian monobank card.
+//
+// Wording is monobank's rule, not taste (knowledge-base/chast/marketing/brand,
+// 26 Mar 2026): the service is «Покупка Частинами» (or «… monobank»), never
+// translated to «Покупка частями», never «Оплата частинами» or «кредит».
+// And the price in parts must equal the normal price — no markup.
 //
 // How a sale goes (https://monobank.ua/api-docs/chast):
 //   1. /buy/mono/<plan>: the buyer gives their email, the phone their monobank
@@ -81,8 +86,8 @@ export function monoSignatureOk(signKey, body, signature) {
 // What the buyer reads when monobank says no (order_sub_state of a FAIL).
 const FAIL_TEXT = {
     CLIENT_NOT_FOUND: 'Этот номер не найден в monobank. Нужен номер, на который зарегистрировано приложение monobank.',
-    EXCEEDED_SUM_LIMIT: 'Сумма больше вашего лимита «Покупки частями». Лимит виден в приложении monobank, раздел «Покупка частями».',
-    EXISTS_OTHER_OPEN_ORDER: 'У вас уже есть незавершённая заявка «Покупки частями». Отмените её в приложении monobank или подождите 15 минут.',
+    EXCEEDED_SUM_LIMIT: 'Сумма больше вашего лимита «Покупки Частинами». Лимит виден в приложении monobank, раздел «Покупка Частинами».',
+    EXISTS_OTHER_OPEN_ORDER: 'У вас уже есть незавершённая заявка «Покупки Частинами». Отмените её в приложении monobank или подождите 15 минут.',
     NOT_ENOUGH_MONEY_FOR_INIT_DEBIT: 'На карте не хватило денег на первый платёж. Пополните карту и попробуйте снова.',
     REJECTED_BY_CLIENT: 'Заявка отклонена в приложении monobank.',
     CLIENT_PUSH_TIMEOUT: 'Заявку не подтвердили в приложении за 15 минут. Попробуйте ещё раз.',
@@ -131,9 +136,9 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
 
     // -> { orderId } or { error, status } for the buyer's page.
     async function createOrder({ planKey, email, phone, parts: wantParts }) {
-        if (!configured) return { status: 503, error: 'Оплата частями временно недоступна.' };
+        if (!configured) return { status: 503, error: '«Покупка Частинами» временно недоступна.' };
         const p = plan(planKey);
-        if (!p) return { status: 404, error: 'Этот тариф нельзя оплатить частями.' };
+        if (!p) return { status: 404, error: 'Этот тариф нельзя оформить через «Покупку Частинами».' };
         email = normEmail(email);
         if (!EMAIL_RE.test(email)) return { status: 400, error: 'Проверьте почту — на неё придёт доступ к курсу.' };
         const clientPhone = normPhone(phone);
