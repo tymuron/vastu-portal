@@ -376,6 +376,8 @@ async function handleCreateInvoice(req, res) {
     // SMART_GLOCAL), and Russian cards are declined there a lot: on the
     // masterclass day 14 of 16 checkouts failed or were abandoned.
     const method = String(payload?.method || 'card').toLowerCase() === 'sbp' && currency === 'RUB' ? 'sbp' : 'card';
+    // The Ukrainian landing (/ua/) opens /buy with ?lang=uk; keep it on the way back.
+    const lang = payload?.lang === 'uk' ? 'uk' : null;
 
     if (!EMAIL_RE.test(email)) {
         sendJson(res, 400, { error: 'Invalid email' });
@@ -406,9 +408,9 @@ async function handleCreateInvoice(req, res) {
                 ...(method === 'sbp' ? { paymentProvider: 'PAY2ME', paymentMethod: 'SBP' } : {}),
                 // Back to us after paying: a page that says what happens next,
                 // or the same tariff with a hint to try СБП / another card.
-                successful_return_url: `${appBase}/buy/thanks`,
-                failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1`,
-                cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}`
+                successful_return_url: `${appBase}/buy/thanks${lang ? `?lang=${lang}` : ''}`,
+                failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1${lang ? `&lang=${lang}` : ''}`,
+                cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}${lang ? `&lang=${lang}` : ''}`
             })
         });
 
@@ -580,7 +582,7 @@ async function handleMonoCreate(req, res) {
     const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     const phoneKey = String(payload?.phone || '').replace(/\D/g, '').slice(-9);
     if (rateLimited(`mono-i:${ip}`, 6, 15 * 60 * 1000) || rateLimited(`mono-p:${phoneKey}`, 3, 15 * 60 * 1000)) {
-        sendJson(res, 429, { error: 'Слишком много заявок. Подождите 15 минут.' });
+        sendJson(res, 429, { error: 'Забагато заявок. Зачекайте 15 хвилин.' });
         return;
     }
     try {
@@ -598,7 +600,7 @@ async function handleMonoCreate(req, res) {
     } catch (err) {
         console.error('monobank create failed:', err?.message || err);
         await fulfilment.alert('monobank: не удалось создать заявку', String(err?.message || err));
-        sendJson(res, 502, { error: 'monobank сейчас не отвечает. Попробуйте через пару минут.' });
+        sendJson(res, 502, { error: 'monobank зараз не відповідає. Спробуйте за кілька хвилин.' });
     }
 }
 

@@ -170,6 +170,17 @@ test('/buy can pay by СБП, and sends lava return links back to /buy', async (
     assert.equal(fake.control.lastInvoiceRequest.paymentMethod, undefined, 'card = lava default');
     await make('sbp', 'EUR');
     assert.equal(fake.control.lastInvoiceRequest.paymentMethod, undefined, 'СБП only exists for rubles');
+
+    // The Ukrainian landing opens /buy?lang=uk: lava sends the buyer back in Ukrainian.
+    const uk = await fetch(`${app}/api/lava/invoice`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'ua@example.com', offerId: T.base[1], currency: 'EUR', method: 'card', lang: 'uk' }),
+    });
+    assert.equal(uk.status, 200);
+    sentToLava = fake.control.lastInvoiceRequest;
+    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks?lang=uk`);
+    assert.equal(sentToLava.failure_return_url, `${app}/buy/${T.base[1]}?currency=EUR&failed=1&lang=uk`);
+    assert.equal(sentToLava.cancel_return_url, `${app}/buy/${T.base[1]}?currency=EUR&lang=uk`);
 });
 
 test('webhook rejects a wrong API key', async () => {
@@ -582,7 +593,7 @@ const monoState = (id) => fetch(`${app}/api/mono/order/${id}`).then((r) => r.jso
 test('monobank plan: price and payment counts for the page; unpriced plans are not for sale', async () => {
     const r = await fetch(`${app}/api/mono/plan/design-base`);
     assert.equal(r.status, 200);
-    assert.deepEqual(await r.json(), { title: '«Васту-дизайн» · тариф «Основной»', uah: 38000, parts: [3, 4, 6] });
+    assert.deepEqual(await r.json(), { title: '«Васту-дизайн» · тариф «Основний»', uah: 38000, parts: [3, 4, 6] });
     assert.equal((await fetch(`${app}/api/mono/plan/design-base-mk`)).status, 404, 'no MK price set');
     assert.equal((await fetch(`${app}/api/mono/plan/nonsense`)).status, 404);
 });
@@ -599,7 +610,7 @@ test('monobank: order -> approved in the app -> callback -> confirmed once -> ac
     assert.equal(o.client_phone, '+380671234567');
     assert.equal(o.total_sum, 38000);
     assert.deepEqual(o.available_programs, [{ type: 'payment_installments', available_parts_count: [4] }]);
-    assert.deepEqual(o.products, [{ name: '«Васту-дизайн» · тариф «Основной»', count: 1, sum: 38000 }]);
+    assert.deepEqual(o.products, [{ name: '«Васту-дизайн» · тариф «Основний»', count: 1, sum: 38000 }]);
     assert.equal(o.invoice.source, 'INTERNET');
     assert.equal(o.result_callback, `${app}/api/mono/callback`);
 
@@ -647,7 +658,7 @@ test('monobank says no: the buyer reads why, nothing is granted; a refused setup
     await fake.monoFail(orderId, 'EXCEEDED_SUM_LIMIT');
     const s = await monoState(orderId);
     assert.equal(s.state, 'FAIL');
-    assert.match(s.message, /лимит/);
+    assert.match(s.message, /ліміт/);
     assert.deepEqual(entitlements('mono-limit@example.com'), []);
 
     const alertsBefore = mailsTo(ALERTS).length;

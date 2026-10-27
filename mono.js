@@ -6,6 +6,8 @@
 // 26 Mar 2026): the service is «Покупка Частинами» (or «… monobank»), never
 // translated to «Покупка частями», never «Оплата частинами» or «кредит».
 // And the price in parts must equal the normal price — no markup.
+// Every buyer here is a monobank client in Ukraine, so what they read
+// (checkout page, errors, product names sent to monobank) is Ukrainian.
 //
 // How a sale goes (https://monobank.ua/api-docs/chast):
 //   1. /buy/mono/<plan>: the buyer gives their email, the phone their monobank
@@ -33,9 +35,9 @@ import { EMAIL_RE, GRANT_TIERS, normEmail } from './fulfilment.js';
 // "design-base=38000,design-base-mk=28000,design-pro=88000", so they can be
 // changed on Render without a deploy. A plan without a price is not for sale.
 export const MONO_PLANS = {
-    'design-base': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основной»' },
-    'design-base-mk': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основной» для участниц мастер-класса' },
-    'design-pro': { tier: 'design-pro', title: '«Васту-дизайн» · тариф «Наставничество»' },
+    'design-base': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний»' },
+    'design-base-mk': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний» для учасниць майстер-класу' },
+    'design-pro': { tier: 'design-pro', title: '«Васту-дизайн» · тариф «Наставництво»' },
 };
 
 // How many payments the buyer may choose (MONO_PARTS, e.g. "3,4,5,6"). The
@@ -85,15 +87,15 @@ export function monoSignatureOk(signKey, body, signature) {
 
 // What the buyer reads when monobank says no (order_sub_state of a FAIL).
 const FAIL_TEXT = {
-    CLIENT_NOT_FOUND: 'Этот номер не найден в monobank. Нужен номер, на который зарегистрировано приложение monobank.',
-    EXCEEDED_SUM_LIMIT: 'Сумма больше вашего лимита «Покупки Частинами». Лимит виден в приложении monobank, раздел «Покупка Частинами».',
-    EXISTS_OTHER_OPEN_ORDER: 'У вас уже есть незавершённая заявка «Покупки Частинами». Отмените её в приложении monobank или подождите 15 минут.',
-    NOT_ENOUGH_MONEY_FOR_INIT_DEBIT: 'На карте не хватило денег на первый платёж. Пополните карту и попробуйте снова.',
-    REJECTED_BY_CLIENT: 'Заявка отклонена в приложении monobank.',
-    CLIENT_PUSH_TIMEOUT: 'Заявку не подтвердили в приложении за 15 минут. Попробуйте ещё раз.',
-    REJECTED_BY_STORE: 'Заявка отменена.',
+    CLIENT_NOT_FOUND: 'Цей номер не знайдено в monobank. Потрібен номер, на який зареєстровано застосунок monobank.',
+    EXCEEDED_SUM_LIMIT: 'Сума більша за ваш ліміт «Покупки Частинами». Ліміт видно в застосунку monobank, розділ «Покупка Частинами».',
+    EXISTS_OTHER_OPEN_ORDER: 'У вас уже є незавершена заявка «Покупки Частинами». Скасуйте її в застосунку monobank або зачекайте 15 хвилин.',
+    NOT_ENOUGH_MONEY_FOR_INIT_DEBIT: 'На картці не вистачило коштів на перший платіж. Поповніть картку й спробуйте знову.',
+    REJECTED_BY_CLIENT: 'Заявку відхилено в застосунку monobank.',
+    CLIENT_PUSH_TIMEOUT: 'Заявку не підтвердили в застосунку протягом 15 хвилин. Спробуйте ще раз.',
+    REJECTED_BY_STORE: 'Заявку скасовано.',
 };
-const FAIL_DEFAULT = 'monobank не одобрил заявку. Попробуйте позже или оплатите картой на странице тарифа.';
+const FAIL_DEFAULT = 'monobank не схвалив заявку. Спробуйте пізніше або оплатіть карткою на сторінці тарифу.';
 // FAIL reasons that mean our setup is wrong, not the buyer's situation.
 const FAIL_ALERT = new Set(['PAY_PARTS_ARE_NOT_ACCEPTABLE', 'FAIL']);
 
@@ -136,15 +138,15 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
 
     // -> { orderId } or { error, status } for the buyer's page.
     async function createOrder({ planKey, email, phone, parts: wantParts }) {
-        if (!configured) return { status: 503, error: '«Покупка Частинами» временно недоступна.' };
+        if (!configured) return { status: 503, error: '«Покупка Частинами» тимчасово недоступна.' };
         const p = plan(planKey);
-        if (!p) return { status: 404, error: 'Этот тариф нельзя оформить через «Покупку Частинами».' };
+        if (!p) return { status: 404, error: 'Цей тариф не можна оформити через «Покупку Частинами».' };
         email = normEmail(email);
-        if (!EMAIL_RE.test(email)) return { status: 400, error: 'Проверьте почту — на неё придёт доступ к курсу.' };
+        if (!EMAIL_RE.test(email)) return { status: 400, error: 'Перевірте пошту — на неї прийде доступ до курсу.' };
         const clientPhone = normPhone(phone);
-        if (!clientPhone) return { status: 400, error: 'Нужен украинский номер в формате +380…, на который зарегистрировано приложение monobank.' };
+        if (!clientPhone) return { status: 400, error: 'Потрібен український номер у форматі +380…, на який зареєстровано застосунок monobank.' };
         const n = Number(wantParts);
-        if (!p.parts.includes(n)) return { status: 400, error: 'Выберите количество платежей.' };
+        if (!p.parts.includes(n)) return { status: 400, error: 'Оберіть кількість платежів.' };
 
         const storeOrderId = `vd-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
         const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' }); // YYYY-MM-DD
@@ -170,7 +172,7 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
         if (error) {
             await call('/api/order/reject', { order_id: created.order_id }).catch(() => {});
             await alert('заявка monobank отменена: не удалось её сохранить', { email, orderId: created.order_id, error: error.message });
-            return { status: 500, error: 'Не получилось создать заявку. Попробуйте ещё раз через минуту.' };
+            return { status: 500, error: 'Не вдалося створити заявку. Спробуйте ще раз за хвилину.' };
         }
         console.log(`monobank order ${created.order_id}: ${p.key}, ${p.uah} UAH in ${n} parts`);
         return { orderId: created.order_id };

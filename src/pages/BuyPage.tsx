@@ -16,6 +16,64 @@ const METHODS: { key: Method; label: string }[] = [
     { key: 'card', label: 'Картой' },
 ];
 
+// The Ukrainian landing (/ua/) sends buyers here with ?lang=uk: the same
+// checkout in Ukrainian, card only (€ / $) — rubles don't apply there.
+type Lang = 'ru' | 'uk';
+const TEXT = {
+    ru: {
+        thanksTitle: 'Спасибо! Оплата прошла',
+        thanks1: 'В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой в личный кабинет, в Telegram-канал и чат курса.',
+        thanks2: 'Не видите письма через 10 минут — загляните в «Спам» и «Промоакции» или запросите ссылку ещё раз.',
+        sendLink: 'Прислать ссылку для входа',
+        badLink: 'Неверная ссылка на оплату. Проверьте URL или свяжитесь с автором.',
+        intro: 'Введите email, на который придёт доступ к курсу. Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.',
+        failed: 'Оплата не прошла. Чаще всего банк отклоняет карту — попробуйте через СБП или другой картой.',
+        notFound: 'Этот оффер не найден на стороне Lava. Свяжитесь с автором.',
+        invoiceFailed: 'Не удалось создать счёт. Попробуйте ещё раз.',
+        offline: 'Не удалось связаться с сервером. Проверьте интернет.',
+        currency: 'Валюта',
+        method: 'Способ оплаты',
+        sbpHint: 'Через приложение вашего банка — по QR-коду или ссылке',
+        creating: 'Создаём счёт…',
+        pay: 'Перейти к оплате',
+    },
+    uk: {
+        thanksTitle: 'Дякуємо! Оплата пройшла',
+        thanks1: 'Протягом кількох хвилин на вашу пошту прийде лист від Anna Romeo з посиланням в особистий кабінет, у Telegram-канал і чат курсу.',
+        thanks2: 'Не бачите листа за 10 хвилин — зазирніть у «Спам» і «Промоакції» або запросіть посилання ще раз.',
+        sendLink: 'Надіслати посилання для входу',
+        badLink: 'Неправильне посилання на оплату. Перевірте URL або зв’яжіться з авторкою.',
+        intro: 'Введіть email, на який прийде доступ до курсу. Одразу після оплати на цю пошту прийде лист із посиланням в особистий кабінет і в Telegram-чат курсу. Навчання проходить російською мовою.',
+        failed: 'Оплата не пройшла. Найчастіше банк відхиляє картку — спробуйте іншу картку.',
+        notFound: 'Цей тариф не знайдено на боці Lava. Зв’яжіться з авторкою.',
+        invoiceFailed: 'Не вдалося створити рахунок. Спробуйте ще раз.',
+        offline: 'Не вдалося зв’язатися із сервером. Перевірте інтернет.',
+        currency: 'Валюта',
+        method: 'Спосіб оплати',
+        sbpHint: '',
+        creating: 'Створюємо рахунок…',
+        pay: 'Перейти до оплати',
+    },
+} as const;
+// lava's product titles are Russian; on the Ukrainian checkout show these.
+const UK_TITLES: Record<string, string> = {
+    '4d14d633-0578-4ce8-8ad6-2d85bc3e0c49': 'Курс «Васту-дизайн» від Anna Romeo · тариф «Основний»',
+    'd6a1aacb-974b-411c-8cee-3d353a44c852': 'Курс «Васту-дизайн» від Anna Romeo · тариф «Наставництво»',
+    'ded0ec37-2888-4336-8e2d-38c49bab7df6': 'Курс «Васту-дизайн» від Anna Romeo · тариф «Основний» (ціна для учасниць майстер-класу)',
+};
+
+function useLang(): Lang {
+    const [searchParams] = useSearchParams();
+    const lang: Lang = searchParams.get('lang') === 'uk' ? 'uk' : 'ru';
+    useEffect(() => {
+        if (lang !== 'uk') return;
+        const prev = document.documentElement.lang;
+        document.documentElement.lang = 'uk';
+        return () => { document.documentElement.lang = prev; };
+    }, [lang]);
+    return lang;
+}
+
 // 55 000 ₽ · 599,50 € · 671 $ — Russian number style, sign after.
 function formatPrice(amount: number, currency: Currency) {
     const cents = amount % 1 !== 0 ? 2 : 0;
@@ -49,22 +107,18 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function BuyThanks() {
+    const t = TEXT[useLang()];
     return (
         <Shell>
             <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
-                <p className="text-vastu-gold font-serif text-2xl">Спасибо! Оплата прошла</p>
-                <p>
-                    В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой
-                    в личный кабинет, в Telegram-канал и чат курса.
-                </p>
-                <p className="text-vastu-light/60">
-                    Не видите письма через 10 минут — загляните в «Спам» и «Промоакции» или запросите ссылку ещё раз.
-                </p>
+                <p className="text-vastu-gold font-serif text-2xl">{t.thanksTitle}</p>
+                <p>{t.thanks1}</p>
+                <p className="text-vastu-light/60">{t.thanks2}</p>
                 <a
                     href="/forgot-password"
                     className="block w-full border border-vastu-gold/40 text-vastu-gold font-serif text-lg py-3 rounded-lg hover:bg-vastu-gold/10 transition-all"
                 >
-                    Прислать ссылку для входа
+                    {t.sendLink}
                 </a>
             </div>
         </Shell>
@@ -73,9 +127,13 @@ function BuyThanks() {
 
 function BuyForm({ offerId }: { offerId?: string }) {
     const [searchParams] = useSearchParams();
+    const lang = useLang();
+    const t = TEXT[lang];
+    // Ukraine: card in € or $ only.
+    const currencies = lang === 'uk' ? ALLOWED_CURRENCIES.filter((c) => c !== 'RUB') : ALLOWED_CURRENCIES;
     const paymentFailed = searchParams.get('failed') === '1';
     const queryCurrency = (searchParams.get('currency') || '').toUpperCase();
-    const initialCurrency: Currency = (ALLOWED_CURRENCIES as readonly string[]).includes(queryCurrency)
+    const initialCurrency: Currency = (currencies as readonly string[]).includes(queryCurrency)
         ? (queryCurrency as Currency)
         : 'EUR';
 
@@ -113,24 +171,20 @@ function BuyForm({ offerId }: { offerId?: string }) {
             const resp = await fetch('/api/lava/invoice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim(), offerId, currency, method })
+                body: JSON.stringify({ email: email.trim(), offerId, currency, method, ...(lang === 'uk' ? { lang } : {}) })
             });
             const data = await resp.json().catch(() => ({}));
 
             if (!resp.ok || !data?.paymentUrl) {
                 setSubmitting(false);
-                setError(
-                    resp.status === 404
-                        ? 'Этот оффер не найден на стороне Lava. Свяжитесь с автором.'
-                        : data?.error || 'Не удалось создать счёт. Попробуйте ещё раз.'
-                );
+                setError(resp.status === 404 ? t.notFound : data?.error || t.invoiceFailed);
                 return;
             }
 
             window.location.href = data.paymentUrl;
         } catch (err) {
             setSubmitting(false);
-            setError('Не удалось связаться с сервером. Проверьте интернет.');
+            setError(t.offline);
         }
     };
 
@@ -142,26 +196,23 @@ function BuyForm({ offerId }: { offerId?: string }) {
         <Shell>
             {!offerIsValid ? (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                    Неверная ссылка на оплату. Проверьте URL или свяжитесь с автором.
+                    {t.badLink}
                 </div>
             ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {offerInfo && (
                         <div className="text-center border-y border-vastu-gold/20 py-4">
-                            <p className="text-vastu-light font-serif text-lg leading-snug">{offerInfo.title}</p>
+                            <p className="text-vastu-light font-serif text-lg leading-snug">{(lang === 'uk' && offerId && UK_TITLES[offerId]) || offerInfo.title}</p>
                             {price != null && (
                                 <p className="text-vastu-gold font-serif text-2xl mt-2">{formatPrice(price, currency)}</p>
                             )}
                         </div>
                     )}
-                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
-                        Введите email, на который придёт доступ к курсу.
-                        Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.
-                    </p>
+                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">{t.intro}</p>
 
                     {paymentFailed && !error && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                            Оплата не прошла. Чаще всего банк отклоняет карту — попробуйте через СБП или другой картой.
+                            {t.failed}
                         </div>
                     )}
                     {error && (
@@ -184,9 +235,9 @@ function BuyForm({ offerId }: { offerId?: string }) {
                     </div>
 
                     <div>
-                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Валюта</label>
+                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">{t.currency}</label>
                         <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
-                            {ALLOWED_CURRENCIES.filter((c) => !offerInfo || offerInfo.prices[c] != null).map((c) => (
+                            {currencies.filter((c) => !offerInfo || offerInfo.prices[c] != null).map((c) => (
                                 <button type="button" key={c} onClick={() => setCurrency(c)} disabled={submitting} className={toggle(currency === c)}>
                                     {c}
                                 </button>
@@ -196,7 +247,7 @@ function BuyForm({ offerId }: { offerId?: string }) {
 
                     {currency === 'RUB' && (
                         <div>
-                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Способ оплаты</label>
+                            <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">{t.method}</label>
                             <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
                                 {METHODS.map((m) => (
                                     <button type="button" key={m.key} onClick={() => setMethod(m.key)} disabled={submitting} className={toggle(method === m.key)}>
@@ -205,7 +256,7 @@ function BuyForm({ offerId }: { offerId?: string }) {
                                 ))}
                             </div>
                             {method === 'sbp' && (
-                                <p className="text-vastu-light/50 text-xs mt-1.5 ml-1">Через приложение вашего банка — по QR-коду или ссылке</p>
+                                <p className="text-vastu-light/50 text-xs mt-1.5 ml-1">{t.sbpHint}</p>
                             )}
                         </div>
                     )}
@@ -215,7 +266,7 @@ function BuyForm({ offerId }: { offerId?: string }) {
                         disabled={submitting || !email}
                         className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
-                        {submitting ? 'Создаём счёт…' : 'Перейти к оплате'}
+                        {submitting ? t.creating : t.pay}
                     </button>
                 </form>
             )}

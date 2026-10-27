@@ -5,7 +5,8 @@ import { useParams } from 'react-router-dom';
 // «Покупка Частинами» (server: mono.js). The buyer approves the agreement in
 // the monobank app; this page waits for that and says what happened.
 // The service name and the legal block below are monobank's requirements
-// (knowledge-base/chast/marketing), not copy to rewrite.
+// (knowledge-base/chast/marketing), not copy to rewrite. The page is in
+// Ukrainian: every buyer here is a monobank client in Ukraine.
 
 type Plan = { title: string; uah: number; parts: number[] };
 type Stage = 'form' | 'waiting' | 'done' | 'failed';
@@ -14,13 +15,13 @@ const POLL_MS = 4000;
 const GIVE_UP_MS = 20 * 60 * 1000; // monobank cancels an unapproved order after 15 min
 
 function uah(n: number) {
-    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(n)} ₴`;
+    return `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(n)} ₴`;
 }
 
-// 3 платежа, 5 платежей
+// 3 платежі, 5 платежів
 function payments(n: number) {
     const tail = n % 100;
-    return n % 10 >= 2 && n % 10 <= 4 && (tail < 12 || tail > 14) ? `${n} платежа` : `${n} платежей`;
+    return n % 10 >= 2 && n % 10 <= 4 && (tail < 12 || tail > 14) ? `${n} платежі` : `${n} платежів`;
 }
 
 // Verbatim from monobank's product page — must be published wherever the
@@ -81,6 +82,12 @@ export default function MonoBuyPage() {
     const startedAt = useRef(0);
 
     useEffect(() => {
+        const prev = document.documentElement.lang;
+        document.documentElement.lang = 'uk';
+        return () => { document.documentElement.lang = prev; };
+    }, []);
+
+    useEffect(() => {
         let cancelled = false;
         fetch(`/api/mono/plan/${encodeURIComponent(planKey || '')}`)
             .then((r) => (r.ok ? r.json() : null))
@@ -105,10 +112,10 @@ export default function MonoBuyPage() {
                 const s = await r.json().catch(() => ({}));
                 if (stop) return;
                 if (s.granted || s.state === 'SUCCESS') { setStage('done'); return; }
-                if (s.state === 'FAIL') { setError(s.message || 'monobank не одобрил заявку.'); setStage('failed'); return; }
+                if (s.state === 'FAIL') { setError(s.message || 'monobank не схвалив заявку.'); setStage('failed'); return; }
             } catch { /* network blip: keep waiting */ }
             if (Date.now() - startedAt.current > GIVE_UP_MS) {
-                setError('Заявку так и не подтвердили в приложении. Если списание всё же прошло — доступ придёт на почту автоматически.');
+                setError('Заявку так і не підтвердили в застосунку. Якщо списання все ж відбулося — доступ прийде на пошту автоматично.');
                 setStage('failed');
                 return;
             }
@@ -132,7 +139,7 @@ export default function MonoBuyPage() {
             const data = await r.json().catch(() => ({}));
             setSubmitting(false);
             if (!r.ok || !data.orderId) {
-                setError(data.error || 'Не получилось создать заявку. Попробуйте ещё раз.');
+                setError(data.error || 'Не вдалося створити заявку. Спробуйте ще раз.');
                 return;
             }
             startedAt.current = Date.now();
@@ -140,18 +147,18 @@ export default function MonoBuyPage() {
             setStage('waiting');
         } catch {
             setSubmitting(false);
-            setError('Не удалось связаться с сервером. Проверьте интернет.');
+            setError('Не вдалося зв’язатися із сервером. Перевірте інтернет.');
         }
     };
 
     if (plan === undefined) {
-        return <Shell><p className="text-center text-vastu-light/60 text-sm">Загружаем тариф…</p></Shell>;
+        return <Shell><p className="text-center text-vastu-light/60 text-sm">Завантажуємо тариф…</p></Shell>;
     }
     if (plan === null) {
         return (
             <Shell>
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
-                    Этот тариф сейчас нельзя оформить через «Покупку Частинами». Вернитесь на страницу курса и выберите другой способ оплаты.
+                    Цей тариф зараз не можна оформити через «Покупку Частинами». Поверніться на сторінку курсу й оберіть інший спосіб оплати.
                 </div>
             </Shell>
         );
@@ -174,13 +181,13 @@ export default function MonoBuyPage() {
             <Shell>
                 {header}
                 <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
-                    <p className="text-vastu-gold font-serif text-2xl">Подтвердите в приложении monobank</p>
+                    <p className="text-vastu-gold font-serif text-2xl">Підтвердіть у застосунку monobank</p>
                     <p>
-                        Мы отправили заявку на номер <span className="text-vastu-light whitespace-nowrap">{phone}</span>.
-                        Откройте приложение monobank — там уже ждёт уведомление о «Покупке Частинами».
-                        Подтвердите его в течение 15 минут.
+                        Ми надіслали заявку на номер <span className="text-vastu-light whitespace-nowrap">{phone}</span>.
+                        Відкрийте застосунок monobank — там уже чекає сповіщення про «Покупку Частинами».
+                        Підтвердіть його протягом 15 хвилин.
                     </p>
-                    <p className="text-vastu-light/60">Эту страницу не закрывайте — она обновится сама.</p>
+                    <p className="text-vastu-light/60">Не закривайте цю сторінку — вона оновиться сама.</p>
                     <div className="flex justify-center pt-2" aria-hidden="true">
                         <div className="w-8 h-8 border-2 border-vastu-gold/30 border-t-vastu-gold rounded-full animate-spin" />
                     </div>
@@ -194,19 +201,19 @@ export default function MonoBuyPage() {
             <Shell>
                 {header}
                 <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
-                    <p className="text-vastu-gold font-serif text-2xl">Готово! Доступ открыт</p>
+                    <p className="text-vastu-gold font-serif text-2xl">Готово! Доступ відкрито</p>
                     <p>
-                        На <span className="text-vastu-light">{email.trim()}</span> уже идёт письмо от Anna Romeo
-                        со ссылкой в личный кабинет, в Telegram-канал и чат курса.
+                        На <span className="text-vastu-light">{email.trim()}</span> уже йде лист від Anna Romeo
+                        з посиланням в особистий кабінет, у Telegram-канал і чат курсу.
                     </p>
                     <p className="text-vastu-light/60">
-                        Не видите письма через 10 минут — загляните в «Спам» и «Промоакции» или запросите ссылку ещё раз.
+                        Не бачите листа за 10 хвилин — зазирніть у «Спам» і «Промоакції» або запросіть посилання ще раз.
                     </p>
                     <a
                         href="/forgot-password"
                         className="block w-full border border-vastu-gold/40 text-vastu-gold font-serif text-lg py-3 rounded-lg hover:bg-vastu-gold/10 transition-all"
                     >
-                        Прислать ссылку для входа
+                        Надіслати посилання для входу
                     </a>
                 </div>
             </Shell>
@@ -224,9 +231,9 @@ export default function MonoBuyPage() {
             {header}
             <form onSubmit={submit} className="space-y-6">
                 <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
-                    «Покупка Частинами monobank» — для клиентов monobank в Украине. Цена та же, что при оплате сразу.
-                    Первый платёж спишется, когда вы подтвердите заявку в приложении, и сразу после этого
-                    на почту придёт доступ к курсу.
+                    «Покупка Частинами monobank» — для клієнтів monobank в Україні. Ціна та сама, що й під час оплати одразу.
+                    Перший платіж спишеться, коли ви підтвердите заявку в застосунку, і одразу після цього
+                    на пошту прийде доступ до курсу. Навчання проходить російською мовою.
                 </p>
 
                 {error && (
@@ -236,19 +243,19 @@ export default function MonoBuyPage() {
                 )}
 
                 <div>
-                    <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Email для доступа</label>
+                    <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Email для доступу</label>
                     <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={input} placeholder="name@example.com" disabled={submitting} />
                 </div>
 
                 <div>
-                    <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Телефон в monobank</label>
+                    <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Телефон у monobank</label>
                     <input type="tel" required inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={input} placeholder="+380 67 123 45 67" disabled={submitting} />
-                    <p className="text-vastu-light/50 text-xs mt-1.5 ml-1">Номер, на который зарегистрировано приложение monobank</p>
+                    <p className="text-vastu-light/50 text-xs mt-1.5 ml-1">Номер, на який зареєстровано застосунок monobank</p>
                 </div>
 
                 {plan.parts.length > 1 && (
                     <div>
-                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Количество платежей</label>
+                        <label className="block text-xs uppercase tracking-wider text-vastu-gold/80 mb-1.5 ml-1">Кількість платежів</label>
                         <div className="flex gap-2 p-1 bg-black/20 rounded-lg">
                             {plan.parts.map((n) => (
                                 <button type="button" key={n} onClick={() => setParts(n)} disabled={submitting} className={toggle(parts === n)}>
@@ -264,7 +271,7 @@ export default function MonoBuyPage() {
                     disabled={submitting || !email || !parts}
                     className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                    {submitting ? 'Отправляем заявку…' : stage === 'failed' ? 'Попробовать ещё раз' : 'Оформить Покупку Частинами'}
+                    {submitting ? 'Надсилаємо заявку…' : stage === 'failed' ? 'Спробувати ще раз' : 'Оформити Покупку Частинами'}
                 </button>
             </form>
         </Shell>
