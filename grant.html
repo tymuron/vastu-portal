@@ -189,7 +189,10 @@
           : p.email_skipped_reason ? chip('y', 'повторная оплата, письмо не нужно')
           : p.source === 'manual' && p.status === 'granted' && !p.email_error ? chip('y', 'без письма')
           : chip('r', 'письмо не ушло');
-        var src = { webhook: 'вебхук', poll: 'сверка lava', manual: 'вручную' }[p.source] || p.source;
+        var id = String(p.contract_id || '');
+        var src = id.indexOf('gk-') === 0 ? 'GetCourse, заказ ' + id.slice(3)
+          : id.indexOf('mono-') === 0 ? 'monobank частями'
+          : { webhook: 'вебхук', poll: 'сверка lava', manual: 'вручную' }[p.source] || p.source;
         var err = p.error || p.email_error;
         return '<div class="row"><div class="top"><span class="mail">' + esc(p.email) + '</span>' +
           '<span class="meta">' + esc(when(p.created_at)) + '</span></div>' +

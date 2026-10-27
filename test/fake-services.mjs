@@ -3,6 +3,7 @@
 //                 insert, upsert-ignore, patch) over in-memory tables
 //   /auth/v1/*  — the GoTrue admin + user endpoints the server and SPA use
 //   /api/v1/invoices, /api/v2/products — lava.top (shapes as observed live)
+//   /mono/api/order/* — monobank «Покупка частинами» (signature checked)
 //   /emails     — Resend
 //   /__*        — test controls (seed, inspect, inject failures)
 // Good enough to run the real server.js and the real built SPA against it.
@@ -20,7 +21,7 @@ const UNIQUE = {
     lava_invoices: [['contract_id']],
 };
 
-export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
+export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId = 'mono-store', monoSignKey = 'mono-sign-key' } = {}) {
     const db = { courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [] };
     const users = new Map(); // id -> user
     const tokens = new Map(); // hashed_token -> { userId, type }
@@ -76,6 +77,10 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             case 'lte': return cmp(v, f.val) <= 0;
             case 'gt': return cmp(v, f.val) > 0;
             case 'gte': return cmp(v, f.val) >= 0;
+            case 'like': {
+                const re = new RegExp(`^${f.val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`);
+                return v != null && re.test(String(v));
+            }
             default: throw new Error(`fake postgrest: unsupported op ${f.op}`);
         }
     }
@@ -101,6 +106,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
     function withDefaults(table, row) {
         const r = { ...row };
         if (!('id' in r) && table !== 'purchases' && table !== 'lava_invoices') r.id = uuid();
+        if (table === 'lava_invoices') r.created_at ??= nowIso();
         if (table === 'purchases') {
             r.attempts ??= 0; r.email_attempts ??= 0; r.lava_ids ??= [];
             r.created_at ??= nowIso(); r.updated_at ??= nowIso();
@@ -290,6 +296,46 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
         return send(res, 200, { items: products, nextPage: null });
     }
 
+    // -------------------------------------------------------------- monobank
+    // What the buyer does in the app is up to the test: monoApprove / monoFail.
+    const monoOrders = new Map(); // order_id -> order
+    const monoSig = (raw) => crypto.createHmac('sha256', monoSignKey).update(raw, 'utf8').digest('base64');
+    function monoApi(req, res, p, raw, body) {
+        if (req.headers['store-id'] !== monoStoreId || req.headers['signature'] !== monoSig(raw)) {
+            return send(res, 401, { message: 'Signature is not valid' });
+        }
+        if (p === '/api/order/create' && req.method === 'POST') {
+            if (control.monoCreateFail) return send(res, 200, { state: 'FAIL', order_sub_state: control.monoCreateFail, message: 'fake refusal' });
+            const same = [...monoOrders.values()].find((o) => o.store_order_id === body.store_order_id);
+            if (same) return send(res, 201, { order_id: same.order_id });
+            const order = { order_id: uuid(), ...body, state: 'IN_PROCESS', order_sub_state: 'WAITING_FOR_CLIENT', confirms: 0 };
+            monoOrders.set(order.order_id, order);
+            return send(res, 201, { order_id: order.order_id });
+        }
+        const order = monoOrders.get(body?.order_id);
+        if (!order) return send(res, 404, { message: 'order not found' });
+        if (p === '/api/order/state') return send(res, 200, { order_id: order.order_id, state: order.state, order_sub_state: order.order_sub_state });
+        if (p === '/api/order/confirm') {
+            if (order.order_sub_state !== 'WAITING_FOR_STORE_CONFIRM') return send(res, 400, { message: `can't confirm in ${order.order_sub_state}` });
+            order.confirms += 1;
+            order.state = 'SUCCESS';
+            order.order_sub_state = 'ACTIVE';
+            return send(res, 200, { order_id: order.order_id, state: order.state, order_sub_state: order.order_sub_state });
+        }
+        if (p === '/api/order/reject') {
+            order.state = 'FAIL';
+            order.order_sub_state = 'REJECTED_BY_STORE';
+            return send(res, 200, { order_id: order.order_id, state: order.state, order_sub_state: order.order_sub_state });
+        }
+        return send(res, 404, { message: `fake mono: no route ${p}` });
+    }
+    // monobank's callback: signed JSON to the order's result_callback.
+    async function monoCallback(order, signature) {
+        const raw = JSON.stringify({ order_id: order.order_id, state: order.state, order_sub_state: order.order_sub_state });
+        const r = await fetch(order.result_callback, { method: 'POST', headers: { 'Content-Type': 'application/json', signature: signature ?? monoSig(raw) }, body: raw });
+        return r.status;
+    }
+
     // ---------------------------------------------------------------- resend
     function resend(req, res, body) {
         if (control.resendFailures > 0) {
@@ -303,7 +349,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
 
     // --------------------------------------------------------------- control
     const api = {
-        db, users, sent, invoices, products, control,
+        db, users, sent, invoices, products, control, monoOrders,
         createUser,
         seed(table, rows) { for (const r of rows) db[table].push(withDefaults(table, r)); },
         // A contract created through /buy: lava's invoice + our lava_invoices row.
@@ -311,6 +357,19 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             invoices.unshift({ id, type: 'ONE_TIME', datetime, status, receipt: { amount, currency, fee: 0 }, buyer: { email }, product: { name: 'x', offer: 'x' } });
             if (recorded && offerId) db.lava_invoices.push({ contract_id: id, offer_id: offerId, email, created_at: datetime });
             return id;
+        },
+        // The buyer approved in the monobank app. -> callback HTTP status, or null.
+        async monoApprove(orderId, { callback = true, signature } = {}) {
+            const o = monoOrders.get(orderId);
+            o.state = 'IN_PROCESS';
+            o.order_sub_state = 'WAITING_FOR_STORE_CONFIRM';
+            return callback ? monoCallback(o, signature) : null;
+        },
+        async monoFail(orderId, subState, { callback = true } = {}) {
+            const o = monoOrders.get(orderId);
+            o.state = 'FAIL';
+            o.order_sub_state = subState;
+            return callback ? monoCallback(o) : null;
         },
     };
 
@@ -337,6 +396,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key' } = {}) {
             const p = url.pathname;
             try {
                 if (p.startsWith('/rest/v1/')) return rest(req, res, p.slice('/rest/v1/'.length), url, body);
+                if (p.startsWith('/mono/')) return monoApi(req, res, p.slice('/mono'.length), raw, body);
                 if (p.startsWith('/auth/v1')) return auth(req, res, p.slice('/auth/v1'.length), url, body || {});
                 if (p === '/api/v1/invoices') return lavaInvoices(req, res, url);
                 if (p === '/api/v2/products') return lavaProducts(req, res);

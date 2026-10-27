@@ -33,3 +33,15 @@ services:
         sync: false
       - key: RECONCILE_SINCE
         sync: false
+      # GetCourse orders -> access (/api/getcourse/order?key=...)
+      - key: GETCOURSE_WEBHOOK_KEY
+        sync: false
+      # monobank «Покупка частинами» (mono.js)
+      - key: MONO_STORE_ID
+        sync: false
+      - key: MONO_SIGN_KEY
+        sync: false
+      - key: MONO_PRICES_UAH
+        sync: false
+      - key: MONO_PARTS
+        sync: false

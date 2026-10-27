@@ -95,6 +95,34 @@ export const GRANT_TIERS = [
     { key: 'vip', label: 'Васту для бизнеса · VIP', lavaId: '1daaffb0-e3aa-44a9-98f6-5e1a986a79b3' },
 ];
 
+// Which way the money came, from the contract id: purchases.source only says
+// webhook / poll / manual. GetCourse orders are `gk-<order number>`,
+// monobank installments `mono-<order id>` (mono.js), the rest are lava.
+export function channelOf(contractId, source) {
+    if (source === 'manual') return 'manual';
+    const id = String(contractId || '');
+    if (id.startsWith('gk-')) return 'getcourse';
+    if (id.startsWith('mono-')) return 'monobank';
+    return 'lava.top';
+}
+
+// GetCourse orders (Мила's pages, 26 Oct 2026, annaromeoschool.getcourse.ru):
+//   vastu-course_75   «Основной тариф» 75 000 ₽        -> design-base
+//   vastu-course_55   «Тариф МК» 55 000 ₽ (Основной)   -> design-base
+//   vastu-course_175  «VIP-тариф» 175 000 ₽            -> design-pro (Наставничество)
+// The process call names the tier outright (tier=design-base|design-pro);
+// without it the offer names from {object.positions} decide. Anything else
+// is left unmapped and alerts Tymur — never guessed.
+const GETCOURSE_TIER_KEYS = ['design-base', 'design-pro'];
+export function getcourseTier({ tier, positions }) {
+    const named = String(tier || '').trim().toLowerCase();
+    if (GETCOURSE_TIER_KEYS.includes(named)) return named;
+    const text = String(positions || '').toLowerCase();
+    if (/vip|вип|наставнич|175/.test(text)) return 'design-pro';
+    if (/основн|тариф мк|vastu-course_(?:55|75)/.test(text)) return 'design-base';
+    return null;
+}
+
 export function missingWelcomeLinks() {
     const missing = [];
     for (const [slug, cfg] of Object.entries(COURSE_WELCOME)) {
@@ -643,7 +671,7 @@ export function createFulfilment({
                         row.course_id,
                         computeExpiresAt(row),
                         contractId,
-                        source === 'manual' ? 'manual' : 'lava.top'
+                        channelOf(contractId, source)
                     );
                     if (err) throw new Error(`user_entitlements upsert failed: ${err.message}`);
                 }

@@ -13,9 +13,11 @@ import {
     TG_VIP_CHANNEL_URL,
     TG_VIP_CHAT_URL,
     createFulfilment,
+    getcourseTier,
     makeResendSender,
     normEmail,
 } from './fulfilment.js';
+import { createMono } from './mono.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,6 +55,18 @@ const RESEND_API_BASE = process.env.RESEND_API_BASE || 'https://api.resend.com';
 // annaromeo.design expired (2026-09-02): buyers got access but no email.
 // Anna doesn't need a real mailbox at hello@; Resend only uses the header.
 const RESEND_FROM = process.env.RESEND_FROM || 'Anna Romeo <hello@annaromeo.design>';
+
+// GetCourse orders (рассрочка в рублях): the `key` Мила's process puts in the
+// URL it calls. Unset = the endpoint refuses everything.
+const GETCOURSE_WEBHOOK_KEY = process.env.GETCOURSE_WEBHOOK_KEY;
+
+// monobank «Покупка частинами» (mono.js). Store id + sign key come from
+// monobank's activation letter; prices are hryvnias per plan.
+const MONO_STORE_ID = process.env.MONO_STORE_ID;
+const MONO_SIGN_KEY = process.env.MONO_SIGN_KEY;
+const MONO_API_BASE = process.env.MONO_API_BASE || 'https://u2.monobank.com.ua';
+const MONO_PRICES_UAH = process.env.MONO_PRICES_UAH;
+const MONO_PARTS = process.env.MONO_PARTS;
 
 // Lazy-init: only create the admin client when the webhook actually fires,
 // so the static server still boots if envs are missing in dev.
@@ -120,6 +134,32 @@ function readJsonBody(req) {
     });
 }
 
+function readRawBody(req) {
+    return new Promise((resolve, reject) => {
+        let size = 0;
+        const chunks = [];
+        req.on('data', (chunk) => {
+            size += chunk.length;
+            if (size > MAX_WEBHOOK_BODY_BYTES) {
+                const err = new Error('Payload too large');
+                err.code = 'PAYLOAD_TOO_LARGE';
+                reject(err);
+                req.destroy();
+                return;
+            }
+            chunks.push(chunk);
+        });
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', reject);
+    });
+}
+
+function secretMatches(given, expected) {
+    const a = Buffer.from(String(given || ''));
+    const b = Buffer.from(String(expected || ''));
+    return a.length === b.length && b.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
 function pickEventType(payload) {
     return payload?.eventType || payload?.event_type || payload?.event || null;
 }
@@ -168,6 +208,18 @@ const fulfilment = createFulfilment({
     lavaApiKey: LAVA_API_KEY,
     lavaBase: LAVA_API_BASE,
     reconcileSince: RECONCILE_SINCE
+});
+
+const mono = createMono({
+    storeId: MONO_STORE_ID,
+    signKey: MONO_SIGN_KEY,
+    base: MONO_API_BASE,
+    appUrl: APP_URL,
+    prices: MONO_PRICES_UAH,
+    parts: MONO_PARTS,
+    getSupabase: getSupabaseAdmin,
+    fulfil: fulfilment.fulfil,
+    alert: fulfilment.alert
 });
 
 async function handleLavaWebhook(req, res) {
@@ -406,6 +458,161 @@ async function handleCreateInvoice(req, res) {
         console.error('Lava invoice fetch threw:', err);
         sendJson(res, 502, { error: 'Failed to reach Lava' });
     }
+}
+
+// ---------------------------------------------------------------------------
+// GetCourse orders -> access («Рассрочка в рублях» on the landing goes to
+// Мила's GetCourse pages). Her process over paid orders calls, GET or POST
+// (form or JSON — "Вызвать URL"):
+//   /api/getcourse/order?key=<GETCOURSE_WEBHOOK_KEY>&tier=design-base
+//     &email={object.user.email}&order={object.number}
+//     &positions={object.positions}&cost={object.cost_money_value}&paid={object.payed_money}
+// The order number is the contract id (gk-<number>), so a process that fires
+// on «частично оплачен» and again on «завершён» grants and emails once.
+// &dry=1 answers with what it understood and grants nothing.
+// ---------------------------------------------------------------------------
+
+// "75 000 руб." / "75000.00" / "0 руб." -> number; "" -> null
+function moneyOf(v) {
+    const s = String(v ?? '').replace(/[^\d.,]/g, '').replace(',', '.');
+    if (!s || !/\d/.test(s)) return null;
+    const n = Number.parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+}
+
+function parseLooseBody(raw, contentType) {
+    if (!raw) return {};
+    if (String(contentType || '').includes('json') || /^\s*\{/.test(raw)) {
+        try {
+            const o = JSON.parse(raw);
+            return o && typeof o === 'object' ? o : {};
+        } catch {
+            return {};
+        }
+    }
+    return Object.fromEntries(new URLSearchParams(raw));
+}
+
+async function handleGetcourseOrder(req, res) {
+    if (!GETCOURSE_WEBHOOK_KEY) {
+        sendJson(res, 500, { error: 'GetCourse webhook not configured' });
+        return;
+    }
+    const params = Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+    if (req.method === 'POST') {
+        try {
+            Object.assign(params, parseLooseBody(await readRawBody(req), req.headers['content-type']));
+        } catch {
+            sendJson(res, 400, { error: 'Bad body' });
+            return;
+        }
+    }
+    if (!secretMatches(params.key, GETCOURSE_WEBHOOK_KEY)) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+    const { key, ...seen } = params;
+
+    // GetCourse may not URL-encode what it substitutes: a "+" in an address
+    // then arrives as a space.
+    const email = normEmail(params.email).replace(/ /g, '+');
+    const order = String(params.order || params.number || '').trim();
+    const positions = String(params.positions || '').trim();
+    if (!order || /\{object\./.test(email + order) || !EMAIL_RE.test(email)) {
+        await fulfilment.alert('GetCourse прислал заказ без номера или почты', seen);
+        sendJson(res, 400, { error: 'need email and order (are the {object.…} variables spelled right?)' });
+        return;
+    }
+    const paid = moneyOf(params.paid);
+    if (paid === 0) {
+        sendJson(res, 200, { ignored: true, reason: 'nothing paid yet' });
+        return;
+    }
+
+    const tierKey = getcourseTier({ tier: params.tier, positions });
+    const tier = GRANT_TIERS.find((t) => t.key === tierKey);
+    const contractId = `gk-${order}`;
+    // The tier's lava id maps to courses; the GetCourse names ride along so an
+    // unmapped order says what it was.
+    const lavaIds = [tier?.lavaId, `getcourse:${positions || params.offers || '—'}`].filter(Boolean);
+    const amount = moneyOf(params.cost) ?? paid;
+
+    if (params.dry === '1') {
+        sendJson(res, 200, { dryRun: true, contractId, email, tier: tierKey, amount, paid, seen });
+        return;
+    }
+
+    try {
+        const result = await fulfilment.fulfil({ contractId, email, lavaIds, source: 'webhook', amount, currency: 'RUB' });
+        if (result.status !== 'granted') {
+            // unmapped / bad email: recorded and alerted; a retry can't help.
+            sendJson(res, 200, { granted: false, reason: result.error || result.status });
+            return;
+        }
+        sendJson(res, 200, {
+            granted: true,
+            tier: tierKey,
+            courses: result.courseSlugs,
+            email_sent: !!result.email?.sent || !!result.already
+        });
+    } catch (err) {
+        // Recorded as an error and retried by the reconcile timer.
+        console.error('GetCourse order failed:', err);
+        sendJson(res, 500, { error: err?.message || 'Internal error' });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// monobank «Покупка частинами» (mono.js): /buy/mono/<plan> in the SPA asks
+// /api/mono/plan/<plan>, creates the order, then polls its state.
+// ---------------------------------------------------------------------------
+
+async function handleMonoCreate(req, res) {
+    let payload;
+    try {
+        payload = await readJsonBody(req);
+    } catch {
+        sendJson(res, 400, { error: 'Bad body' });
+        return;
+    }
+    // Every order pushes a request into somebody's monobank app — keep this
+    // from being used to spam phones.
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const phoneKey = String(payload?.phone || '').replace(/\D/g, '').slice(-9);
+    if (rateLimited(`mono-i:${ip}`, 6, 15 * 60 * 1000) || rateLimited(`mono-p:${phoneKey}`, 3, 15 * 60 * 1000)) {
+        sendJson(res, 429, { error: 'Слишком много заявок. Подождите 15 минут.' });
+        return;
+    }
+    try {
+        const r = await mono.createOrder({
+            planKey: String(payload?.plan || ''),
+            email: payload?.email,
+            phone: payload?.phone,
+            parts: payload?.parts
+        });
+        if (r.error) {
+            sendJson(res, r.status || 400, { error: r.error });
+            return;
+        }
+        sendJson(res, 200, { orderId: r.orderId });
+    } catch (err) {
+        console.error('monobank create failed:', err?.message || err);
+        await fulfilment.alert('monobank: не удалось создать заявку', String(err?.message || err));
+        sendJson(res, 502, { error: 'monobank сейчас не отвечает. Попробуйте через пару минут.' });
+    }
+}
+
+async function handleMonoCallback(req, res) {
+    let raw;
+    try {
+        raw = await readRawBody(req);
+    } catch {
+        sendJson(res, 400, { error: 'Bad body' });
+        return;
+    }
+    console.log('monobank callback:', raw.slice(0, 500));
+    const r = await mono.handleCallback(raw, req.headers['signature']);
+    sendJson(res, r.status, r.result || {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1084,7 +1291,14 @@ const server = http.createServer((req, res) => {
 
     if (req.method === 'GET' && urlPath === '/api/admin/status') {
         if (!checkCronSecret(req, res)) return;
-        sendJson(res, 200, fulfilment.status());
+        sendJson(res, 200, {
+            ...fulfilment.status(),
+            getcourse: { enabled: !!GETCOURSE_WEBHOOK_KEY },
+            monobank: {
+                enabled: mono.configured,
+                plans: ['design-base', 'design-base-mk', 'design-pro'].map((k) => ({ plan: k, uah: mono.plan(k)?.uah ?? null })),
+            },
+        });
         return;
     }
 
@@ -1109,6 +1323,60 @@ const server = http.createServer((req, res) => {
         if (!checkCronSecret(req, res)) return;
         const dryRun = /(?:^|[?&])dryRun=1(?:&|$)/.test(req.url.split('?')[1] || '');
         fulfilment.reconcile({ dryRun }).then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    // GetCourse paid order -> access (Мила's "Вызвать URL").
+    if ((req.method === 'GET' || req.method === 'POST') && urlPath === '/api/getcourse/order') {
+        handleGetcourseOrder(req, res).catch((err) => {
+            console.error('handleGetcourseOrder threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    // monobank «Покупка частинами»: plan for the page, new order, order
+    // state (also confirms + grants once approved), monobank's callback.
+    const monoPlanMatch = req.method === 'GET' && urlPath.match(/^\/api\/mono\/plan\/([a-z0-9-]{1,40})$/);
+    if (monoPlanMatch) {
+        const p = mono.configured ? mono.plan(monoPlanMatch[1]) : null;
+        if (!p) sendJson(res, 404, { error: 'not for sale in parts' });
+        else sendJson(res, 200, { title: p.title, uah: p.uah, parts: p.parts });
+        return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/mono/order') {
+        handleMonoCreate(req, res).catch((err) => {
+            console.error('handleMonoCreate threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+    const monoOrderMatch = req.method === 'GET' && urlPath.match(/^\/api\/mono\/order\/([A-Za-z0-9-]{8,64})$/);
+    if (monoOrderMatch) {
+        mono.settle(monoOrderMatch[1], 'page').then(
+            (r) => sendJson(res, r.state === 'UNKNOWN' ? 404 : 200, r),
+            (err) => {
+                console.error('monobank state failed:', err?.message || err);
+                sendJson(res, 200, { state: 'IN_PROCESS', retry: true });
+            }
+        );
+        return;
+    }
+    if (req.method === 'POST' && urlPath === '/api/mono/callback') {
+        handleMonoCallback(req, res).catch((err) => {
+            console.error('handleMonoCallback threw:', err);
+            sendJson(res, 200, {});
+        });
+        return;
+    }
+
+    // monobank sweep on demand (it also runs on the reconcile timer).
+    if (req.method === 'POST' && urlPath === '/api/cron/mono-sweep') {
+        if (!checkCronSecret(req, res)) return;
+        mono.sweep().then(
             (r) => sendJson(res, 200, r),
             (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
         );
@@ -1307,4 +1575,17 @@ if (RECONCILE_SINCE && LAVA_API_KEY && SUPABASE_SERVICE_ROLE_KEY) {
     setInterval(runReconcile, Math.max(1, RECONCILE_INTERVAL_MIN) * 60 * 1000);
 } else {
     console.warn('lava.top sales poll is OFF (needs RECONCILE_SINCE, LAVA_API_KEY, SUPABASE_SERVICE_ROLE_KEY)');
+}
+
+// monobank orders whose callback never came and whose buyer closed the page.
+if (mono.configured && SUPABASE_SERVICE_ROLE_KEY) {
+    const runSweep = () =>
+        mono.sweep().then(
+            (r) => {
+                if (r.granted?.length || r.errors?.length) console.log('monobank sweep:', JSON.stringify(r));
+            },
+            (err) => console.error('monobank sweep threw:', err)
+        );
+    setTimeout(runSweep, 30 * 1000);
+    setInterval(runSweep, Math.max(1, RECONCILE_INTERVAL_MIN) * 60 * 1000);
 }

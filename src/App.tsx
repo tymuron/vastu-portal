@@ -24,6 +24,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import UpdatePasswordPage from './pages/UpdatePasswordPage';
 import WelcomePage from './pages/WelcomePage';
 import BuyPage from './pages/BuyPage';
+import MonoBuyPage from './pages/MonoBuyPage';
 import InstallApp from './pages/InstallApp';
 
 function App() {
@@ -63,6 +64,7 @@ function App() {
                     <Route path="/update-password" element={<UpdatePasswordPage />} />
                     <Route path="/welcome" element={<WelcomePage />} />
                     <Route path="/buy/:offerId" element={<BuyPage />} />
+                    <Route path="/buy/mono/:plan" element={<MonoBuyPage />} />
 
                     {/* Student Routes */}
                     <Route path="/student" element={<CourseProvider><StudentLayout /></CourseProvider>}>

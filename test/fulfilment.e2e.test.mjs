@@ -2,8 +2,8 @@
 // and Resend (test/fake-services.mjs). Run: npm test
 //
 // Covers every way a buyer reaches the platform — webhook, the lava invoice
-// poll, manual /grant — plus installments, the access link, "send me my link",
-// retries and alerts. course_offers rows mirror
+// poll, manual /grant, GetCourse orders, monobank «Покупка частинами» — plus
+// installments, the access link, "send me my link", retries and alerts. course_offers rows mirror
 // supabase/migrations/20261023_purchase_fulfilment.sql.
 
 import test from 'node:test';
@@ -31,7 +31,7 @@ const BIZ_PRODUCT = '11111111-2222-3333-4444-555555555555';
 const BIZ_VIP_OFFER = '1daaffb0-e3aa-44a9-98f6-5e1a986a79b3';
 const BIZ_STD_OFFER = 'caa3c132-dca3-438d-b424-eafff3dd3033';
 const ALERTS = 'alerts@example.com';
-const SECRET = { cron: 'cron-secret', hook: 'hook-key', access: 'access-secret' };
+const SECRET = { cron: 'cron-secret', hook: 'hook-key', access: 'access-secret', gk: 'gk-key', monoStore: 'mono-store', monoSign: 'mono-sign-key' };
 
 let fake, serverProc, app, fakeUrl;
 
@@ -45,7 +45,7 @@ async function waitFor(fn, ms = 8000) {
 }
 
 test.before(async () => {
-    fake = createFakeServices({ lavaApiKey: 'lava-key' });
+    fake = createFakeServices({ lavaApiKey: 'lava-key', monoStoreId: SECRET.monoStore, monoSignKey: SECRET.monoSign });
     const fakePort = await fake.listen();
     fakeUrl = `http://127.0.0.1:${fakePort}`;
 
@@ -90,6 +90,12 @@ test.before(async () => {
             ALERT_EMAIL: ALERTS,
             RECONCILE_SINCE: '2026-10-20T00:00:00Z',
             RECONCILE_INTERVAL_MIN: '600',
+            GETCOURSE_WEBHOOK_KEY: SECRET.gk,
+            MONO_STORE_ID: SECRET.monoStore,
+            MONO_SIGN_KEY: SECRET.monoSign,
+            MONO_API_BASE: `${fakeUrl}/mono`,
+            MONO_PRICES_UAH: 'design-base=38000, design-pro=88000',
+            MONO_PARTS: '3,4,6',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -488,4 +494,166 @@ test('admin purchases list + retry re-sends; status reports missing Telegram lin
 
 test('the access token never shows up in the server log', () => {
     assert.doesNotMatch(serverProc.output, /\/access\?t=/);
+});
+
+// ------------------------------------------------------------- GetCourse
+
+const gk = (params, { method = 'GET', key = SECRET.gk, form = false } = {}) => {
+    const q = new URLSearchParams({ key, ...params });
+    if (method === 'GET') return fetch(`${app}/api/getcourse/order?${q}`);
+    return fetch(`${app}/api/getcourse/order`, form
+        ? { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: q.toString() }
+        : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, ...params }) });
+};
+const entitlementSource = (email) => {
+    const u = [...fake.users.values()].find((x) => x.email === email);
+    return fake.db.user_entitlements.filter((e) => e.user_id === u.id).map((e) => e.source);
+};
+
+test('GetCourse paid order: Основной for 6 months, one welcome email, logged as gk-<order>', async () => {
+    const r = await gk({ tier: 'design-base', email: 'GK.Buyer@mail.ru', order: '1001', positions: 'Основной тариф', cost: '75000', paid: '18 750 руб.' });
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.equal(body.granted, true);
+    assert.deepEqual(body.courses, ['vastu-design-2026']);
+    assert.deepEqual(entitlements('gk.buyer@mail.ru'), [{ slug: 'vastu-design-2026', expires_at: '2027-05-09T00:00:00.000Z' }]);
+    assert.deepEqual(entitlementSource('gk.buyer@mail.ru'), ['getcourse']);
+    const p = purchase('gk-1001');
+    assert.equal(p.status, 'granted');
+    assert.equal(p.amount, 75000);
+    assert.equal(p.currency, 'RUB');
+    assert.equal(mailsTo('gk.buyer@mail.ru').length, 1);
+    assert.equal(mailsTo('gk.buyer@mail.ru')[0].subject, 'Добро пожаловать на курс «Васту-дизайн»');
+
+    // The process fires again when the order is fully paid: nothing new.
+    const again = await gk({ tier: 'design-base', email: 'gk.buyer@mail.ru', order: '1001', paid: '75000' });
+    assert.equal(again.status, 200);
+    assert.equal(mailsTo('gk.buyer@mail.ru').length, 1);
+});
+
+test('GetCourse without a tier: the offer name decides (VIP-тариф = Наставничество), POST form or JSON', async () => {
+    const r = await gk({ email: 'gk-vip@example.com', order: '1002', positions: 'VIP-тариф', cost: '175000' }, { method: 'POST', form: true });
+    assert.equal(r.status, 200);
+    assert.deepEqual(entitlements('gk-vip@example.com').map((e) => [e.slug, e.expires_at]), [
+        ['vastu-design-2026', '2027-11-09T00:00:00.000Z'],
+        ['vastu-design-2026-pro', '2027-11-09T00:00:00.000Z'],
+    ]);
+    assert.match(mailsTo('gk-vip@example.com')[0].html, /тариф «Наставничество»/);
+
+    const mk = await gk({ email: 'gk-mk@example.com', order: '1003', positions: 'Тариф МК' }, { method: 'POST' });
+    assert.equal(mk.status, 200);
+    assert.deepEqual(entitlements('gk-mk@example.com').map((e) => e.slug), ['vastu-design-2026']);
+});
+
+test('GetCourse: wrong key, unpaid order, unfilled variables, unknown offer, a "+" lost in the URL, dry run', async () => {
+    assert.equal((await gk({ email: 'x@example.com', order: '1' }, { key: 'nope' })).status, 401);
+
+    const unpaid = await gk({ tier: 'design-base', email: 'gk-unpaid@example.com', order: '1004', paid: '0 руб.' });
+    assert.equal((await unpaid.json()).ignored, true);
+    assert.equal(purchase('gk-1004'), undefined);
+    assert.deepEqual(entitlements('gk-unpaid@example.com'), []);
+
+    const alertsBefore = mailsTo(ALERTS).length;
+    const raw = await gk({ email: '{object.user.email}', order: '{object.number}' });
+    assert.equal(raw.status, 400);
+
+    const odd = await gk({ email: 'gk-odd@example.com', order: '1005', positions: 'Марафон по цвету' });
+    assert.equal((await odd.json()).granted, false);
+    assert.equal(purchase('gk-1005').status, 'unmapped');
+    assert.deepEqual(entitlements('gk-odd@example.com'), []);
+    assert.ok(mailsTo(ALERTS).length >= alertsBefore + 2, 'Tymur hears about both');
+
+    // GetCourse may not encode what it substitutes: "a+b@x" arrives as "a b@x".
+    await fetch(`${app}/api/getcourse/order?key=${SECRET.gk}&tier=design-base&order=1006&email=anna+gk@example.com`);
+    assert.deepEqual(entitlements('anna+gk@example.com').map((e) => e.slug), ['vastu-design-2026']);
+
+    const dry = await (await gk({ email: 'gk-dry@example.com', order: '1007', positions: 'Основной тариф', dry: '1' })).json();
+    assert.equal(dry.dryRun, true);
+    assert.equal(dry.tier, 'design-base');
+    assert.equal(purchase('gk-1007'), undefined);
+});
+
+// -------------------------------------------------------------- monobank
+
+const monoOrder = (body) =>
+    fetch(`${app}/api/mono/order`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(body) });
+const monoState = (id) => fetch(`${app}/api/mono/order/${id}`).then((r) => r.json());
+
+test('monobank plan: price and payment counts for the page; unpriced plans are not for sale', async () => {
+    const r = await fetch(`${app}/api/mono/plan/design-base`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { title: '«Васту-дизайн» · тариф «Основной»', uah: 38000, parts: [3, 4, 6] });
+    assert.equal((await fetch(`${app}/api/mono/plan/design-base-mk`)).status, 404, 'no MK price set');
+    assert.equal((await fetch(`${app}/api/mono/plan/nonsense`)).status, 404);
+});
+
+test('monobank: order -> approved in the app -> callback -> confirmed once -> access + email', async () => {
+    const bad = await monoOrder({ plan: 'design-base', email: 'mono@example.com', phone: '12345', parts: 4 });
+    assert.equal(bad.status, 400);
+    assert.equal((await monoOrder({ plan: 'design-base', email: 'mono@example.com', phone: '0671234567', parts: 5 })).status, 400, 'only the configured counts');
+
+    const r = await monoOrder({ plan: 'design-base', email: ' Mono@Example.com ', phone: '+38 (067) 123-45-67', parts: 4 });
+    assert.equal(r.status, 200);
+    const { orderId } = await r.json();
+    const o = fake.monoOrders.get(orderId);
+    assert.equal(o.client_phone, '+380671234567');
+    assert.equal(o.total_sum, 38000);
+    assert.deepEqual(o.available_programs, [{ type: 'payment_installments', available_parts_count: [4] }]);
+    assert.deepEqual(o.products, [{ name: '«Васту-дизайн» · тариф «Основной»', count: 1, sum: 38000 }]);
+    assert.equal(o.invoice.source, 'INTERNET');
+    assert.equal(o.result_callback, `${app}/api/mono/callback`);
+
+    // The page polls while the buyer hasn't answered yet.
+    assert.equal((await monoState(orderId)).state, 'IN_PROCESS');
+    assert.deepEqual(entitlements('mono@example.com'), []);
+
+    assert.equal(await fake.monoApprove(orderId), 200);
+    assert.equal(o.confirms, 1);
+    assert.equal(o.order_sub_state, 'ACTIVE');
+    assert.deepEqual(entitlements('mono@example.com'), [{ slug: 'vastu-design-2026', expires_at: '2027-05-09T00:00:00.000Z' }]);
+    assert.deepEqual(entitlementSource('mono@example.com'), ['monobank']);
+    assert.equal(purchase(`mono-${orderId}`).status, 'granted');
+    assert.equal(purchase(`mono-${orderId}`).currency, 'UAH');
+
+    const s = await monoState(orderId);
+    assert.equal(s.granted, true);
+    assert.equal(mailsTo('mono@example.com').length, 1);
+    assert.equal(o.confirms, 1, 'never confirmed twice');
+});
+
+test('monobank: a forged callback is refused; the page poll alone confirms and grants', async () => {
+    const { orderId } = await (await monoOrder({ plan: 'design-pro', email: 'mono-pro@example.com', phone: '380501112233', parts: 6 })).json();
+    assert.equal(await fake.monoApprove(orderId, { signature: 'forged' }), 401);
+    assert.equal(fake.monoOrders.get(orderId).confirms, 0);
+
+    const s = await monoState(orderId);
+    assert.equal(s.state, 'SUCCESS');
+    assert.equal(s.granted, true);
+    assert.deepEqual(entitlements('mono-pro@example.com').map((e) => e.slug), ['vastu-design-2026', 'vastu-design-2026-pro']);
+});
+
+test('monobank: approved but no callback and the tab closed — the sweep grants it', async () => {
+    const { orderId } = await (await monoOrder({ plan: 'design-base', email: 'mono-sweep@example.com', phone: '0931234567', parts: 3 })).json();
+    await fake.monoApprove(orderId, { callback: false });
+    const run = await (await admin('POST', '/api/cron/mono-sweep')).json();
+    assert.ok(run.granted.includes(`mono-${orderId}`));
+    assert.equal(mailsTo('mono-sweep@example.com').length, 1);
+    const again = await (await admin('POST', '/api/cron/mono-sweep')).json();
+    assert.ok(!again.granted.includes(`mono-${orderId}`));
+});
+
+test('monobank says no: the buyer reads why, nothing is granted; a refused setup alerts Tymur', async () => {
+    const { orderId } = await (await monoOrder({ plan: 'design-base', email: 'mono-limit@example.com', phone: '0661234567', parts: 4 })).json();
+    await fake.monoFail(orderId, 'EXCEEDED_SUM_LIMIT');
+    const s = await monoState(orderId);
+    assert.equal(s.state, 'FAIL');
+    assert.match(s.message, /лимит/);
+    assert.deepEqual(entitlements('mono-limit@example.com'), []);
+
+    const alertsBefore = mailsTo(ALERTS).length;
+    fake.control.monoCreateFail = 'PAY_PARTS_ARE_NOT_ACCEPTABLE';
+    const r = await monoOrder({ plan: 'design-base', email: 'mono-parts@example.com', phone: '0671112233', parts: 6 });
+    fake.control.monoCreateFail = null;
+    assert.equal(r.status, 402);
+    assert.ok(mailsTo(ALERTS).length > alertsBefore);
 });
