@@ -38,12 +38,15 @@ export const MONO_PLANS = {
     'design-base': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний»' },
     'design-base-mk': { tier: 'design-base', title: '«Васту-дизайн» · тариф «Основний» для учасниць майстер-класу' },
     'design-pro': { tier: 'design-pro', title: '«Васту-дизайн» · тариф «Наставництво»' },
-    // Hidden 2-hryvnia order to test the whole chain with a real monobank
-    // client before selling (monobank: the store can't buy from itself — ask
-    // someone close). Approved and confirmed like a sale, but it grants no
-    // access; Tymur gets an email that it passed. Cancel it afterwards in
-    // web.monobank.ua. Linked from nowhere.
-    test: { tier: null, title: 'Тестове замовлення (перевірка інтеграції)', uah: 2 },
+    // Hidden order to test the whole chain with a real monobank client before
+    // selling. The buyer must NOT be the store's owner — monobank answers an
+    // owner's own order with FAIL/FAIL within 2 s (27 Oct: four attempts by
+    // Роман, 2 ₴ in 6 parts, all refused). Approved and confirmed like a
+    // sale, but it grants no access; Tymur gets an email that it passed.
+    // Cancel it afterwards in web.monobank.ua. Linked from nowhere.
+    // 10 ₴, not monobank's suggested 2 ₴: 2 ₴ in 6 parts is 33 kopecks each.
+    // MONO_PRICES_UAH "test=…" overrides.
+    test: { tier: null, title: 'Тестове замовлення (перевірка інтеграції)', uah: 10 },
 };
 // lava_invoices.offer_id of a test order (the column is NOT NULL).
 const TEST_OFFER = 'mono-test';
@@ -122,7 +125,7 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
     function plan(key) {
         const p = Object.hasOwn(MONO_PLANS, key) ? MONO_PLANS[key] : null;
         if (!p) return null;
-        if (!p.tier) return { key, title: p.title, uah: p.uah, parts: partsList, lavaId: null, test: true };
+        if (!p.tier) return { key, title: p.title, uah: priceOf[key] || p.uah, parts: partsList, lavaId: null, test: true };
         const tier = GRANT_TIERS.find((t) => t.key === p.tier);
         if (!tier || !priceOf[key]) return null;
         return { key, title: p.title, uah: priceOf[key], parts: partsList, lavaId: tier.lavaId };

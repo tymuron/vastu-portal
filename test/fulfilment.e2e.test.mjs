@@ -653,13 +653,13 @@ test('monobank: approved but no callback and the tab closed — the sweep grants
     assert.ok(!again.granted.includes(`mono-${orderId}`));
 });
 
-test('monobank test order: 2 ₴, approved and confirmed, grants nothing, Tymur hears it passed', async () => {
+test('monobank test order: 10 ₴, approved and confirmed, grants nothing, Tymur hears it passed', async () => {
     const plan = await (await fetch(`${app}/api/mono/plan/test`)).json();
-    assert.equal(plan.uah, 2);
+    assert.equal(plan.uah, 10);
     const alertsBefore = mailsTo(ALERTS).length;
     const { orderId } = await (await monoOrder({ plan: 'test', email: 'tester@example.com', phone: '0671234500', parts: 3 })).json();
     const o = fake.monoOrders.get(orderId);
-    assert.equal(o.total_sum, 2);
+    assert.equal(o.total_sum, 10);
     assert.equal(await fake.monoApprove(orderId), 200);
     assert.equal(o.confirms, 1, 'confirmed like a sale');
     assert.deepEqual(entitlements('tester@example.com'), [], 'no course access');
