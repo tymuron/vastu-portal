@@ -54,7 +54,7 @@ const RESEND_API_BASE = process.env.RESEND_API_BASE || 'https://api.resend.com';
 // (DKIM/SPF in DNS) or every send fails with 403 — that happened when
 // annaromeo.design expired (2026-09-02): buyers got access but no email.
 // Anna doesn't need a real mailbox at hello@; Resend only uses the header.
-const RESEND_FROM = process.env.RESEND_FROM || 'Anna Romeo <hello@annaromeo.design>';
+const RESEND_FROM = process.env.RESEND_FROM || 'Anna Romeo <hello@annaromeovastu.com>';
 
 // GetCourse orders (рассрочка в рублях): the `key` Мила's process puts in the
 // URL it calls. Unset = the endpoint refuses everything.
