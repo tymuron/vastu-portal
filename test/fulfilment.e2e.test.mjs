@@ -504,7 +504,8 @@ test('admin purchases list + retry re-sends; status reports missing Telegram lin
 });
 
 test('the access token never shows up in the server log', () => {
-    assert.doesNotMatch(serverProc.output, /\/access\?t=/);
+    assert.match(serverProc.output, /\/access\?t=…/);
+    assert.doesNotMatch(serverProc.output, /\/access\?t=(?!…)/);
 });
 
 // ------------------------------------------------------------- GetCourse
@@ -559,10 +560,21 @@ test('GetCourse without a tier: the offer name decides (VIP-тариф = Нас�
 test('GetCourse: wrong key, unpaid order, unfilled variables, unknown offer, a "+" lost in the URL, dry run', async () => {
     assert.equal((await gk({ email: 'x@example.com', order: '1' }, { key: 'nope' })).status, 401);
 
+    // A signed installment still in its cooling-off period: nothing granted,
+    // and since GetCourse won't send the order again once it's paid, Tymur
+    // hears about it (a dry run tells nobody).
+    const beforeUnpaid = mailsTo(ALERTS).length;
     const unpaid = await gk({ tier: 'design-base', email: 'gk-unpaid@example.com', order: '1004', paid: '0 руб.' });
     assert.equal((await unpaid.json()).ignored, true);
     assert.equal(purchase('gk-1004'), undefined);
     assert.deepEqual(entitlements('gk-unpaid@example.com'), []);
+    const unpaidAlerts = mailsTo(ALERTS).slice(beforeUnpaid);
+    assert.equal(unpaidAlerts.length, 1);
+    assert.match(unpaidAlerts[0].subject, /заказ #1004 пришёл без оплаты/);
+    assert.match(unpaidAlerts[0].text, /gk-unpaid@example\.com/);
+    assert.match(unpaidAlerts[0].text, /Васту-дизайн · Основной/);
+    await gk({ positions: 'Тариф МК', email: 'gk-unpaid@example.com', order: '1008', paid: '0', dry: '1' });
+    assert.equal(mailsTo(ALERTS).length, beforeUnpaid + 1);
 
     const alertsBefore = mailsTo(ALERTS).length;
     const raw = await gk({ email: '{object.user.email}', order: '{object.number}' });
@@ -582,6 +594,15 @@ test('GetCourse: wrong key, unpaid order, unfilled variables, unknown offer, a "
     assert.equal(dry.dryRun, true);
     assert.equal(dry.tier, 'design-base');
     assert.equal(purchase('gk-1007'), undefined);
+});
+
+test('the GetCourse key and recovery tokens never show up in the server log', async () => {
+    await fetch(`${app}/update-password?token_hash=recovery-secret-123&type=recovery`);
+    await new Promise((r) => setTimeout(r, 100));
+    assert.match(serverProc.output, /Request: GET \/update-password\?token_hash=…&type=recovery/);
+    assert.ok(!serverProc.output.includes('recovery-secret-123'), 'recovery token');
+    assert.match(serverProc.output, /\/api\/getcourse\/order\?key=…/);
+    assert.ok(!serverProc.output.includes(SECRET.gk), 'GetCourse key');
 });
 
 // -------------------------------------------------------------- monobank

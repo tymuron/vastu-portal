@@ -471,6 +471,9 @@ async function handleCreateInvoice(req, res) {
 //     &positions={object.positions}&cost={object.cost_money_value}&paid={object.payed_money}
 // The order number is the contract id (gk-<number>), so a process that fires
 // on «частично оплачен» and again on «завершён» grants and emails once.
+// The process's rule must count only payments that arrived («Есть платеж»
+// with статус «Получен»): it runs once per order, so an order sent while its
+// payment is still pending never comes back.
 // &dry=1 answers with what it understood and grants nothing.
 // ---------------------------------------------------------------------------
 
@@ -525,14 +528,30 @@ async function handleGetcourseOrder(req, res) {
         sendJson(res, 400, { error: 'need email and order (are the {object.…} variables spelled right?)' });
         return;
     }
+    const tierKey = getcourseTier({ tier: params.tier, positions });
+    const tier = GRANT_TIERS.find((t) => t.key === tierKey);
+
     const paid = moneyOf(params.paid);
     if (paid === 0) {
+        // GetCourse runs a process once per order, and a payment that hasn't
+        // arrived yet already counts as «Есть платеж»: a signed installment
+        // (Яндекс Сплит first waits out a cooling-off period of up to 4 hours)
+        // or a credit application lands here unpaid, and when the money comes
+        // GetCourse doesn't ask again. So each one is said out loud.
+        if (params.dry !== '1') {
+            await fulfilment.alert(`GetCourse: заказ #${order} пришёл без оплаты — когда оплатят, доступ сам не откроется`, {
+                order,
+                email,
+                tier: tier?.label || `не понял тариф: ${positions || '—'}`,
+                cost: params.cost,
+                paid: params.paid,
+                todo: 'Когда заказ оплатят, откройте доступ на /grant. Процесс в GetCourse должен брать только платежи со статусом «Получен».',
+            });
+        }
         sendJson(res, 200, { ignored: true, reason: 'nothing paid yet' });
         return;
     }
 
-    const tierKey = getcourseTier({ tier: params.tier, positions });
-    const tier = GRANT_TIERS.find((t) => t.key === tierKey);
     const contractId = `gk-${order}`;
     // The tier's lava id maps to courses; the GetCourse names ride along so an
     // unmapped order says what it was.
@@ -1232,10 +1251,13 @@ async function handleExpiryReminders(req, res) {
     }
 }
 
+// Query values that let someone in — the access link's ?t=, Supabase's
+// recovery token_hash, GetCourse's key — are blanked in the request log.
+const SECRET_QUERY_VALUES = /([?&](?:t|key|token|token_hash|code|access_token|refresh_token)=)[^&#]*/gi;
+
 const server = http.createServer((req, res) => {
     const urlPath = req.url.split('?')[0];
-    // /access?t= carries a login-capable token — keep it out of the logs.
-    console.log(`Request: ${req.method} ${urlPath === '/access' ? urlPath : req.url}`);
+    console.log(`Request: ${req.method} ${req.url.replace(SECRET_QUERY_VALUES, '$1…')}`);
 
     // Lava.top payment webhook (must short-circuit before static logic)
     if (req.method === 'POST' && urlPath === '/api/lava/webhook') {
