@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem } from '../../lib/types';
 import { Download, FileText, Eye } from 'lucide-react';
-import { saveFile } from '../../lib/download';
+import { useFileSave } from '../../hooks/useFileSave';
 import { useCourseContext } from '../../contexts/CourseContext';
 
 export default function Library() {
     const { activeCourseId } = useCourseContext();
     const [items, setItems] = useState<LibraryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const { save, sheet } = useFileSave();
 
     useEffect(() => {
         fetchLibrary();
@@ -39,11 +40,12 @@ export default function Library() {
 
     const handleDownload = (e: React.MouseEvent, item: LibraryItem) => {
         e.stopPropagation();
-        saveFile(item.file_url, item.title);
+        save(item.file_url, item.title);
     };
 
     return (
         <div className="space-y-8 animate-fade-in">
+            {sheet}
             {/* Header */}
             <div>
                 <h1 className="font-serif text-3xl text-[#422326] mb-2">Библиотека Материалов</h1>

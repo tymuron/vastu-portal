@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
-import { saveFile } from '../../lib/download';
+import { useFileSave } from '../../hooks/useFileSave';
 import HomeworkSubmission from '../../components/HomeworkSubmission';
 
 // Helper component for dual video player (reused logic)
@@ -76,6 +76,7 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
 
 export default function DayView() {
     const { weekId, dayId } = useParams();
+    const { save, sheet } = useFileSave();
 
     // We need weeks to find prev/next day
     const { weeks } = useWeeks();
@@ -102,14 +103,15 @@ export default function DayView() {
         return ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'file', 'ppt', 'pptx'].includes(type.toLowerCase());
     };
 
-    // Straight from the tap, no await: see lib/download.ts.
+    // Straight from the tap: see hooks/useFileSave.tsx.
     const handleDownload = (e: React.MouseEvent, material: { url: string, title: string }) => {
         e.preventDefault();
-        saveFile(material.url, material.title);
+        save(material.url, material.title);
     };
 
     return (
         <div className="max-w-6xl mx-auto animate-fade-in">
+            {sheet}
             {/* Breadcrumbs */}
             <div className="flex items-center gap-2 text-sm text-vastu-text-light mb-6">
                 <Link to="/student" className="hover:text-vastu-gold">Курс</Link>
