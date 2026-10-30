@@ -260,16 +260,31 @@ export default function StudentLayout() {
                 </div>
             </aside>
 
-            {/* Mobile Header */}
-            <header className="md:hidden bg-vastu-dark text-vastu-light fixed top-0 w-full z-50 shadow-md flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem_+_env(safe-area-inset-top))]">
-                <Link to="/student" className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-vastu-gold rounded-full flex items-center justify-center text-vastu-dark font-serif font-bold text-lg">
+            {/* Mobile Header. Names the open course: the fixed brand read as
+                «Васту-дизайн» even inside «Васту для бизнеса», and the course
+                switch was only inside the menu. */}
+            <header className="md:hidden bg-vastu-dark text-vastu-light fixed top-0 w-full z-50 shadow-md flex items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem_+_env(safe-area-inset-top))]">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Link to="/student" className="w-8 h-8 shrink-0 bg-vastu-gold rounded-full flex items-center justify-center text-vastu-dark font-serif font-bold text-lg">
                         V
-                    </div>
-                    <span className="font-serif text-lg text-vastu-gold">ВАСТУ-ДИЗАЙН</span>
-                </Link>
+                    </Link>
+                    {hasMultipleCourses ? (
+                        <button
+                            onClick={() => navigate('/student/courses')}
+                            className="flex items-center gap-1 min-w-0 text-left"
+                            aria-label="Сменить курс"
+                        >
+                            <span className="font-serif text-lg text-vastu-gold truncate">{activeCourse?.title ?? 'Выбрать курс'}</span>
+                            <ChevronDown size={16} className="text-vastu-gold/70 shrink-0" />
+                        </button>
+                    ) : (
+                        <Link to="/student" className="font-serif text-lg text-vastu-gold truncate">
+                            {activeCourse?.title ?? 'ВАСТУ-ДИЗАЙН'}
+                        </Link>
+                    )}
+                </div>
                 <button
-                    className="text-vastu-gold"
+                    className="text-vastu-gold shrink-0"
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 >
                     {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

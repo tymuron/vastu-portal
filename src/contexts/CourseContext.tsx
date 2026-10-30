@@ -4,6 +4,7 @@ import { Course } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
 import { useAuth } from './AuthContext';
 import { serverNow } from '../lib/authDiagnostics';
+import { COURSE_PICK_KEY, CoursePick, chooseActiveCourse, parseCoursePick } from '../lib/activeCourse';
 
 interface CourseContextType {
     courses: Course[];
@@ -55,6 +56,10 @@ const mapCourse = (row: RawCourseRow): Course => ({
 
 export function CourseProvider({ children }: { children: React.ReactNode }) {
     const { user, role, loading: authLoading } = useAuth();
+    // Reload on a different account, not on every new `user` object: Supabase
+    // hands out a fresh one whenever the app comes back to the foreground, and
+    // each reload used to drop the course the student had picked.
+    const userId = user?.id ?? null;
     const [courses, setCourses] = useState<Course[]>([]);
     const [activeCourseId, setActiveCourseIdState] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -64,15 +69,16 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
     const setActiveCourseId = useCallback((id: string | null) => {
         setActiveCourseIdState(id);
         try {
-            if (id) {
-                localStorage.setItem(STORAGE_KEY, id);
+            if (id && userId) {
+                const pick: CoursePick = { userId, courseId: id, courseIds: courses.map((c) => c.id) };
+                localStorage.setItem(COURSE_PICK_KEY, JSON.stringify(pick));
             } else {
-                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(COURSE_PICK_KEY);
             }
         } catch {
             // ignore storage errors
         }
-    }, []);
+    }, [userId, courses]);
 
     useEffect(() => {
         if (authLoading) return;
@@ -109,7 +115,9 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                     return;
                 }
 
-                if (!user) {
+                if (!userId) {
+                    // Signed out: the next sign-in starts at the picker again.
+                    try { localStorage.removeItem(COURSE_PICK_KEY); } catch { /* ignore */ }
                     if (!cancelled) {
                         setCourses([]);
                         setExpiryByCourse(new Map());
@@ -135,7 +143,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                     const { data, error: qErr } = await supabase
                         .from('user_entitlements')
                         .select('course_id, expires_at, courses(id, slug, title, description, is_active, order_index)')
-                        .eq('user_id', user.id);
+                        .eq('user_id', userId);
 
                     if (qErr) throw qErr;
 
@@ -165,26 +173,13 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 setExpiryByCourse(expiryMap);
 
                 // Single course → auto-select it (no picker, seamless).
-                // Multiple courses → leave activeCourseId null so StudentLayout
-                // forces the course picker on every fresh login. Previously we
-                // resumed the last-used course from localStorage, which meant
-                // non-technical users who bought a 2nd course silently stayed
-                // in their 1st course and never discovered the new one (they
-                // never noticed the small switcher). Forcing the picker on
-                // login makes multiple courses unmissable.
-                let next: string | null;
-                if (list.length === 1) {
-                    next = list[0].id;
-                } else {
-                    next = null;
-                }
-                setActiveCourseIdState(next);
-                try {
-                    if (next) localStorage.setItem(STORAGE_KEY, next);
-                    else localStorage.removeItem(STORAGE_KEY);
-                } catch {
-                    // ignore
-                }
+                // Multiple courses → the one picked last, or null so
+                // StudentLayout shows the picker: on a fresh sign-in, and
+                // whenever a course was added since the pick, so a 2nd course
+                // can't go unnoticed. See lib/activeCourse.ts.
+                let pick: CoursePick | null = null;
+                try { pick = parseCoursePick(localStorage.getItem(COURSE_PICK_KEY)); } catch { /* ignore */ }
+                setActiveCourseIdState(chooseActiveCourse(userId, list.map((c) => c.id), pick));
             } catch (err) {
                 console.error('Failed to load courses:', err);
                 if (!cancelled) {
@@ -202,7 +197,7 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [user, role, authLoading]);
+    }, [userId, role, authLoading]);
 
     const activeCourseExpiresAt = activeCourseId
         ? expiryByCourse.get(activeCourseId) ?? null
