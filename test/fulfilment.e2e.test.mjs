@@ -708,3 +708,49 @@ test('monobank says no: the buyer reads why, nothing is granted; a refused setup
     assert.equal(r.status, 402);
     assert.ok(mailsTo(ALERTS).length > alertsBefore);
 });
+
+// ------------------------------------------------ public endpoint limits
+// Last in the file: these push the hourly totals past their alert line.
+
+test('"send me my link" limits: a forged X-Forwarded-For changes nothing, a flood resets nothing, totals only alert', async () => {
+    const ask = (email, headers) => fetch(`${app}/api/access/request`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ email }),
+    }).then((r) => r.status);
+
+    // One sender behind Cloudflare, writing a new X-Forwarded-For each time.
+    const sender = [];
+    for (let i = 0; i < 21; i++) sender.push(await ask(`spoof${i}@example.com`, { 'CF-Connecting-IP': '203.0.113.50', 'X-Forwarded-For': `198.51.100.${i}` }));
+    assert.deepEqual(sender.map((s, i) => [i, s]).filter(([, s]) => s === 429), [[20, 429]], 'the 21st request in an hour is refused');
+
+    // A student's address gets three links, whatever else is going on.
+    fake.createUser('limited@example.com');
+    const own = [];
+    for (let i = 0; i < 4; i++) own.push(await ask('limited@example.com', { 'CF-Connecting-IP': '203.0.113.60' }));
+    assert.deepEqual(own, [200, 200, 200, 429]);
+
+    const alertsBefore = mailsTo(ALERTS).length;
+    // 80 different people asking within the hour: everyone is answered.
+    const flood = await Promise.all(Array.from({ length: 80 }, (_, i) => ask(`junk${i}@example.com`, { 'CF-Connecting-IP': `198.18.${i}.1` })));
+    assert.ok(flood.every((s) => s === 200), 'a total never turns anyone away');
+    assert.equal(await ask('limited@example.com', { 'CF-Connecting-IP': '203.0.113.61' }), 429, 'the flood reset nothing');
+    assert.equal(mailsTo('limited@example.com').length, 3);
+    assert.equal(mailsTo(ALERTS).slice(alertsBefore).filter((m) => /необычно много запросов ссылки/.test(m.subject)).length, 1, 'past 60 an hour Tymur hears it, once');
+});
+
+test('monobank orders: 6 per sender in 15 minutes whatever X-Forwarded-For says; past 20 an hour Tymur hears, nobody is refused', async () => {
+    const order = (i, ip) => fetch(`${app}/api/mono/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, 'X-Forwarded-For': `10.1.${i % 250}.1` },
+        body: JSON.stringify({ plan: 'design-base', email: `push${i}@example.com`, phone: `06712${String(i).padStart(5, '0')}`, parts: 3 }),
+    }).then((r) => r.status);
+
+    const one = [];
+    for (let i = 0; i < 7; i++) one.push(await order(i, '203.0.113.70'));
+    assert.deepEqual(one, [200, 200, 200, 200, 200, 200, 429]);
+
+    const alertsBefore = mailsTo(ALERTS).length;
+    const many = [];
+    for (let i = 100; i < 125; i++) many.push(await order(i, `198.19.${i}.1`));
+    assert.ok(many.every((s) => s === 200), 'a wave of orders after a webinar all go through');
+    assert.ok(mailsTo(ALERTS).slice(alertsBefore).some((m) => /monobank: необычно много заявок/.test(m.subject)));
+});

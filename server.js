@@ -18,6 +18,7 @@ import {
     normEmail,
 } from './fulfilment.js';
 import { createMono } from './mono.js';
+import { clientIp, createRateLimiter } from './ratelimit.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -221,6 +222,16 @@ const mono = createMono({
     fulfil: fulfilment.fulfil,
     alert: fulfilment.alert
 });
+
+// The public endpoints that send something on a stranger's word — the
+// access-link email and monobank's push — are limited per sender and per
+// target (ratelimit.js). Totals across everyone only alert Tymur.
+const limits = createRateLimiter({
+    onFull: () => void fulfilment.alert('лимиты запросов: таблица заполнена — новые адреса проходят без счёта, похоже на атаку'),
+});
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 async function handleLavaWebhook(req, res) {
     // 1. Authenticate
@@ -598,11 +609,16 @@ async function handleMonoCreate(req, res) {
     }
     // Every order pushes a request into somebody's monobank app — keep this
     // from being used to spam phones.
-    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     const phoneKey = String(payload?.phone || '').replace(/\D/g, '').slice(-9);
-    if (rateLimited(`mono-i:${ip}`, 6, 15 * 60 * 1000) || rateLimited(`mono-p:${phoneKey}`, 3, 15 * 60 * 1000)) {
+    if (limits.take([[`mono-i:${clientIp(req)}`, 6, 15 * MINUTE], [`mono-p:${phoneKey}`, 3, 15 * MINUTE]])) {
         sendJson(res, 429, { error: 'Забагато заявок. Зачекайте 15 хвилин.' });
         return;
+    }
+    // Totals only alert: orders come in waves after a webinar.
+    const lastHour = limits.count('mono-all', HOUR);
+    const last24h = limits.count('mono-all-day', DAY);
+    if (lastHour > 20 || last24h > 100) {
+        await fulfilment.alert('monobank: необычно много заявок — проверьте, не атака ли', { lastHour, last24h });
     }
     try {
         const r = await mono.createOrder({
@@ -1014,16 +1030,6 @@ async function handleAdminRetry(req, res) {
 
 // POST /api/access/request {email} — the "forgot password / no email"
 // button. Always answers the same, whether or not the address exists.
-const accessRequestLog = new Map(); // key -> [timestamps]
-function rateLimited(key, max, windowMs) {
-    const now = Date.now();
-    const hits = (accessRequestLog.get(key) || []).filter((t) => now - t < windowMs);
-    if (hits.length >= max) return true;
-    hits.push(now);
-    accessRequestLog.set(key, hits);
-    if (accessRequestLog.size > 5000) accessRequestLog.clear();
-    return false;
-}
 async function handleAccessRequest(req, res) {
     let payload;
     try {
@@ -1037,10 +1043,15 @@ async function handleAccessRequest(req, res) {
         sendJson(res, 400, { error: 'Invalid email' });
         return;
     }
-    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-    if (rateLimited(`e:${email}`, 3, 15 * 60 * 1000) || rateLimited(`i:${ip}`, 20, 60 * 60 * 1000)) {
+    if (limits.take([[`i:${clientIp(req)}`, 20, HOUR], [`e:${email}`, 3, 15 * MINUTE]])) {
         sendJson(res, 429, { error: 'Слишком много запросов. Подождите 15 минут.' });
         return;
+    }
+    // Totals only alert: before a course starts, many students ask at once.
+    const lastHour = limits.count('access-all', HOUR);
+    const last24h = limits.count('access-all-day', DAY);
+    if (lastHour > 60 || last24h > 300) {
+        await fulfilment.alert('необычно много запросов ссылки для входа — проверьте, не атака ли', { lastHour, last24h });
     }
     try {
         await fulfilment.requestAccessEmail(email);
