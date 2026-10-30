@@ -52,6 +52,7 @@ export function useWeeks() {
                     .from('user_progress')
                     .select('day_id');
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const completedDayIds = new Set(progressData?.map((p: any) => p.day_id));
 
                 if (data) {

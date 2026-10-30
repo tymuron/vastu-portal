@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
