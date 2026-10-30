@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
+import { saveFile } from '../../lib/download';
 import HomeworkSubmission from '../../components/HomeworkSubmission';
 
 // Helper component for dual video player (reused logic)
@@ -75,7 +76,6 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
 
 export default function DayView() {
     const { weekId, dayId } = useParams();
-    const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
     // We need weeks to find prev/next day
     const { weeks } = useWeeks();
@@ -102,39 +102,10 @@ export default function DayView() {
         return ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'file', 'ppt', 'pptx'].includes(type.toLowerCase());
     };
 
-    const handleDownload = async (e: React.MouseEvent, material: { id: string, url: string, title: string, type: string }) => {
+    // Straight from the tap, no await: see lib/download.ts.
+    const handleDownload = (e: React.MouseEvent, material: { url: string, title: string }) => {
         e.preventDefault();
-        if (downloadingId) return;
-
-        setDownloadingId(material.id);
-
-        try {
-            const response = await fetch(material.url);
-            if (!response.ok) throw new Error('Download failed');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            // Use the title with the correct extension if possible, or fallback to the URL name or default
-            let filename = material.title;
-            if (!filename.toLowerCase().endsWith(`.${material.type}`)) {
-                filename += `.${material.type}`;
-            }
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error) {
-            console.error('Download error:', error);
-            alert('Ошибка при скачивании файла. Попробуйте открыть его в новой вкладке.');
-            // Fallback: Just open in new tab if JS download fails
-            window.open(material.url, '_blank');
-        } finally {
-            setDownloadingId(null);
-        }
+        saveFile(material.url, material.title);
     };
 
     return (
@@ -272,15 +243,10 @@ export default function DayView() {
                                         {isDownloadable(material.type) && (
                                             <button
                                                 onClick={(e) => handleDownload(e, material)}
-                                                disabled={downloadingId === material.id}
-                                                className="p-2 -mr-2 text-gray-300 hover:text-vastu-gold transition-colors disabled:opacity-50"
+                                                className="p-2 -mr-2 text-gray-300 hover:text-vastu-gold transition-colors"
                                                 title="Скачать файл"
                                             >
-                                                {downloadingId === material.id ? (
-                                                    <Loader2 size={16} className="animate-spin text-vastu-gold" />
-                                                ) : (
-                                                    <Download size={16} />
-                                                )}
+                                                <Download size={16} />
                                             </button>
                                         )}
                                     </div>
@@ -338,15 +304,10 @@ export default function DayView() {
                                                 {isDownloadable(material.type) && (
                                                     <button
                                                         onClick={(e) => handleDownload(e, material)}
-                                                        disabled={downloadingId === material.id}
-                                                        className="p-1 -mr-1 text-orange-300 hover:text-orange-600 disabled:opacity-50"
+                                                        className="p-1 -mr-1 text-orange-300 hover:text-orange-600"
                                                         title="Скачать файл"
                                                     >
-                                                        {downloadingId === material.id ? (
-                                                            <Loader2 size={14} className="animate-spin text-orange-500" />
-                                                        ) : (
-                                                            <Download size={14} />
-                                                        )}
+                                                        <Download size={14} />
                                                     </button>
                                                 )}
                                             </div>

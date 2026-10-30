@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { LibraryItem } from '../../lib/types';
 import { Download, FileText, Eye } from 'lucide-react';
-import { downloadFile } from '../../lib/utils';
+import { saveFile } from '../../lib/download';
 import { useCourseContext } from '../../contexts/CourseContext';
 
 export default function Library() {
@@ -37,9 +37,9 @@ export default function Library() {
         }
     };
 
-    const handleDownload = async (e: React.MouseEvent, item: LibraryItem) => {
+    const handleDownload = (e: React.MouseEvent, item: LibraryItem) => {
         e.stopPropagation();
-        await downloadFile(item.file_url, item.title);
+        saveFile(item.file_url, item.title);
     };
 
     return (
