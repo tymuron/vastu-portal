@@ -1,16 +1,20 @@
 // The Russian door. Since about 31 Oct 2026 most Russian home internet times out
-// on Render, so lk.annaromeovastu.com is a server in Moscow that passes traffic
-// through to Render and Supabase (repo anna-front). Supabase sits behind
-// Cloudflare, and Russian providers cut Cloudflare traffic after the first 16 KB,
-// so a visitor on the door reaches the database and the course files through the
-// door as well. A visitor on the old onrender.com address sees no change.
+// on Render, so visitors in Russia reach the platform another way (repo anna-front):
+//   lk-ru.annaromeovastu.com  a server in Moscow that passes traffic through to Render
+//                             and Supabase. Supabase sits behind Cloudflare, and Russian
+//                             providers are reported to cut Cloudflare after 16 KB, so
+//                             the database and course files go through Moscow as well.
+//   lk.annaromeovastu.com     a Cloudflare Worker that does the same, for visitors whose
+//                             connection has just passed a big test page through Cloudflare,
+//                             so Supabase is fine to reach directly.
+// A visitor on the old onrender.com address sees no change.
 //
 // No imports: test/door.test.mjs loads this file straight into Node.
 
 const DOOR_DATABASE = 'https://sb.annaromeovastu.com';
 
 export function onDoor(hostname: string): boolean {
-    return hostname.endsWith('.annaromeovastu.com');
+    return hostname.endsWith('-ru.annaromeovastu.com');
 }
 
 export function databaseUrl(configured: string, hostname: string): string {
@@ -28,8 +32,11 @@ const LESSON_SITES = new Set([
 // Course files are stored as full links, written by whichever address the
 // teacher was on. Whatever is stored, show the visitor the one they can reach.
 export function doorFileLink(url: string, configured: string, hostname: string): string {
-    const lesson = onDoor(hostname) ? url?.match(/^https:\/\/([a-z0-9-]+)\.lovable\.app([/?#].*)?$/) : null;
-    if (lesson && LESSON_SITES.has(lesson[1])) return `https://${lesson[1]}-ru.annaromeovastu.com${lesson[2] || ''}`;
+    const lesson = url?.match(/^https:\/\/([a-z0-9-]+)\.lovable\.app([/?#].*)?$/);
+    if (lesson && LESSON_SITES.has(lesson[1])) {
+        if (onDoor(hostname)) return `https://${lesson[1]}-ru.annaromeovastu.com${lesson[2] || ''}`;
+        if (hostname === 'lk.annaromeovastu.com') return `https://${lesson[1]}.annaromeovastu.com${lesson[2] || ''}`;
+    }
     const target = databaseUrl(configured, hostname);
     for (const origin of [configured, DOOR_DATABASE]) {
         if (origin && url?.startsWith(`${origin}/`)) return target + url.slice(origin.length);
