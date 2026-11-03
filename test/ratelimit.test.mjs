@@ -20,6 +20,13 @@ test('the sender is the address Cloudflare saw, not what the client wrote into X
     assert.equal(clientIp(req({})), '10.9.9.9');
 });
 
+test('the door is believed about who asked only with the shared secret', () => {
+    const viaDoor = { 'cf-connecting-ip': '198.51.100.1', 'x-door-client-ip': '203.0.113.9', 'x-door-secret': 's3cret' };
+    assert.equal(clientIp(req(viaDoor), 's3cret'), '203.0.113.9');
+    assert.equal(clientIp(req({ ...viaDoor, 'x-door-secret': 'guess' }), 's3cret'), '198.51.100.1', 'wrong secret: Cloudflare\'s answer');
+    assert.equal(clientIp(req(viaDoor), ''), '198.51.100.1', 'no door configured: the headers mean nothing');
+});
+
 test('a key takes max hits per window, then refuses until the oldest hit ages out', () => {
     const now = clock();
     const limits = createRateLimiter({ now });

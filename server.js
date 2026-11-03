@@ -204,6 +204,7 @@ const fulfilment = createFulfilment({
     getSupabase: getSupabaseAdmin,
     sendEmail: makeResendSender({ apiKey: RESEND_API_KEY, from: RESEND_FROM, base: RESEND_API_BASE }),
     appUrl: APP_URL,
+    spareAppUrl: process.env.APP_URL_SPARE,
     accessSecret: ACCESS_LINK_SECRET,
     alertEmail: ALERT_EMAIL,
     lavaApiKey: LAVA_API_KEY,

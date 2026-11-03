@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { fileLink, supabase } from '../../lib/supabase';
 import { LibraryItem } from '../../lib/types';
 import { Download, FileText, Eye } from 'lucide-react';
 import { useFileSave } from '../../hooks/useFileSave';
@@ -30,7 +30,7 @@ export default function Library() {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setItems(data || []);
+            setItems((data || []).map((item) => ({ ...item, file_url: fileLink(item.file_url) })));
         } catch (error) {
             console.error('Error fetching library:', error);
         } finally {

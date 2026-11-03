@@ -434,19 +434,19 @@ test('access link mints a fresh recovery token every click and survives a mail s
     const human = await fetch(link, { redirect: 'manual' });
     for (const r of [scanner, human]) {
         assert.equal(r.status, 302);
-        assert.match(r.headers.get('location'), new RegExp(`^${app}/update-password\\?token_hash=[0-9a-f]+&type=recovery$`));
+        assert.match(r.headers.get('location'), /^\/update-password\?token_hash=[0-9a-f]+&type=recovery$/);
     }
-    const tokenHash = new URL(human.headers.get('location')).searchParams.get('token_hash');
+    const tokenHash = new URL(human.headers.get('location'), app).searchParams.get('token_hash');
     const verify = await fetch(`${fakeUrl}/auth/v1/verify`, { method: 'POST', body: JSON.stringify({ type: 'recovery', token_hash: tokenHash }) });
     assert.equal(verify.status, 200, 'the latest token works even though a scanner opened the link first');
 });
 
 test('tampered and expired access links land on "send me a new link"', async () => {
     const tampered = await fetch(`${app}/access?t=abc.def`, { redirect: 'manual' });
-    assert.equal(tampered.headers.get('location'), `${app}/forgot-password?invalid=1`);
+    assert.equal(tampered.headers.get('location'), `/forgot-password?invalid=1`);
     const old = makeAccessToken(SECRET.access, 'new.buyer@mail.ru', Date.now() - 61 * 24 * 3600 * 1000);
     const expired = await fetch(`${app}/access?t=${old}`, { redirect: 'manual' });
-    assert.equal(expired.headers.get('location'), `${app}/forgot-password?expired=1&email=new.buyer%40mail.ru`);
+    assert.equal(expired.headers.get('location'), `/forgot-password?expired=1&email=new.buyer%40mail.ru`);
     const forged = makeAccessToken('wrong-secret', 'new.buyer@mail.ru');
     assert.match((await fetch(`${app}/access?t=${forged}`, { redirect: 'manual' })).headers.get('location'), /invalid=1/);
 });

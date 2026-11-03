@@ -13,7 +13,13 @@
 // itself and overwrites whatever the client sent. X-Forwarded-For is only
 // appended to on the way in, so its first entry is whatever the client wrote:
 // used only when there is nothing better (local runs, tests).
-export function clientIp(req) {
+//
+// Through the Russian door, Cloudflare sees the door as every visitor, which would
+// lump all of Russia under one limit. The door says who really asked, and proves
+// it is the door with a secret only it and this server know.
+export function clientIp(req, doorSecret = process.env.DOOR_SECRET) {
+    const viaDoor = String(req.headers['x-door-client-ip'] || '').trim();
+    if (doorSecret && viaDoor && req.headers['x-door-secret'] === doorSecret) return viaDoor;
     const cf = String(req.headers['cf-connecting-ip'] || '').trim();
     if (cf) return cf;
     const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();

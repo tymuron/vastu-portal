@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { fileLink, supabase } from '../lib/supabase';
 import { Week, Day } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
 import { useCourseContext } from '../contexts/CourseContext';
@@ -80,7 +80,7 @@ export function useWeeks() {
                             id: m.id,
                             title: m.title,
                             type: m.type,
-                            url: m.url,
+                            url: fileLink(m.url),
                             isHomework: m.is_homework
                         }))
                     }));
@@ -168,7 +168,7 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
                         id: m.id,
                         title: m.title,
                         type: m.type,
-                        url: m.url
+                        url: fileLink(m.url)
                     }))
                 });
             }

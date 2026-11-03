@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { resilientAuthStorage } from './browserStorage';
+import { databaseUrl, doorFileLink } from './door';
 
 // These environment variables will be needed
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const configuredUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseUrl = configuredUrl && databaseUrl(configuredUrl, window.location.hostname);
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -31,3 +33,7 @@ export const supabase = createClient(
         },
     }
 );
+
+// A course file's link, through the address this visitor can reach. See ./door.
+export const fileLink = (url: string): string =>
+    configuredUrl ? doorFileLink(url, configuredUrl, window.location.hostname) : url;

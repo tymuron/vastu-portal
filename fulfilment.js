@@ -359,7 +359,7 @@ export function welcomeContent(courses) {
 
 // reason: 'purchase' (just bought) | 'request' (asked for a login link)
 // returning: true when the account has logged in before (knows its password)
-export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, returning, reason = 'purchase' }) {
+export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, spareUrl, returning, reason = 'purchase' }) {
     const c = welcomeContent(courses);
     const loginHost = loginUrl.replace(/^https?:\/\//, '').replace(/\/login$/, '');
     const courseLine = c.name
@@ -438,6 +438,7 @@ ${EMAIL_LIGHT_ONLY_HEAD}
             </td>
           </tr>
           ${returning ? `<tr><td align="center" style="padding:0 24px 8px 24px;font-size:14px;color:#7a5a3a;"><a href="${esc(accessUrl)}" style="color:#8a6a3b;">Не помню пароль — задать новый</a></td></tr>` : ''}
+          ${spareUrl ? `<tr><td align="center" style="padding:0 24px 8px 24px;font-size:14px;color:#7a5a3a;">Страница не открывается? <a href="${esc(spareUrl)}" style="color:#8a6a3b;">Запасная ссылка</a></td></tr>` : ''}
           ${tgBlock}
           <tr>
             <td style="padding:16px 24px;font-size:15px;line-height:1.7;color:#422326;">
@@ -468,6 +469,7 @@ ${EMAIL_LIGHT_ONLY_HEAD}
             ? `Курс уже добавлен в ваш личный кабинет. Входите как обычно — почта ${email} и ваш пароль: ${loginUrl}`
             : `Задайте пароль и войдите по ссылке: ${accessUrl}`,
         returning ? `Не помните пароль — задайте новый: ${accessUrl}` : `Дальше входите на ${loginHost} с почтой ${email} и этим паролем.`,
+        ...(spareUrl ? [`Страница не открывается? Запасная ссылка: ${spareUrl}`] : []),
         ...(c.links.length ? ['', 'Telegram:', ...c.links.map((l) => `${l.label}: ${l.url}`)] : []),
         ...(c.start && reason === 'purchase' ? ['', `Старт потока — ${c.start}.`] : []),
         '',
@@ -509,6 +511,7 @@ export function createFulfilment({
     getSupabase,
     sendEmail,
     appUrl,
+    spareAppUrl,
     accessSecret,
     alertEmail,
     lavaApiKey,
@@ -554,6 +557,13 @@ export function createFulfilment({
 
     function accessUrlFor(email) {
         return `${appBase}/access?t=${makeAccessToken(accessSecret, email)}`;
+    }
+
+    // The other way in, for someone the main address doesn't open for: the door
+    // (a Russian server) may be out of reach from abroad, onrender.com from Russia.
+    const spareBase = spareAppUrl && spareAppUrl.replace(/\/$/, '') !== appBase ? spareAppUrl.replace(/\/$/, '') : null;
+    function spareUrlFor(email) {
+        return spareBase ? `${spareBase}/access?t=${makeAccessToken(accessSecret, email)}` : undefined;
     }
 
     // course_offers rows (+ their course) for the first id that maps to any.
@@ -606,6 +616,7 @@ export function createFulfilment({
             courses,
             accessUrl: accessUrlFor(email),
             loginUrl,
+            spareUrl: spareUrlFor(email),
             returning: !!user.last_sign_in_at,
             reason,
         });
@@ -754,20 +765,21 @@ export function createFulfilment({
         return { sent: true };
     }
 
-    // GET /access?t=... -> fresh recovery token -> /update-password.
+    // GET /access?t=... -> fresh recovery token -> /update-password. Relative, so
+    // the student stays on the address they came in by (the door or onrender.com).
     async function accessRedirect(token) {
         const info = readAccessToken(accessSecret, token);
-        if (!info) return `${appBase}/forgot-password?invalid=1`;
+        if (!info) return '/forgot-password?invalid=1';
         const emailQ = encodeURIComponent(info.email);
-        if (info.expired) return `${appBase}/forgot-password?expired=1&email=${emailQ}`;
+        if (info.expired) return `/forgot-password?expired=1&email=${emailQ}`;
         const supabase = getSupabase();
         const { data, error } = await supabase.auth.admin.generateLink({ type: 'recovery', email: info.email });
         const hashed = data?.properties?.hashed_token;
         if (error || !hashed) {
             console.error('access link: generateLink failed:', error?.message || 'no hashed_token');
-            return `${appBase}/forgot-password?failed=1&email=${emailQ}`;
+            return `/forgot-password?failed=1&email=${emailQ}`;
         }
-        return `${appBase}/update-password?token_hash=${encodeURIComponent(hashed)}&type=recovery`;
+        return `/update-password?token_hash=${encodeURIComponent(hashed)}&type=recovery`;
     }
 
     // ------------------------------------------------------------------
