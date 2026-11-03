@@ -1361,6 +1361,13 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // Which address the rate limits see for this caller, for checking a route into the platform.
+    if (req.method === 'GET' && urlPath === '/api/admin/whoami') {
+        if (!checkCronSecret(req, res)) return;
+        sendJson(res, 200, { ip: clientIp(req), worker: req.headers['cf-worker'] || null });
+        return;
+    }
+
     // The watchdog calls in on every run; the timer at the end of this file notices when it stops.
     if (req.method === 'POST' && urlPath === '/api/cron/watchdog-seen') {
         if (!checkCronSecret(req, res)) return;

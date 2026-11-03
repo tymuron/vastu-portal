@@ -20,6 +20,10 @@
 export function clientIp(req, doorSecret = process.env.DOOR_SECRET) {
     const viaDoor = String(req.headers['x-door-client-ip'] || '').trim();
     if (doorSecret && viaDoor && req.headers['x-door-secret'] === doorSecret) return viaDoor;
+    // Our router on Cloudflare (repo anna-front) carries students in Russia, all from one shared
+    // address, and Cloudflare marks what it fetches with the domain it belongs to. Only these
+    // per-address counters rely on this: per-email limits and the alerts on totals still apply.
+    if (viaDoor && req.headers['cf-worker'] === 'annaromeovastu.com') return viaDoor;
     const cf = String(req.headers['cf-connecting-ip'] || '').trim();
     if (cf) return cf;
     const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
