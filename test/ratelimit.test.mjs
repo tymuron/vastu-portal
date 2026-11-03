@@ -80,10 +80,10 @@ test('totals only count: they never refuse, and old hits age out', () => {
     assert.equal(limits.count('access-all', 60 * MINUTE), 1);
 });
 
-test("students carried by our Cloudflare router count by their own address", () => {
-    const carried = { 'cf-connecting-ip': '2a06:98c0:3600::103', 'cf-worker': 'annaromeovastu.com', 'x-door-client-ip': '5.6.7.8' };
+test('students carried by our Cloudflare router count by their own address', () => {
+    const carried = { 'cf-connecting-ip': '162.158.1.2', 'x-door-client-ip': '5.6.7.8' };
     assert.equal(clientIp({ headers: carried }, ''), '5.6.7.8');
-    // Someone else's Worker, or no address sent: the connecting address, as for anyone.
-    assert.equal(clientIp({ headers: { ...carried, 'cf-worker': 'other.example' } }, ''), '2a06:98c0:3600::103');
-    assert.equal(clientIp({ headers: { 'cf-connecting-ip': '1.1.1.1', 'cf-worker': 'annaromeovastu.com' } }, ''), '1.1.1.1');
+    // The header alone, from an ordinary address, changes nothing. Nor Cloudflare with no header.
+    assert.equal(clientIp({ headers: { ...carried, 'cf-connecting-ip': '1.1.1.1' } }, ''), '1.1.1.1');
+    assert.equal(clientIp({ headers: { 'cf-connecting-ip': '162.158.1.2' } }, ''), '162.158.1.2');
 });

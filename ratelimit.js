@@ -17,14 +17,16 @@
 // Through the Russian door, Cloudflare sees the door as every visitor, which would
 // lump all of Russia under one limit. The door says who really asked, and proves
 // it is the door with a secret only it and this server know.
+const CLOUDFLARE_WORKER = /^(162\.15[89]\.|172\.(6[4-9]|7[01])\.|104\.(1[6-9]|2\d|3[01])\.|2a06:98c0:)/;
+
 export function clientIp(req, doorSecret = process.env.DOOR_SECRET) {
     const viaDoor = String(req.headers['x-door-client-ip'] || '').trim();
     if (doorSecret && viaDoor && req.headers['x-door-secret'] === doorSecret) return viaDoor;
-    // Our router on Cloudflare (repo anna-front) carries students in Russia, all from one shared
-    // address, and Cloudflare marks what it fetches with the domain it belongs to. Only these
-    // per-address counters rely on this: per-email limits and the alerts on totals still apply.
-    if (viaDoor && req.headers['cf-worker'] === 'annaromeovastu.com') return viaDoor;
     const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+    // Our router on Cloudflare (repo anna-front) carries students in Russia, so they arrive from a
+    // few Cloudflare addresses. Someone else's Worker could fake this, which only touches these
+    // per-address counters: per-email limits and the alerts on totals still apply.
+    if (viaDoor && CLOUDFLARE_WORKER.test(cf)) return viaDoor;
     if (cf) return cf;
     const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
     return forwarded || req.socket?.remoteAddress || '';

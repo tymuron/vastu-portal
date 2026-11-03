@@ -1364,7 +1364,7 @@ const server = http.createServer((req, res) => {
     // Which address the rate limits see for this caller, for checking a route into the platform.
     if (req.method === 'GET' && urlPath === '/api/admin/whoami') {
         if (!checkCronSecret(req, res)) return;
-        sendJson(res, 200, { ip: clientIp(req), worker: req.headers['cf-worker'] || null });
+        sendJson(res, 200, { ip: clientIp(req) });
         return;
     }
 
