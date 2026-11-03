@@ -470,6 +470,11 @@ test('"send me my link": known address gets course links, unknown gets nothing, 
     assert.equal((await ask('vip@example.com')).status, 429);
 });
 
+test('the watchdog calls in with the secret, and only with it', async () => {
+    assert.equal((await admin('POST', '/api/cron/watchdog-seen', {}, 'bad')).status, 401);
+    assert.equal((await admin('POST', '/api/cron/watchdog-seen', {})).status, 200);
+});
+
 test('/grant: wrong secret refused; tier grant = purchase grant, with email and a paste-ready link', async () => {
     assert.equal((await admin('POST', '/api/admin/grant-access', { email: 'm@example.com', tier: 'design-base' }, 'bad')).status, 401);
     const tiers = await (await admin('GET', '/api/admin/tiers')).json();

@@ -71,6 +71,12 @@ const MONO_PARTS = process.env.MONO_PARTS;
 
 // Lazy-init: only create the admin client when the webhook actually fires,
 // so the static server still boots if envs are missing in dev.
+// See the timer at the end of this file.
+const WATCHDOG_QUIET_MS = 3 * 60 * 60 * 1000;
+const WATCHDOG_REPEAT_MS = 24 * 60 * 60 * 1000;
+let watchdogSeenAt = Date.now();
+let watchdogAlertedAt = 0;
+
 let supabaseAdmin = null;
 function getSupabaseAdmin() {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -217,6 +223,7 @@ const mono = createMono({
     signKey: MONO_SIGN_KEY,
     base: MONO_API_BASE,
     appUrl: APP_URL,
+    callbackBase: process.env.RENDER_EXTERNAL_URL, // set by Render: this service's own address
     prices: MONO_PRICES_UAH,
     parts: MONO_PARTS,
     getSupabase: getSupabaseAdmin,
@@ -1354,6 +1361,14 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // The watchdog calls in on every run; the timer at the end of this file notices when it stops.
+    if (req.method === 'POST' && urlPath === '/api/cron/watchdog-seen') {
+        if (!checkCronSecret(req, res)) return;
+        watchdogSeenAt = Date.now();
+        sendJson(res, 200, { ok: true });
+        return;
+    }
+
     // lava.top sales poll on demand; ?dryRun=1 only reports what it would do.
     if (req.method === 'POST' && urlPath === '/api/cron/reconcile') {
         if (!checkCronSecret(req, res)) return;
@@ -1612,6 +1627,20 @@ if (RECONCILE_SINCE && LAVA_API_KEY && SUPABASE_SERVICE_ROLE_KEY) {
 } else {
     console.warn('lava.top sales poll is OFF (needs RECONCILE_SINCE, LAVA_API_KEY, SUPABASE_SERVICE_ROLE_KEY)');
 }
+
+// Who watches the watchdog: it checks this server from outside, and this server checks
+// that it still calls in. A watchdog that doesn't run can't say so, and on 3 Nov 2026
+// GitHub's timer was found not to be starting it, with no error anywhere.
+setInterval(() => {
+    const quiet = Date.now() - watchdogSeenAt;
+    if (quiet < WATCHDOG_QUIET_MS || Date.now() - watchdogAlertedAt < WATCHDOG_REPEAT_MS) return;
+    watchdogAlertedAt = Date.now();
+    void fulfilment.alert(
+        'сторож сайтов молчит',
+        `Проверки сайтов (tymuron/anna-watchdog) не запускались ${Math.round(quiet / 3600000)} ч., так что о сбоях сейчас никто не предупредит. ` +
+        'Обычно это таймер anna-timer в Cloudflare, истёкший ключ GitHub или закончившиеся минуты GitHub Actions.'
+    );
+}, 10 * 60 * 1000);
 
 // monobank orders whose callback never came and whose buyer closed the page.
 if (mono.configured && SUPABASE_SERVICE_ROLE_KEY) {

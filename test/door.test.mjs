@@ -21,6 +21,18 @@ test('the database goes through the door only for visitors on the door', () => {
     assert.equal(databaseUrl(SUPABASE, 'vastu-portal-app.onrender.com'), SUPABASE);
 });
 
+test('a lesson presentation goes through the door only for visitors on the door', () => {
+    const LK = 'lk-ru.annaromeovastu.com';
+    assert.equal(doorFileLink('https://urok4-1.lovable.app/', SUPABASE, LK), 'https://urok4-1-ru.annaromeovastu.com/');
+    assert.equal(doorFileLink('https://sever.lovable.app', SUPABASE, LK), 'https://sever-ru.annaromeovastu.com');
+    assert.equal(doorFileLink('https://urokdva.lovable.app/slide/3?x=1', SUPABASE, LK), 'https://urokdva-ru.annaromeovastu.com/slide/3?x=1');
+    assert.equal(doorFileLink('https://urokdva.lovable.app/', SUPABASE, 'vastu-portal-app.onrender.com'), 'https://urokdva.lovable.app/');
+    // Not ours, or no door for it yet: left alone rather than turned into a dead link.
+    assert.equal(doorFileLink('https://someone-else.lovable.app/', SUPABASE, LK), 'https://someone-else.lovable.app/');
+    assert.equal(doorFileLink('https://urokdva.lovable.app.evil.example/', SUPABASE, LK), 'https://urokdva.lovable.app.evil.example/');
+    assert.equal(doorFileLink('https://nativastu.com/', SUPABASE, LK), 'https://nativastu.com/');
+});
+
 test('a stored file link becomes the one this visitor can reach, whichever way it was saved', () => {
     assert.equal(doorFileLink(SUPABASE + FILE, SUPABASE, 'lk.annaromeovastu.com'), DOOR + FILE);
     assert.equal(doorFileLink(DOOR + FILE, SUPABASE, 'vastu-portal-app.onrender.com'), SUPABASE + FILE);

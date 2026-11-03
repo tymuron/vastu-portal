@@ -116,8 +116,10 @@ export function failText(subState) {
 
 const SWEEP_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
-export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.ua', appUrl, prices, parts, getSupabase, fulfil, alert }) {
+export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.ua', appUrl, callbackBase, prices, parts, getSupabase, fulfil, alert }) {
     const appBase = (appUrl || 'https://vastu-portal-app.onrender.com').replace(/\/$/, '');
+    // The bank's server calls this one, not a person, so it skips the public address's router.
+    const callbackUrl = `${(callbackBase || appBase).replace(/\/$/, '')}/api/mono/callback`;
     const configured = !!(storeId && signKey);
     const priceOf = parsePrices(prices);
     const partsList = parseParts(parts);
@@ -170,7 +172,7 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
             invoice: { date: today, number: storeOrderId, source: 'INTERNET' },
             available_programs: [{ type: 'payment_installments', available_parts_count: [n] }],
             products: [{ name: p.title, count: 1, sum: p.uah }],
-            result_callback: `${appBase}/api/mono/callback`,
+            result_callback: callbackUrl,
         });
         if (created.state === 'FAIL' || !created.order_id) {
             if (FAIL_ALERT.has(created.order_sub_state)) await alert(`monobank не принял заявку (${created.order_sub_state || 'без причины'})`, { email, plan: p.key, parts: n, created });
