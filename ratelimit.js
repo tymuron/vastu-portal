@@ -9,6 +9,8 @@
 // waves after a webinar.
 // ---------------------------------------------------------------------------
 
+const CLOUDFLARE_WORKER = /^(162\.15[89]\.|172\.(6[4-9]|7[01])\.|104\.(1[6-9]|2\d|3[01])\.|2a06:98c0:)/;
+
 // Who is asking. Render's edge is Cloudflare, which sets CF-Connecting-IP
 // itself and overwrites whatever the client sent. X-Forwarded-For is only
 // appended to on the way in, so its first entry is whatever the client wrote:
@@ -17,8 +19,6 @@
 // Through the Russian door, Cloudflare sees the door as every visitor, which would
 // lump all of Russia under one limit. The door says who really asked, and proves
 // it is the door with a secret only it and this server know.
-const CLOUDFLARE_WORKER = /^(162\.15[89]\.|172\.(6[4-9]|7[01])\.|104\.(1[6-9]|2\d|3[01])\.|2a06:98c0:)/;
-
 export function clientIp(req, doorSecret = process.env.DOOR_SECRET) {
     const viaDoor = String(req.headers['x-door-client-ip'] || '').trim();
     if (doorSecret && viaDoor && req.headers['x-door-secret'] === doorSecret) return viaDoor;
