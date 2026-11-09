@@ -18,10 +18,16 @@ const CLOUDFLARE_WORKER = /^(162\.15[89]\.|172\.(6[4-9]|7[01])\.|104\.(1[6-9]|2\
 //
 // Through the Russian door, Cloudflare sees the door as every visitor, which would
 // lump all of Russia under one limit. The door says who really asked, and proves
-// it is the door with a secret only it and this server know.
+// it is the door with a secret only it and this server know. Since 9 Nov 2026 Russia
+// blocks Render from its data centres too, so the door comes in through our router,
+// which writes the door's own address into X-Door-Client-IP: the door's word about
+// the visitor rides in X-Door-Visitor instead.
 export function clientIp(req, doorSecret = process.env.DOOR_SECRET) {
     const viaDoor = String(req.headers['x-door-client-ip'] || '').trim();
-    if (doorSecret && viaDoor && req.headers['x-door-secret'] === doorSecret) return viaDoor;
+    if (doorSecret && req.headers['x-door-secret'] === doorSecret) {
+        const visitor = String(req.headers['x-door-visitor'] || '').trim() || viaDoor;
+        if (visitor) return visitor;
+    }
     const cf = String(req.headers['cf-connecting-ip'] || '').trim();
     // Our router on Cloudflare (repo anna-front) carries students in Russia, so they arrive from a
     // few Cloudflare addresses. Someone else's Worker could fake this, which only touches these

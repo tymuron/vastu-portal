@@ -27,6 +27,14 @@ test('the door is believed about who asked only with the shared secret', () => {
     assert.equal(clientIp(req(viaDoor), ''), '198.51.100.1', 'no door configured: the headers mean nothing');
 });
 
+test('through the door and then our router, the door still says who asked', () => {
+    // The router overwrites X-Door-Client-IP with the address it saw: the door's.
+    const relayed = { 'cf-connecting-ip': '2a06:98c0:3600::103', 'x-door-client-ip': '5.42.114.52', 'x-door-visitor': '203.0.113.9', 'x-door-secret': 's3cret' };
+    assert.equal(clientIp(req(relayed), 's3cret'), '203.0.113.9');
+    assert.equal(clientIp(req({ ...relayed, 'x-door-secret': 'guess' }), 's3cret'), '5.42.114.52', 'wrong secret: the router\'s word, never the visitor header');
+    assert.equal(clientIp(req({ ...relayed, 'x-door-secret': undefined }), 's3cret'), '5.42.114.52');
+});
+
 test('a key takes max hits per window, then refuses until the oldest hit ages out', () => {
     const now = clock();
     const limits = createRateLimiter({ now });
