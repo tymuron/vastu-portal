@@ -19,6 +19,7 @@ import {
 } from './fulfilment.js';
 import { createMono } from './mono.js';
 import { clientIp, createRateLimiter } from './ratelimit.js';
+import { createLessonNotifier, makeTelegramClient, readLessonNotifyConfig } from './lessonNotify.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -228,6 +229,19 @@ const mono = createMono({
     parts: MONO_PARTS,
     getSupabase: getSupabaseAdmin,
     fulfil: fulfilment.fulfil,
+    alert: fulfilment.alert
+});
+
+// New-lesson emails and Telegram posts (lessonNotify.js). Off unless
+// LESSON_NOTIFY is dry-run or live; live also needs LESSON_NOTIFY_SINCE.
+const lessonNotifyConfig = readLessonNotifyConfig(process.env);
+const lessonNotifier = createLessonNotifier({
+    getSupabase: getSupabaseAdmin,
+    sendEmail: makeResendSender({ apiKey: RESEND_API_KEY, from: RESEND_FROM, base: RESEND_API_BASE }),
+    telegram: makeTelegramClient({ token: lessonNotifyConfig.telegram.token, base: process.env.TELEGRAM_API_BASE }),
+    appUrl: APP_URL,
+    spareAppUrl: process.env.APP_URL_SPARE,
+    config: lessonNotifyConfig,
     alert: fulfilment.alert
 });
 
@@ -1336,6 +1350,7 @@ const server = http.createServer((req, res) => {
         if (!checkCronSecret(req, res)) return;
         sendJson(res, 200, {
             ...fulfilment.status(),
+            lessonNotify: lessonNotifier.status(),
             getcourse: { enabled: !!GETCOURSE_WEBHOOK_KEY },
             monobank: {
                 enabled: mono.configured,
@@ -1383,6 +1398,60 @@ const server = http.createServer((req, res) => {
         fulfilment.reconcile({ dryRun }).then(
             (r) => sendJson(res, 200, r),
             (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    // New-lesson notifications, on demand. Unless LESSON_NOTIFY=live, and
+    // always with ?dryRun=1, it only reports who would get what. A dry run
+    // may take ?since=<ISO> to see what a different LESSON_NOTIFY_SINCE would do.
+    if (req.method === 'POST' && urlPath === '/api/cron/lesson-notify') {
+        if (!checkCronSecret(req, res)) return;
+        const q = new URL(req.url, 'http://x').searchParams;
+        const dryRun = q.get('dryRun') === '1' || lessonNotifyConfig.mode !== 'live';
+        let since;
+        if (q.has('since')) {
+            since = Date.parse(q.get('since'));
+            if (!dryRun || Number.isNaN(since)) {
+                sendJson(res, 400, { error: 'since: an ISO date, and only with dryRun=1' });
+                return;
+            }
+        }
+        lessonNotifier.run({ dryRun, since }).then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/admin/lesson-notify') {
+        if (!checkCronSecret(req, res)) return;
+        sendJson(res, 200, lessonNotifier.status());
+        return;
+    }
+
+    // POST {dayId, email?, telegramChat?}: that lesson's email to one address
+    // and/or its post to one chat, exactly as students would get them, without
+    // recording anything. With neither, returns the rendered email.
+    if (req.method === 'POST' && urlPath === '/api/admin/lesson-notify/test') {
+        if (!checkCronSecret(req, res)) return;
+        readJsonBody(req).then(
+            (body) => lessonNotifier.testSend({ dayId: String(body?.dayId || ''), email: body?.email, telegramChat: body?.telegramChat }),
+            () => { throw new Error('Bad body'); }
+        ).then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 400, { error: err?.message || 'Failed' })
+        );
+        return;
+    }
+
+    // The chats the bot was added to in the last 24 hours, with their ids —
+    // how to find the course channel's id for LESSON_NOTIFY_TELEGRAM.
+    if (req.method === 'GET' && urlPath === '/api/admin/lesson-notify/telegram-chats') {
+        if (!checkCronSecret(req, res)) return;
+        lessonNotifier.telegramChats().then(
+            (chats) => sendJson(res, 200, { chats }),
+            (err) => sendJson(res, 400, { error: err?.message || 'Failed' })
         );
         return;
     }
@@ -1633,6 +1702,28 @@ if (RECONCILE_SINCE && LAVA_API_KEY && SUPABASE_SERVICE_ROLE_KEY) {
     setInterval(runReconcile, Math.max(1, RECONCILE_INTERVAL_MIN) * 60 * 1000);
 } else {
     console.warn('lava.top sales poll is OFF (needs RECONCILE_SINCE, LAVA_API_KEY, SUPABASE_SERVICE_ROLE_KEY)');
+}
+
+// New-lesson notifications: same in-process timer as the sales poll.
+if (lessonNotifyConfig.mode !== 'off' && SUPABASE_SERVICE_ROLE_KEY) {
+    if (lessonNotifyConfig.problems.length) {
+        console.warn('lesson notifications:', lessonNotifyConfig.problems.join('; '));
+        if (lessonNotifyConfig.mode === 'live') {
+            void fulfilment.alert('уведомления об уроках: настройка неполная', lessonNotifyConfig.problems.join('\n'));
+        }
+    }
+    const runLessonNotify = () =>
+        lessonNotifier.run().then(
+            (r) => {
+                if (r.error) console.error(`lesson-notify (${r.mode}): ${r.error}`);
+            },
+            (err) => console.error('lesson-notify threw:', err)
+        );
+    setTimeout(runLessonNotify, 45 * 1000);
+    setInterval(runLessonNotify, lessonNotifyConfig.intervalMs);
+    console.log(`lesson notifications: ${lessonNotifyConfig.mode}, every ${lessonNotifyConfig.intervalMs / 60000} min`);
+} else {
+    console.log('lesson notifications are OFF (LESSON_NOTIFY)');
 }
 
 // Who watches the watchdog: it checks this server from outside, and this server checks

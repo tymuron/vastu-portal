@@ -759,3 +759,35 @@ test('monobank orders: 6 per sender in 15 minutes whatever X-Forwarded-For says;
     assert.ok(many.every((s) => s === 200), 'a wave of orders after a webinar all go through');
     assert.ok(mailsTo(ALERTS).slice(alertsBefore).some((m) => /monobank: необычно много заявок/.test(m.subject)));
 });
+
+// New-lesson notifications (lessonNotify.js; its own tests: lessonNotify.test.mjs).
+// Here only the server's side: off unless switched on, admin-only, and a dry
+// run that sends and writes nothing.
+test('new-lesson notifications: off by default; the dry run needs the secret, sends nothing, writes nothing', async () => {
+    const before = fake.sent.length;
+    assert.equal((await admin('POST', '/api/cron/lesson-notify?dryRun=1', null, 'wrong')).status, 401);
+    const design = fake.db.courses.find((c) => c.slug === 'vastu-design-2026');
+    const week = { id: crypto.randomUUID(), course_id: design.id, title: 'НЕДЕЛЯ 9', order_index: 9, is_locked: false, available_from: '2026-11-10T00:00:00Z' };
+    const day = { id: crypto.randomUUID(), week_id: week.id, title: 'Урок e2e', order_index: 1, video_url: 'https://youtu.be/e2e', created_at: new Date().toISOString() };
+    fake.seed('weeks', [week]);
+    fake.seed('days', [day]);
+    try {
+        const r = await admin('POST', '/api/cron/lesson-notify?dryRun=1&since=2026-11-01T00:00:00Z');
+        assert.equal(r.status, 200);
+        const body = await r.json();
+        assert.equal(body.mode, 'dry-run');
+        assert.deepEqual(body.lessons.map((l) => [l.title, l.state]), [['Урок e2e', 'new']]);
+        assert.equal(fake.sent.length, before, 'nothing sent');
+        assert.equal(fake.db.lesson_announcements.length + fake.db.lesson_notifications.length, 0, 'nothing written');
+        assert.equal((await admin('POST', '/api/cron/lesson-notify?since=garbage')).status, 400);
+        const status = await (await admin('GET', '/api/admin/status')).json();
+        assert.equal(status.lessonNotify.mode, 'off');
+        const preview = await (await admin('POST', '/api/admin/lesson-notify/test', { dayId: day.id })).json();
+        assert.equal(preview.subject, 'Новый урок: Урок e2e');
+        assert.ok(preview.lesson.url.startsWith(`${app}/student/week/${week.id}/day/${day.id}?course=`));
+        assert.equal(fake.sent.length, before, 'a preview without an address sends nothing');
+    } finally {
+        fake.db.days.splice(fake.db.days.findIndex((d) => d.id === day.id), 1);
+        fake.db.weeks.splice(fake.db.weeks.findIndex((w) => w.id === week.id), 1);
+    }
+});

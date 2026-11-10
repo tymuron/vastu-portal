@@ -11,6 +11,7 @@
 
 import http from 'http';
 import crypto from 'crypto';
+import { Readable } from 'stream';
 
 const UNIQUE = {
     purchases: [['contract_id']],
@@ -19,10 +20,15 @@ const UNIQUE = {
     courses: [['slug']],
     profiles: [['id']],
     lava_invoices: [['contract_id']],
+    lesson_announcements: [['day_id']],
+    lesson_notifications: [['day_id', 'user_id']],
 };
 
 export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId = 'mono-store', monoSignKey = 'mono-sign-key' } = {}) {
-    const db = { courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [] };
+    const db = {
+        courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [],
+        weeks: [], days: [], materials: [], lesson_announcements: [], lesson_notifications: [],
+    };
     const users = new Map(); // id -> user
     const tokens = new Map(); // hashed_token -> { userId, type }
     const sessions = new Map(); // access_token -> userId
@@ -114,6 +120,16 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
         }
         if (table === 'user_entitlements') { r.granted_at ??= nowIso(); r.expires_at ??= null; r.reminder_sent_at ??= null; }
         if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; }
+        if (table === 'days') r.created_at ??= nowIso();
+        if (table === 'lesson_announcements') {
+            r.status ??= 'settling'; r.ready_at ??= nowIso(); r.tg_attempts ??= 0;
+            r.created_at ??= nowIso(); r.updated_at ??= nowIso();
+            for (const k of ['fingerprint', 'announced_at', 'finished_at', 'recipients', 'tg_status', 'tg_chat', 'tg_message_id', 'tg_error']) r[k] ??= null;
+        }
+        if (table === 'lesson_notifications') {
+            r.status ??= 'pending'; r.attempts ??= 0; r.created_at ??= nowIso(); r.updated_at ??= nowIso();
+            for (const k of ['email_id', 'error', 'sent_at']) r[k] ??= null;
+        }
         return r;
     }
 
@@ -410,6 +426,32 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
                 return send(res, 500, { message: String(err?.stack || err) });
             }
         });
+    });
+
+    // The same services without a port: a fetch() that hands each request
+    // straight to the handler above. For supabase-js in-process
+    // (createClient(url, key, { global: { fetch: fake.fetch } })), where a
+    // sandbox forbids listening.
+    api.fetch = (input, init = {}) => new Promise((resolve) => {
+        const url = new URL(typeof input === 'string' || input instanceof URL ? String(input) : input.url);
+        const body = init.body == null ? [] : [Buffer.from(typeof init.body === 'string' ? init.body : String(init.body))];
+        const req = Readable.from(body, { objectMode: false });
+        req.method = String(init.method || 'GET').toUpperCase();
+        req.url = url.pathname + url.search;
+        req.headers = Object.fromEntries(new Headers(init.headers || {}).entries());
+        const res = {
+            statusCode: 200,
+            headers: {},
+            writableEnded: false,
+            writeHead(status, headers = {}) { this.statusCode = status; Object.assign(this.headers, headers); return this; },
+            setHeader(k, v) { this.headers[k] = v; },
+            end(chunk = '') {
+                this.writableEnded = true;
+                const empty = [204, 205, 304].includes(this.statusCode);
+                resolve(new Response(empty ? null : chunk, { status: this.statusCode, headers: this.headers }));
+            },
+        };
+        server.emit('request', req, res);
     });
 
     api.listen = (port = 0) => new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server.address().port)));

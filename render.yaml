@@ -45,3 +45,12 @@ services:
         sync: false
       - key: MONO_PARTS
         sync: false
+      # New-lesson emails + Telegram posts (lessonNotify.js)
+      - key: LESSON_NOTIFY
+        sync: false
+      - key: LESSON_NOTIFY_SINCE
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: LESSON_NOTIFY_TELEGRAM
+        sync: false
