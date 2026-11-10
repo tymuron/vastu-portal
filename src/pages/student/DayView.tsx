@@ -124,12 +124,16 @@ export default function DayView() {
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Main Content (Video + Info) */}
                 <div className="lg:col-span-2 space-y-8">
-                    {/* Video Player */}
-                    <VideoPlayer
-                        youtubeUrl={day.videoUrl}
-                        rutubeUrl={day.rutubeUrl}
-                        title={day.title}
-                    />
+                    {/* Video Player: only for a lesson with a video. A practice
+                        lesson has none, and an empty «Видео недоступно» box
+                        would push its text down, on a phone below the fold. */}
+                    {(day.videoUrl || day.rutubeUrl) && (
+                        <VideoPlayer
+                            youtubeUrl={day.videoUrl}
+                            rutubeUrl={day.rutubeUrl}
+                            title={day.title}
+                        />
+                    )}
 
                     <div>
                         <h1 className="text-2xl md:text-3xl font-serif text-vastu-dark mb-4 break-words">{day.title}</h1>
@@ -201,7 +205,8 @@ export default function DayView() {
                                             className="flex items-center justify-between gap-3 p-3 rounded-lg border border-vastu-gold/30 text-vastu-dark hover:bg-vastu-gold/10 transition-colors text-sm"
                                         >
                                             <div className="text-left">
-                                                <div className="text-xs text-vastu-text-light">Курс завершен</div>
+                                                {/* Only the last lesson so far: weeks are added while
+                                                    the course runs, so this doesn't say «Курс завершен». */}
                                                 <div className="font-medium">Вернуться к программе</div>
                                             </div>
                                             <ChevronRight size={16} className="text-vastu-gold" />
