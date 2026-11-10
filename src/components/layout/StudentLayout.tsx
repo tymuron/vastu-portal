@@ -2,6 +2,7 @@ import { Outlet, Link, useLocation, Navigate, useNavigate } from 'react-router-d
 import { LogOut, User as UserIcon, Menu, X, Loader2, BookOpen, Video, Library, Lock, ChevronDown, ChevronRight, Clock, Home, Smartphone, LayoutGrid } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
+import { loginPathFor } from '../../lib/loginNext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
@@ -46,7 +47,9 @@ export default function StudentLayout() {
     if (authLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-vastu-gold" size={40} /></div>;
 
     if (!user) {
-        return <Navigate to="/login" replace />;
+        // Keep where they were going (a lesson link from an email), so the
+        // login page can bring them back to it.
+        return <Navigate to={loginPathFor(location.pathname, location.search)} replace />;
     }
 
     if (coursesLoading) {

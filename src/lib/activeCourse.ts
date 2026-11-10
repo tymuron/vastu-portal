@@ -16,7 +16,11 @@ export interface CoursePick {
     courseIds: string[];
 }
 
-export function chooseActiveCourse(userId: string, courseIds: string[], pick: CoursePick | null): string | null {
+// `wanted`: the course a link names (?course=…, as in the new-lesson email).
+// It wins whenever the student has that course: the lesson page only finds
+// lessons of the open course, and the picker would lose the link.
+export function chooseActiveCourse(userId: string, courseIds: string[], pick: CoursePick | null, wanted?: string | null): string | null {
+    if (wanted && courseIds.includes(wanted)) return wanted;
     if (courseIds.length === 1) return courseIds[0];
     if (!pick || pick.userId !== userId) return null;
     if (!courseIds.includes(pick.courseId)) return null;

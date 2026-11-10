@@ -177,9 +177,20 @@ export function CourseProvider({ children }: { children: React.ReactNode }) {
                 // StudentLayout shows the picker: on a fresh sign-in, and
                 // whenever a course was added since the pick, so a 2nd course
                 // can't go unnoticed. See lib/activeCourse.ts.
+                // A link that names its course (?course=…, the new-lesson
+                // email) opens that course and counts as the student's pick.
                 let pick: CoursePick | null = null;
                 try { pick = parseCoursePick(localStorage.getItem(COURSE_PICK_KEY)); } catch { /* ignore */ }
-                setActiveCourseIdState(chooseActiveCourse(userId, list.map((c) => c.id), pick));
+                let wanted: string | null = null;
+                try { wanted = new URLSearchParams(window.location.search).get('course'); } catch { /* ignore */ }
+                const ids = list.map((c) => c.id);
+                const chosen = chooseActiveCourse(userId, ids, pick, wanted);
+                if (chosen && chosen === wanted && ids.length > 1) {
+                    try {
+                        localStorage.setItem(COURSE_PICK_KEY, JSON.stringify({ userId, courseId: chosen, courseIds: ids }));
+                    } catch { /* ignore */ }
+                }
+                setActiveCourseIdState(chosen);
             } catch (err) {
                 console.error('Failed to load courses:', err);
                 if (!cancelled) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
+import { safeNext } from '../lib/loginNext';
 import { UserRole } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import { LogOut, ArrowRight, User, Eye, EyeOff, AlertTriangle } from 'lucide-react';
@@ -39,6 +40,9 @@ function authErrorToRu(err: any): string {
 
 export default function LoginPage() {
     const navigate = useNavigate();
+    const location = useLocation();
+    // A student sent here from a lesson link goes back to that lesson.
+    const studentHome = safeNext(new URLSearchParams(location.search).get('next')) ?? '/welcome';
     const { user, role: authRole, signOut, authIssue } = useAuth();
     const [role, setRole] = useState<UserRole>('student');
     const [email, setEmail] = useState('');
@@ -110,7 +114,7 @@ export default function LoginPage() {
                 if (realRole === 'teacher') {
                     navigate('/teacher');
                 } else {
-                    navigate('/welcome');
+                    navigate(studentHome);
                 }
             }
 
@@ -146,7 +150,7 @@ export default function LoginPage() {
 
                     <div className="space-y-4">
                         <button
-                            onClick={() => authRole === 'teacher' ? navigate('/teacher') : navigate('/welcome')}
+                            onClick={() => authRole === 'teacher' ? navigate('/teacher') : navigate(studentHome)}
                             className="w-full bg-vastu-gold text-vastu-dark font-serif text-lg font-medium py-3 rounded-lg hover:bg-[#D4C6A0] transform hover:scale-[1.02] transition-all duration-300 shadow-lg shadow-vastu-gold/20 flex items-center justify-center gap-2"
                         >
                             Продолжить

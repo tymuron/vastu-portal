@@ -46,3 +46,14 @@ test('a stored pick that is missing or garbled reads as no pick', () => {
         { userId: 'u1', courseId: DESIGN, courseIds: [BUSINESS, DESIGN] },
     );
 });
+
+test('a lesson link names its course (?course=…, the new-lesson email) and that course opens', () => {
+    // Before: a student with two courses got the picker, or «Урок не найден»
+    // when the other course was open, because the lesson page only looks in
+    // the open course.
+    const pick = { userId: 'u1', courseId: BUSINESS, courseIds: [BUSINESS, DESIGN] };
+    assert.equal(chooseActiveCourse('u1', [BUSINESS, DESIGN], pick, DESIGN), DESIGN);
+    assert.equal(chooseActiveCourse('u1', [BUSINESS, DESIGN], null, DESIGN), DESIGN, 'no pick yet: no picker either');
+    assert.equal(chooseActiveCourse('u1', [BUSINESS, DESIGN], pick, 'someone-elses-course'), BUSINESS, 'a course they lack changes nothing');
+    assert.equal(chooseActiveCourse('u1', [DESIGN], null, null), DESIGN);
+});
