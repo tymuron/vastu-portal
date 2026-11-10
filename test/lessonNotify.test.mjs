@@ -150,6 +150,10 @@ test('a long description is cut at a word, and says so', () => {
     const short = shortLines(many, { maxLines: 3 });
     assert.deepEqual(short.lines, ['1. Пункт 1', '2. Пункт 2', '3. Пункт 3 …']);
     assert.deepEqual(shortLines('<p>Коротко</p>'), { lines: ['Коротко'], cut: false });
+    // Lesson 1's description: two paragraphs; the second doesn't fit, so it is
+    // left out whole rather than broken off mid-word.
+    const two = shortLines(`<p>Вводный урок, с которого начинается вся работа с домом.</p><p><br></p><p>${'Вы узнаете три закона природы. '.repeat(12)}</p>`, { maxChars: 120 });
+    assert.deepEqual(two, { lines: ['Вводный урок, с которого начинается вся работа с домом.'], cut: true });
 });
 
 test('a week is open like on the course page; a lesson opens when created, or when its week opens', () => {
@@ -391,17 +395,22 @@ test('a failed email is tried again on the next run with the same idempotency ke
     assert.equal(wd.announcement(day.id).status, 'sent');
 });
 
-test("Resend's 429 (too fast, or the day's quota) stops the run and leaves the rest for the next one", async () => {
+test("Resend's 429 (too fast, or the day's quota): everyone waits 30 minutes, and nobody loses an attempt", async () => {
     const wd = world();
-    wd.lesson(wd.w.w1.id, { title: 'Урок 2', order_index: 3, video_url: 'https://youtu.be/abc' });
+    const day = wd.lesson(wd.w.w1.id, { title: 'Урок 2', order_index: 3, video_url: 'https://youtu.be/abc' });
     wd.failSends.push('Resend 429: daily_quota_exceeded');
     const r = await settleAndRun(wd);
-    assert.equal(r.emails.stoppedEarly, true);
+    assert.ok(r.emails.pausedUntil);
     assert.equal(wd.keys.length, 1, 'nobody else tried in that run');
-    assert.equal(wd.emails.length, 0);
+    assert.deepEqual(wd.rowsOf(day.id).map((x) => [x.status, x.attempts]), [['pending', 0], ['pending', 0]]);
+    assert.match(wd.alerts.map((a) => a.subject).join(), /429/);
     wd.clock.advance(5 * MIN);
     await wd.notifier.run();
+    assert.equal(wd.keys.length, 1, 'no knocking every five minutes');
+    wd.clock.advance(26 * MIN);
+    await wd.notifier.run();
     assert.deepEqual(recipients(wd.emails), ['a-base@example.com', 'b-pro@example.com']);
+    assert.equal(wd.announcement(day.id).status, 'sent');
 });
 
 test('a run cut off halfway is finished by the next one', async () => {

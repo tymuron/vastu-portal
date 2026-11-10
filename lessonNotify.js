@@ -44,6 +44,8 @@ const MAX_EMAIL_ATTEMPTS = 8;
 const MAX_TG_ATTEMPTS = 5;
 // A row left 'sending' this long was cut off mid-run (a deploy, a crash).
 const STALE_MS = 10 * MINUTE;
+// How long emails wait after Resend answers 429.
+const RESEND_PAUSE_MS = 30 * MINUTE;
 // PostgREST puts `in` lists in the URL; keep each under a few kilobytes.
 const IN_CHUNK = 100;
 
@@ -250,25 +252,25 @@ function clip(text, max) {
     return `${s.replace(/[\s,.;:—–-]+$/, '')}…`;
 }
 
-// The start of a description, for an email or a post: whole lines while
-// they fit, the last one clipped at a word, «…» when something was left out.
+// The start of a description, for an email or a post: whole paragraphs and
+// list items while they fit. Only a first paragraph that alone is too long is
+// clipped, at a word. «…» marks a cut, unless the last line ends a sentence.
 export function shortLines(html, { maxLines = 6, maxChars = 320 } = {}) {
     const all = htmlToLines(html);
     const lines = [];
     let used = 0;
     for (const l of all) {
-        const room = maxChars - used;
-        if (lines.length >= maxLines || room < 12) break;
-        if (l.length > room) {
-            lines.push(clip(l, room));
-            used = maxChars;
+        if (lines.length >= maxLines) break;
+        if (l.length > maxChars - used) {
+            if (!lines.length) lines.push(clip(l, maxChars));
             break;
         }
         lines.push(l);
         used += l.length;
     }
     const cut = lines.length < all.length || lines.some((l, i) => l !== all[i]);
-    if (cut && lines.length && !lines[lines.length - 1].endsWith('…')) lines[lines.length - 1] += ' …';
+    const last = lines[lines.length - 1];
+    if (cut && last && !/[.!?…]$/.test(last)) lines[lines.length - 1] = `${last} …`;
     return { lines, cut };
 }
 
@@ -523,7 +525,7 @@ export function buildTelegramPost({ lessons, appBase }) {
     lessons = [...lessons].sort(byCourseOrder);
     const many = lessons.length > 1;
     const blocks = lessons.map((l) => {
-        const { lines } = shortLines(l.descriptionHtml, many ? { maxLines: 3, maxChars: 180 } : { maxLines: 8, maxChars: 600 });
+        const { lines } = shortLines(l.descriptionHtml, many ? { maxLines: 3, maxChars: 240 } : { maxLines: 10, maxChars: 900 });
         return [`<b>${tgEsc(l.title)}</b>`, ...(l.weekTitle ? [`<i>${tgEsc(l.weekTitle)}</i>`] : []), ...lines.map(tgEsc)].join('\n');
     });
     const text = [
@@ -628,6 +630,7 @@ export function createLessonNotifier({
 
     let running = false;
     let lastRun = null;
+    let emailPauseUntil = 0;
     const loggedDry = new Set();
 
     async function load(supabase, { allowMissingTables }) {
@@ -772,6 +775,12 @@ export function createLessonNotifier({
 
     async function sendEmails(supabase, lessonBy, sendingIds, t, report) {
         if (!sendingIds.length) return;
+        // After Resend said 429 (too fast, or the day's quota is used up), wait
+        // before asking again instead of knocking every few minutes.
+        if (now() < emailPauseUntil) {
+            report.emails.pausedUntil = iso(emailPauseUntil);
+            return;
+        }
         // Rows a cut-off run left mid-send go out again; the idempotency key
         // makes Resend skip any that did leave.
         for (const part of chunks(sendingIds)) {
@@ -807,16 +816,23 @@ export function createLessonNotifier({
                 report.emails.sent += 1;
             } catch (err) {
                 const msg = String(err?.message || err);
+                // 429 = too fast, or the day's quota is used up. Not this email's
+                // fault: back in the queue without spending an attempt, and the
+                // rest wait with it.
+                if (/\b429\b/.test(msg)) {
+                    for (const r of mine) {
+                        await rows(supabase.from('lesson_notifications').update({ status: 'pending', error: msg.slice(0, 500), updated_at: iso(now()) }).eq('id', r.id).select('id'), 'mark deferred');
+                    }
+                    emailPauseUntil = now() + RESEND_PAUSE_MS;
+                    report.emails.pausedUntil = iso(emailPauseUntil);
+                    await alert('уведомления об уроках: Resend просит подождать (429)', `Отправлено ${report.emails.sent}, остальные уйдут после ${iso(emailPauseUntil)}. Если так весь день — закончилась дневная квота тарифа Resend.\n${msg}`);
+                    break;
+                }
                 for (const r of mine) {
                     await rows(supabase.from('lesson_notifications').update({ status: 'failed', attempts: (r.attempts || 0) + 1, error: msg.slice(0, 500), updated_at: iso(now()) }).eq('id', r.id).select('id'), 'mark failed');
                 }
                 report.emails.failed += 1;
                 report.emails.errors.push({ to: mine[0].email, error: msg });
-                // 429 = too fast or the day's quota: leave the rest for the next run.
-                if (/\b429\b/.test(msg)) {
-                    report.emails.stoppedEarly = true;
-                    break;
-                }
             }
         }
         if (report.emails.failed) {
