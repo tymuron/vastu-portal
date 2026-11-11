@@ -124,13 +124,22 @@ export function readLessonNotifyConfig(env = process.env) {
     }
 
     // vastu-design-2026=-1001234567890,other-course=@public_channel
+    // A course posts to several chats when its slug repeats, and «id/42» posts
+    // into topic 42 of a forum group (the last number of the topic's link):
+    // vastu-design-2026=-1001234567890,vastu-design-2026=-1009876543210/2
+    // chats[slug] lists them comma-separated, in the order given.
     const chats = {};
     for (const pair of listOf(env.LESSON_NOTIFY_TELEGRAM)) {
         const eq = pair.indexOf('=');
         const slug = eq > 0 ? pair.slice(0, eq).trim() : '';
         const chat = eq > 0 ? pair.slice(eq + 1).trim() : '';
-        if (slug && /^(-?\d+|@[A-Za-z0-9_]{4,})$/.test(chat)) chats[slug] = chat;
-        else problems.push(`LESSON_NOTIFY_TELEGRAM: «${pair}» — нужно «slug курса=id канала»`);
+        if (slug && /^(-?\d+|@[A-Za-z0-9_]{4,})(\/\d+)?$/.test(chat)) {
+            const list = chats[slug] ? chats[slug].split(',') : [];
+            if (!list.includes(chat)) list.push(chat);
+            chats[slug] = list.join(',');
+        } else {
+            problems.push(`LESSON_NOTIFY_TELEGRAM: «${pair}» — нужно «slug курса=id канала» или «slug курса=id группы/номер темы»`);
+        }
     }
     const token = String(env.TELEGRAM_BOT_TOKEN || '').trim() || null;
     if (Object.keys(chats).length && !token) {
@@ -685,6 +694,32 @@ export function makeLessonPicture({ getSupabase, log = console, covers = coverRe
 // from an answer Telegram gave has its HTTP status in err.status.
 // ---------------------------------------------------------------------------
 
+// Where a post goes: «-1001234567890», «@channel», or «-1001234567890/2» for
+// topic 2 of a forum group.
+export function splitTelegramTarget(target) {
+    const m = String(target).match(/^(.+)\/(\d+)$/);
+    return m ? { chat: m[1], thread: Number(m[2]) } : { chat: String(target), thread: null };
+}
+
+// lesson_announcements.tg_chat: where the lesson's post goes, comma-separated.
+// A target the post already reached carries «#message_id»
+// («-1001234567890#25,-1009876543210/2»), so a retry after a partial failure
+// posts only where it hasn't yet.
+export function parseTelegramTargets(value) {
+    return String(value || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => {
+            const i = s.indexOf('#');
+            return i < 0 ? { key: s, done: null } : { key: s.slice(0, i), done: Number(s.slice(i + 1)) || 0 };
+        });
+}
+
+export function formatTelegramTargets(targets) {
+    return targets.map((x) => (x.done != null ? `${x.key}#${x.done}` : x.key)).join(',');
+}
+
 export function makeTelegramClient({ token, base = 'https://api.telegram.org' }) {
     if (!token) return null;
     const url = (method) => `${base.replace(/\/$/, '')}/bot${token}/${method}`;
@@ -701,10 +736,12 @@ export function makeTelegramClient({ token, base = 'https://api.telegram.org' })
         const resp = await fetch(url(method), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}) });
         return answer(method, resp);
     }
+    // `thread`: a topic of a forum group; without it a post goes to General.
     return {
-        async sendMessage(chatId, { text, reply_markup }) {
+        async sendMessage(chatId, { text, reply_markup, thread }) {
             const r = await call('sendMessage', {
                 chat_id: chatId,
+                ...(thread ? { message_thread_id: thread } : {}),
                 text,
                 parse_mode: 'HTML',
                 link_preview_options: { is_disabled: true },
@@ -712,9 +749,10 @@ export function makeTelegramClient({ token, base = 'https://api.telegram.org' })
             });
             return r?.message_id ?? null;
         },
-        async sendPhoto(chatId, { photo, caption, reply_markup }) {
+        async sendPhoto(chatId, { photo, caption, reply_markup, thread }) {
             const form = new FormData();
             form.append('chat_id', String(chatId));
+            if (thread) form.append('message_thread_id', String(thread));
             form.append('caption', caption);
             form.append('parse_mode', 'HTML');
             if (reply_markup) form.append('reply_markup', JSON.stringify(reply_markup));
@@ -791,20 +829,27 @@ export function createLessonNotifier({
     const chatFor = (slug) => config.telegram.chats[slug] || null;
     const pictureFor = picture || makeLessonPicture({ getSupabase, log });
 
-    // One post: the picture with the text as its caption, or, with no picture
-    // (or when Telegram turns the photo down), the same text as a message.
+    // One post to one target («id» or «id/topic»): the picture with the text as
+    // its caption, or, with no picture (or when Telegram turns the photo down),
+    // the same text as a message.
+    // `pictures` (a Map) keeps one run's pictures, so a post going to several
+    // chats renders its cover once.
     // -> { messageId, picture: 'cover' | 'card' | null }
-    async function deliverPost(chat, lessons) {
+    async function deliverPost(target, lessons, pictures = null) {
+        const { chat, thread } = splitTelegramTarget(target);
+        const where = thread ? { thread } : {};
         let pic = null;
         try {
-            pic = await pictureFor(lessons);
+            const key = lessons.map((l) => l.dayId).join(',');
+            if (!pictures?.has(key)) pictures?.set(key, pictureFor(lessons));
+            pic = await (pictures ? pictures.get(key) : pictureFor(lessons));
         } catch (err) {
             log.error(`lesson-notify: picture failed: ${err?.message || err}`);
         }
         if (pic?.jpeg?.length && telegram.sendPhoto) {
             const caption = buildTelegramPost({ lessons, appBase, limit: TG_CAPTION_LIMIT });
             try {
-                const messageId = await telegram.sendPhoto(chat, { photo: pic.jpeg, caption: caption.text, reply_markup: caption.reply_markup });
+                const messageId = await telegram.sendPhoto(chat, { photo: pic.jpeg, caption: caption.text, reply_markup: caption.reply_markup, ...where });
                 return { messageId, picture: pic.kind };
             } catch (err) {
                 // Only a clear «no» to this photo falls back to text. A network
@@ -813,7 +858,7 @@ export function createLessonNotifier({
                 log.error(`lesson-notify: Telegram refused the photo (${err.message}); posting text`);
             }
         }
-        const messageId = await telegram.sendMessage(chat, buildTelegramPost({ lessons, appBase, limit: TG_TEXT_LIMIT }));
+        const messageId = await telegram.sendMessage(chat, { ...buildTelegramPost({ lessons, appBase, limit: TG_TEXT_LIMIT }), ...where });
         return { messageId, picture: null };
     }
 
@@ -924,10 +969,11 @@ export function createLessonNotifier({
 
     async function postTelegram(supabase, lessonBy, t, report) {
         const anns = await rowsIn(supabase, 'lesson_announcements', 'day_id, status, tg_status, tg_chat, tg_attempts, updated_at', 'day_id', [...lessonBy.keys()]);
-        // A post cut off mid-flight may already be in the channel: never repost it by itself.
+        // A post cut off mid-flight may already be in the chat: never repost it by itself.
         for (const a of anns.filter((x) => x.tg_status === 'posting' && (timeOf(x.updated_at) ?? 0) < t - STALE_MS)) {
+            const open = parseTelegramTargets(a.tg_chat).filter((x) => x.done == null).map((x) => x.key).join(', ');
             await rows(supabase.from('lesson_announcements').update({ tg_status: 'failed', tg_attempts: MAX_TG_ATTEMPTS, tg_error: 'прервано во время публикации — проверьте канал', updated_at: iso(t) }).eq('day_id', a.day_id).eq('tg_status', 'posting').select('day_id'), 'tg stale');
-            await alert('уведомления об уроках: пост в Telegram прерван', `«${lessonBy.get(a.day_id)?.title}»: проверьте канал ${a.tg_chat}, был ли пост.`);
+            await alert('уведомления об уроках: пост в Telegram прерван', `«${lessonBy.get(a.day_id)?.title}»: проверьте ${open || a.tg_chat}, был ли пост.`);
         }
         const todo = anns.filter((a) => ['sending', 'sent'].includes(a.status) && a.tg_chat && (a.tg_status == null || (a.tg_status === 'failed' && (a.tg_attempts || 0) < MAX_TG_ATTEMPTS)));
         if (!todo.length) return;
@@ -935,30 +981,59 @@ export function createLessonNotifier({
             report.problems.push('посты в Telegram ждут, но TELEGRAM_BOT_TOKEN не задан');
             return;
         }
-        const byChat = new Map();
+        // Claim each lesson for this run. Its targets say where it still has to go.
+        const mine = [];
         for (const a of todo) {
-            if (!byChat.has(a.tg_chat)) byChat.set(a.tg_chat, []);
-            byChat.get(a.tg_chat).push(a);
+            const q = supabase.from('lesson_announcements').update({ tg_status: 'posting', tg_attempts: (a.tg_attempts || 0) + 1, updated_at: iso(t) }).eq('day_id', a.day_id);
+            const got = await rows((a.tg_status == null ? q.is('tg_status', null) : q.eq('tg_status', 'failed')).select('day_id'), 'claim post');
+            if (got.length) mine.push({ dayId: a.day_id, targets: parseTelegramTargets(a.tg_chat), errors: [] });
         }
-        for (const [chat, list] of byChat) {
-            const mine = [];
-            for (const a of list) {
-                const q = supabase.from('lesson_announcements').update({ tg_status: 'posting', tg_attempts: (a.tg_attempts || 0) + 1, updated_at: iso(t) }).eq('day_id', a.day_id);
-                const got = await rows((a.tg_status == null ? q.is('tg_status', null) : q.eq('tg_status', 'failed')).select('day_id'), 'claim post');
-                if (got.length) mine.push(a.day_id);
+        // One post per target, with every lesson still owed there.
+        const byTarget = new Map();
+        for (const m of mine) {
+            if (!lessonBy.get(m.dayId)) continue;
+            for (const target of m.targets) {
+                if (target.done != null) continue;
+                if (!byTarget.has(target.key)) byTarget.set(target.key, []);
+                byTarget.get(target.key).push(m);
             }
-            const lessons = mine.map((id) => lessonBy.get(id)).filter(Boolean);
-            if (!lessons.length) continue;
+        }
+        const pictures = new Map();
+        for (const [chat, list] of byTarget) {
+            const lessons = list.map((m) => lessonBy.get(m.dayId));
             try {
-                const { messageId, picture: kind } = await deliverPost(chat, lessons);
-                await rows(supabase.from('lesson_announcements').update({ tg_status: 'posted', tg_message_id: messageId, tg_error: null, updated_at: iso(now()) }).in('day_id', mine).select('day_id'), 'post done');
+                const { messageId, picture: kind } = await deliverPost(chat, lessons, pictures);
+                // Saved at once, so that a run stopped before the next target
+                // never posts here a second time.
+                for (const m of list) {
+                    m.targets.find((x) => x.key === chat).done = messageId ?? 0;
+                    await rows(supabase.from('lesson_announcements').update({ tg_chat: formatTelegramTargets(m.targets), updated_at: iso(now()) }).eq('day_id', m.dayId).select('day_id'), 'post progress');
+                }
                 report.telegram.push({ chat, lessons: lessons.map((l) => l.title), messageId, picture: kind });
             } catch (err) {
                 const msg = String(err?.message || err);
-                await rows(supabase.from('lesson_announcements').update({ tg_status: 'failed', tg_error: msg.slice(0, 500), updated_at: iso(now()) }).in('day_id', mine).select('day_id'), 'post failed');
+                for (const m of list) m.errors.push(`${chat}: ${msg}`);
                 report.telegram.push({ chat, lessons: lessons.map((l) => l.title), error: msg });
                 await alert('уведомления об уроках: пост в Telegram не опубликован', `${lessons.map((l) => `«${l.title}»`).join(', ')} → ${chat}\n${msg}`);
             }
+        }
+        for (const m of mine) {
+            const failed = m.errors.length > 0 || !lessonBy.get(m.dayId);
+            const first = m.targets.find((x) => x.done != null);
+            await rows(
+                supabase
+                    .from('lesson_announcements')
+                    .update({
+                        tg_status: failed ? 'failed' : 'posted',
+                        tg_chat: formatTelegramTargets(m.targets),
+                        ...(first ? { tg_message_id: first.done } : {}),
+                        tg_error: failed ? (m.errors.join('\n') || 'урок не найден').slice(0, 500) : null,
+                        updated_at: iso(now()),
+                    })
+                    .eq('day_id', m.dayId)
+                    .select('day_id'),
+                failed ? 'post failed' : 'post done'
+            );
         }
     }
 

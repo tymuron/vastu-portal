@@ -20,10 +20,12 @@ import {
     inSendHours,
     lessonHasContent,
     lessonOpenedAt,
+    makeTelegramClient,
     nextSendTime,
     pickCoverFile,
     readLessonNotifyConfig,
     shortLines,
+    splitTelegramTarget,
     storageObjectOf,
     tgVisibleLength,
     weekIsOpen,
@@ -98,19 +100,23 @@ function world({ env = {}, start = '2026-11-12T08:00:00Z' } = {}) {
         return `email-${emails.length}`;
     };
     // Telegram: posts record what was sent. `fail` throws like a lost
-    // connection (no answer, so no status); `refusePhoto` answers 400 to a photo.
+    // connection (no answer, so no status); `refusePhoto` answers 400 to a photo;
+    // a chat in `missing` answers 400 «chat not found» (the bot isn't in it).
     const posts = [];
-    const tg = { fail: 0, refusePhoto: false, updates: [], picture: 'cover' };
+    const tg = { fail: 0, refusePhoto: false, updates: [], picture: 'cover', missing: new Set() };
+    const notFound = (method) => Object.assign(new Error(`Telegram ${method} 400: Bad Request: chat not found`), { status: 400 });
     const telegram = {
         async sendMessage(chat, post) {
             if (tg.fail > 0) { tg.fail -= 1; throw new Error('fetch failed'); }
+            if (tg.missing.has(chat)) throw notFound('sendMessage');
             posts.push({ chat, ...post, photo: null });
             return 1000 + posts.length;
         },
-        async sendPhoto(chat, { photo, caption, reply_markup }) {
+        async sendPhoto(chat, { photo, caption, reply_markup, thread }) {
             if (tg.fail > 0) { tg.fail -= 1; throw new Error('fetch failed'); }
+            if (tg.missing.has(chat)) throw notFound('sendPhoto');
             if (tg.refusePhoto) throw Object.assign(new Error('Telegram sendPhoto 400: Bad Request: IMAGE_PROCESS_FAILED'), { status: 400 });
-            posts.push({ chat, text: caption, reply_markup, photo });
+            posts.push({ chat, text: caption, reply_markup, photo, ...(thread ? { thread } : {}) });
             return 1000 + posts.length;
         },
         async getUpdates() { return tg.updates; },
@@ -675,4 +681,108 @@ test('the test send posts the photo version too, and a preview says which pictur
     assert.deepEqual(preview.telegramPicture, { kind: 'cover', width: 1280, height: 720, bytes: Buffer.from('jpeg of Урок 1. Основы Васту и влияние дома на жизнь').length, source: null });
     assert.ok(preview.telegramCaption.startsWith('🤍 <b>Новый урок на платформе</b>'));
     assert.equal(wd.fake.db.lesson_announcements.length, 0);
+});
+
+// ------------------------------------------------ one course, several chats
+
+const GROUP = '-1009876543210';
+const TWO_CHATS = { LESSON_NOTIFY_TELEGRAM: `vastu-design-2026=${CHANNEL},vastu-design-2026=${GROUP}/2` };
+
+test('a course can post to several chats, one of them a topic of a forum group', () => {
+    const c = readLessonNotifyConfig({
+        TELEGRAM_BOT_TOKEN: 'bot-token',
+        LESSON_NOTIFY_TELEGRAM: `vastu-design-2026=${CHANNEL}, vastu-design-2026=${GROUP}/2, vastu-design-2026=${CHANNEL}, vastu-design-2026=${GROUP}/x`,
+    });
+    assert.equal(c.telegram.chats['vastu-design-2026'], `${CHANNEL},${GROUP}/2`, 'in order, each once');
+    assert.equal(c.problems.length, 1, 'only «/x» is wrong');
+    assert.deepEqual(splitTelegramTarget(`${GROUP}/2`), { chat: GROUP, thread: 2 });
+    assert.deepEqual(splitTelegramTarget('@public_channel'), { chat: '@public_channel', thread: null });
+});
+
+test('a new lesson goes to every chat of its course, into the topic when one is given', async () => {
+    const wd = world({ env: TWO_CHATS });
+    const day = wd.lesson(wd.w.w1.id, { title: 'Урок 2', order_index: 3, video_url: 'https://youtu.be/abc' });
+    const r = await settleAndRun(wd);
+    assert.deepEqual(wd.posts.map((p) => [p.chat, p.thread ?? null]), [[CHANNEL, null], [GROUP, 2]]);
+    assert.equal(wd.posts[1].text, wd.posts[0].text, 'the same post in both');
+    assert.ok(wd.posts[1].photo, 'with the cover');
+    assert.equal(wd.pictureCalls.length, 1, 'the cover is made once for both');
+    const ann = wd.announcement(day.id);
+    assert.equal(ann.tg_status, 'posted');
+    assert.equal(ann.tg_chat, `${CHANNEL}#1001,${GROUP}/2#1002`);
+    assert.equal(ann.tg_message_id, 1001);
+    assert.equal(wd.emails.length, 2, 'one email per student, however many chats');
+    assert.deepEqual(r.telegram.map((x) => x.chat), [CHANNEL, `${GROUP}/2`]);
+});
+
+test('when one of the chats fails, the retry posts only there', async () => {
+    const wd = world({ env: TWO_CHATS });
+    const day = wd.lesson(wd.w.w1.id, { title: 'Урок 2', order_index: 3, video_url: 'https://youtu.be/abc' });
+    wd.tg.missing.add(GROUP);
+    await settleAndRun(wd);
+    assert.deepEqual(wd.posts.map((p) => p.chat), [CHANNEL]);
+    let ann = wd.announcement(day.id);
+    assert.equal(ann.tg_status, 'failed');
+    assert.equal(ann.tg_chat, `${CHANNEL}#1001,${GROUP}/2`);
+    assert.match(ann.tg_error, /chat not found/);
+    assert.ok(wd.alerts.some((a) => a.details.includes(`→ ${GROUP}/2`)), 'Tymur hears which chat');
+    wd.tg.missing.delete(GROUP);
+    wd.clock.advance(5 * MIN);
+    await wd.notifier.run();
+    assert.deepEqual(wd.posts.map((p) => p.chat), [CHANNEL, GROUP], 'the channel gets no second copy');
+    ann = wd.announcement(day.id);
+    assert.equal(ann.tg_status, 'posted');
+    assert.equal(ann.tg_chat, `${CHANNEL}#1001,${GROUP}/2#1002`);
+    assert.equal(ann.tg_error, null);
+    wd.clock.advance(5 * MIN);
+    await wd.notifier.run();
+    assert.equal(wd.posts.length, 2, 'nothing more once every chat has it');
+});
+
+test('a run cut off between two chats is not finished by itself', async () => {
+    const wd = world({ env: TWO_CHATS });
+    const day = wd.lesson(wd.w.w1.id, { title: 'Урок 2', order_index: 3, video_url: 'https://youtu.be/abc' });
+    await settleAndRun(wd);
+    // As if a deploy had stopped a run right after the channel post was saved,
+    // while the group post was on its way.
+    Object.assign(wd.announcement(day.id), { tg_status: 'posting', tg_chat: `${CHANNEL}#1001,${GROUP}/2`, updated_at: new Date(wd.clock.now() - 20 * MIN).toISOString() });
+    const before = wd.posts.length;
+    await wd.notifier.run();
+    assert.equal(wd.posts.length, before, 'no post by itself: it may have gone out');
+    assert.equal(wd.announcement(day.id).tg_status, 'failed');
+    const alert = wd.alerts.find((a) => /прерван/.test(a.subject));
+    assert.ok(alert.details.includes(`проверьте ${GROUP}/2,`), 'the alert names only the chat to check');
+});
+
+test('the test send can post into a topic, as a photo or as text', async () => {
+    const wd = world();
+    const sent = await wd.notifier.testSend({ dayId: wd.existing.lesson1.id, telegramChat: `${GROUP}/2` });
+    assert.equal(sent.telegramPicture, 'cover');
+    assert.deepEqual([wd.posts[0].chat, wd.posts[0].thread], [GROUP, 2]);
+    wd.tg.picture = 'none';
+    await wd.notifier.testSend({ dayId: wd.existing.lesson1.id, telegramChat: `${GROUP}/2` });
+    assert.deepEqual([wd.posts[1].chat, wd.posts[1].thread, wd.posts[1].photo], [GROUP, 2, null]);
+});
+
+test('the Telegram client sends the topic as message_thread_id, and nothing extra without one', async () => {
+    const calls = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+        calls.push({ method: String(url).split('/').pop(), body: init.body });
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 7 } }), { status: 200 });
+    };
+    try {
+        const client = makeTelegramClient({ token: 'bot-token' });
+        assert.equal(await client.sendMessage(GROUP, { text: 'Урок', thread: 2 }), 7);
+        await client.sendMessage(CHANNEL, { text: 'Урок' });
+        await client.sendPhoto(GROUP, { photo: Buffer.from('jpeg'), caption: 'Урок', thread: 2 });
+        await client.sendPhoto(CHANNEL, { photo: Buffer.from('jpeg'), caption: 'Урок' });
+    } finally {
+        globalThis.fetch = realFetch;
+    }
+    assert.equal(JSON.parse(calls[0].body).message_thread_id, 2);
+    assert.equal('message_thread_id' in JSON.parse(calls[1].body), false);
+    assert.equal(calls[2].body.get('message_thread_id'), '2');
+    assert.equal(calls[3].body.has('message_thread_id'), false);
+    assert.deepEqual(calls.map((c) => c.method), ['sendMessage', 'sendMessage', 'sendPhoto', 'sendPhoto']);
 });
