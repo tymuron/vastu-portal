@@ -216,7 +216,9 @@ const fulfilment = createFulfilment({
     alertEmail: ALERT_EMAIL,
     lavaApiKey: LAVA_API_KEY,
     lavaBase: LAVA_API_BASE,
-    reconcileSince: RECONCILE_SINCE
+    reconcileSince: RECONCILE_SINCE,
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
 });
 
 const mono = createMono({
@@ -937,7 +939,7 @@ function checkCronSecret(req, res) {
         sendJson(res, 500, { error: 'Endpoint not configured' });
         return false;
     }
-    const headerSecret = req.headers['x-cron-secret'];
+    const headerSecret = req.headers['x-cron-secret'] || req.headers['x-admin-secret'];
     if (!headerSecret || headerSecret !== CRON_SECRET) {
         sendJson(res, 401, { error: 'Unauthorized' });
         return false;
@@ -945,13 +947,51 @@ function checkCronSecret(req, res) {
     return true;
 }
 
-// POST /api/admin/grant-access {email, tier, sendEmail}
+// Accepts either x-cron-secret / x-admin-secret OR Authorization: Bearer <supabase_access_token>
+// belonging to a user with profiles.role === 'teacher'.
+async function checkCronOrTeacher(req, res) {
+    const headerSecret = req.headers['x-cron-secret'] || req.headers['x-admin-secret'];
+    if (headerSecret !== undefined) {
+        return checkCronSecret(req, res);
+    }
+    const authHeader = req.headers['authorization'];
+    if (typeof authHeader === 'string' && /^Bearer\s+/i.test(authHeader)) {
+        const v = await fulfilment.verifyTeacher(authHeader);
+        if (!v.ok) {
+            sendJson(res, v.status, { error: v.error });
+            return false;
+        }
+        return true;
+    }
+    if (!CRON_SECRET && !SUPABASE_SERVICE_ROLE_KEY) {
+        sendJson(res, 500, { error: 'Endpoint not configured' });
+        return false;
+    }
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return false;
+}
+
+// GET /api/teacher/access?email=... (or /api/admin/access?email=...)
+// Read-only lookup of account, unlocked courses, and purchases for an email.
+async function handleCheckAccess(req, res) {
+    if (!(await checkCronOrTeacher(req, res))) return;
+    const email = new URL(req.url, 'http://x').searchParams.get('email') || '';
+    try {
+        const out = await fulfilment.checkAccess(email);
+        sendJson(res, out.status, out.body);
+    } catch (err) {
+        console.error('handleCheckAccess threw:', err);
+        sendJson(res, 500, { error: err?.message || 'Internal error' });
+    }
+}
+
+// POST /api/admin/grant-access (or /api/teacher/grant-access) {email, tier, sendEmail, dryRun}
 // Grants exactly what buying that tier grants (same course_offers mapping),
 // logs it in purchases, and by default sends the same welcome email. Also
 // returns a durable login link to paste into Telegram, so access never
 // depends on the email arriving.
 async function handleGrantAccess(req, res) {
-    if (!checkCronSecret(req, res)) return;
+    if (!(await checkCronOrTeacher(req, res))) return;
 
     let payload;
     try {
@@ -961,40 +1001,14 @@ async function handleGrantAccess(req, res) {
         return;
     }
 
-    const email = normEmail(payload?.email);
-    const tierKey = String(payload?.tier || '').trim().toLowerCase();
-    const tier = GRANT_TIERS.find((t) => t.key === tierKey);
-    if (!EMAIL_RE.test(email)) {
-        sendJson(res, 400, { error: 'Invalid email' });
-        return;
-    }
-    if (!tier) {
-        sendJson(res, 400, { error: `tier must be one of: ${GRANT_TIERS.map((t) => t.key).join(', ')}` });
-        return;
-    }
-
     try {
-        const result = await fulfilment.fulfil({
-            contractId: `manual-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
-            email,
-            lavaIds: [tier.lavaId],
-            source: 'manual',
-            sendEmail: payload?.sendEmail !== false
+        const out = await fulfilment.grantByTier({
+            email: payload?.email,
+            tier: payload?.tier,
+            sendEmail: payload?.sendEmail !== false,
+            dryRun: payload?.dryRun === true,
         });
-        if (result.status !== 'granted') {
-            sendJson(res, 500, { error: result.error || `Не удалось: ${result.status}` });
-            return;
-        }
-        sendJson(res, 200, {
-            granted: true,
-            email,
-            tier: tier.key,
-            courses: result.courseSlugs,
-            created: result.created,
-            emailSent: !!result.email?.sent,
-            emailError: result.email?.error || null,
-            loginLink: result.accessUrl
-        });
+        sendJson(res, out.status, out.body);
     } catch (err) {
         console.error('handleGrantAccess threw:', err);
         sendJson(res, 500, { error: err?.message || 'Internal error' });
@@ -1331,8 +1345,8 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Manual access grant — same fulfilment as a purchase (phone-friendly).
-    if (req.method === 'POST' && urlPath === '/api/admin/grant-access') {
+    // Manual access grant — same fulfilment as a purchase (phone-friendly & teacher session).
+    if (req.method === 'POST' && (urlPath === '/api/admin/grant-access' || urlPath === '/api/teacher/grant-access')) {
         handleGrantAccess(req, res).catch((err) => {
             console.error('handleGrantAccess threw:', err);
             sendJson(res, 500, { error: 'Internal error' });
@@ -1340,9 +1354,19 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (req.method === 'GET' && urlPath === '/api/admin/tiers') {
-        if (!checkCronSecret(req, res)) return;
-        sendJson(res, 200, { tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })) });
+    if (req.method === 'GET' && (urlPath === '/api/teacher/access' || urlPath === '/api/admin/access')) {
+        handleCheckAccess(req, res).catch((err) => {
+            console.error('handleCheckAccess threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
+        return;
+    }
+
+    if (req.method === 'GET' && (urlPath === '/api/admin/tiers' || urlPath === '/api/teacher/tiers')) {
+        checkCronOrTeacher(req, res).then((ok) => {
+            if (!ok) return;
+            sendJson(res, 200, { tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })) });
+        });
         return;
     }
 

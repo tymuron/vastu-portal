@@ -494,6 +494,55 @@ test('/grant: wrong secret refused; tier grant = purchase grant, with email and 
     assert.deepEqual(entitlements('quiet@example.com'), [{ slug: 'vastu-2', expires_at: '2026-11-18T00:00:00.000Z' }]);
 });
 
+test('teacher Bearer token grants and checks access; student token gets 403; missing token gets 401', async () => {
+    const teacher = fake.createUser('teacher-grant@example.com', { password: 'pw-teacher' });
+    fake.db.profiles.find((p) => p.id === teacher.id).role = 'teacher';
+    fake.createUser('student-grant@example.com', { password: 'pw-student' });
+
+    const login = async (email, password) => {
+        const resp = await fetch(`${fakeUrl}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+        return (await resp.json()).access_token;
+    };
+    const teacherToken = await login('teacher-grant@example.com', 'pw-teacher');
+    const studentToken = await login('student-grant@example.com', 'pw-student');
+
+    const noTokenResp = await fetch(`${app}/api/admin/grant-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'by-teacher@example.com', tier: 'design-base' }),
+    });
+    assert.equal(noTokenResp.status, 401);
+
+    const studentResp = await fetch(`${app}/api/admin/grant-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${studentToken}` },
+        body: JSON.stringify({ email: 'by-teacher@example.com', tier: 'design-base' }),
+    });
+    assert.equal(studentResp.status, 403);
+
+    const teacherResp = await fetch(`${app}/api/admin/grant-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacherToken}` },
+        body: JSON.stringify({ email: 'by-teacher@example.com', tier: 'design-base' }),
+    });
+    assert.equal(teacherResp.status, 200);
+    const granted = await teacherResp.json();
+    assert.equal(granted.granted, true);
+    assert.deepEqual(granted.courses, ['vastu-design-2026']);
+
+    const checkResp = await fetch(`${app}/api/teacher/access?email=by-teacher%40example.com`, {
+        headers: { Authorization: `Bearer ${teacherToken}` },
+    });
+    assert.equal(checkResp.status, 200);
+    const checked = await checkResp.json();
+    assert.equal(checked.accountExists, true);
+    assert.deepEqual(checked.entitlements.map((e) => e.slug), ['vastu-design-2026']);
+});
+
 test('admin purchases list + retry re-sends; status reports missing Telegram links', async () => {
     const list = await (await admin('GET', '/api/admin/purchases')).json();
     assert.ok(list.purchases.length >= 8);

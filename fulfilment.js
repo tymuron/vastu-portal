@@ -95,6 +95,26 @@ export const GRANT_TIERS = [
     { key: 'vip', label: 'Васту для бизнеса · VIP', lavaId: '1daaffb0-e3aa-44a9-98f6-5e1a986a79b3' },
 ];
 
+export function resolveGrantTier(input) {
+    const raw = String(input || '').trim().toLowerCase().replace(/ё/g, 'е');
+    if (!raw) return null;
+    const exact = GRANT_TIERS.find((t) => t.key === raw || t.label.toLowerCase().replace(/ё/g, 'е') === raw);
+    if (exact) return exact;
+    if (/наставнич|design-pro|васту-дизайн.*(?:про|vip|вип)|тариф\s*про/.test(raw)) {
+        return GRANT_TIERS.find((t) => t.key === 'design-pro');
+    }
+    if (/основн|design-base|базов|васту-дизайн/.test(raw)) {
+        return GRANT_TIERS.find((t) => t.key === 'design-base');
+    }
+    if (/бизнес.*(?:vip|вип)|^(?:vip|вип)$/.test(raw)) {
+        return GRANT_TIERS.find((t) => t.key === 'vip');
+    }
+    if (/бизнес.*стандарт|^стандарт$/.test(raw)) {
+        return GRANT_TIERS.find((t) => t.key === 'standard');
+    }
+    return null;
+}
+
 // Which way the money came, from the contract id: purchases.source only says
 // webhook / poll / manual. GetCourse orders are `gk-<order number>`,
 // monobank installments `mono-<order id>` (mono.js), the rest are lava.
@@ -517,6 +537,9 @@ export function createFulfilment({
     lavaApiKey,
     lavaBase = 'https://gate.lava.top',
     reconcileSince,
+    supabaseUrl,
+    serviceRoleKey,
+    fetchFn = fetch,
 }) {
     const appBase = (appUrl || 'https://vastu-portal-app.onrender.com').replace(/\/$/, '');
     const loginUrl = `${appBase}/login`;
@@ -960,5 +983,166 @@ export function createFulfilment({
         };
     }
 
-    return { fulfil, requestAccessEmail, accessRedirect, accessUrlFor, reconcile, status, alert, offerInfo };
+    // Verify a Supabase user access token (`Authorization: Bearer <jwt>`) via
+    // GET ${SUPABASE_URL}/auth/v1/user and confirm `profiles.role === 'teacher'`.
+    async function verifyTeacher(authHeader) {
+        const m = String(authHeader || '').match(/^Bearer\s+(.+)$/i);
+        const token = m ? m[1].trim() : '';
+        if (!token) return { ok: false, status: 401, error: 'Unauthorized' };
+        if (!supabaseUrl || !serviceRoleKey) return { ok: false, status: 500, error: 'Supabase not configured' };
+        let resp;
+        try {
+            resp = await fetchFn(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    apikey: serviceRoleKey,
+                    Accept: 'application/json',
+                },
+            });
+        } catch {
+            return { ok: false, status: 502, error: 'Failed to verify token' };
+        }
+        if (!resp.ok) return { ok: false, status: 401, error: 'Unauthorized' };
+        const user = await resp.json().catch(() => null);
+        if (!user?.id) return { ok: false, status: 401, error: 'Unauthorized' };
+        const supabase = getSupabase();
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('id, email, role, full_name')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (error) return { ok: false, status: 500, error: error.message };
+        if (!profile || profile.role !== 'teacher') {
+            return { ok: false, status: 403, error: 'Forbidden: teacher role required' };
+        }
+        return { ok: true, status: 200, user: profile };
+    }
+
+    // Read-only lookup for teacher / admin: account existence, unlocked courses, and purchases.
+    async function checkAccess(rawEmail) {
+        const email = normEmail(rawEmail);
+        if (!EMAIL_RE.test(email)) return { status: 400, body: { error: 'Invalid email' } };
+        const supabase = getSupabase();
+        const user = await findUserByEmail(supabase, email);
+        let profile = null;
+        let entitlements = [];
+        if (user?.id) {
+            const [{ data: prof }, { data: ents }] = await Promise.all([
+                supabase.from('profiles').select('id, email, role, full_name').eq('id', user.id).maybeSingle(),
+                supabase
+                    .from('user_entitlements')
+                    .select('course_id, granted_at, expires_at, source, courses(slug, title)')
+                    .eq('user_id', user.id),
+            ]);
+            profile = prof || null;
+            entitlements = (ents || []).map((e) => ({
+                slug: e.courses?.slug || null,
+                title: e.courses?.title || null,
+                grantedAt: e.granted_at || null,
+                expiresAt: e.expires_at || null,
+                source: e.source || null,
+            }));
+        }
+        const { data: purchases } = await supabase
+            .from('purchases')
+            .select('contract_id, email, source, status, course_slugs, amount, currency, email_sent_at, created_at')
+            .eq('email', email)
+            .order('created_at', { ascending: false });
+
+        return {
+            status: 200,
+            body: {
+                email,
+                accountExists: !!user,
+                userId: user?.id || null,
+                role: profile?.role || (user ? 'student' : null),
+                fullName: profile?.full_name || null,
+                entitlements,
+                purchases: (purchases || []).map((p) => ({
+                    contractId: p.contract_id,
+                    source: p.source,
+                    status: p.status,
+                    courseSlugs: p.course_slugs || [],
+                    amount: p.amount,
+                    currency: p.currency,
+                    emailSentAt: p.email_sent_at,
+                    createdAt: p.created_at,
+                })),
+                tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })),
+            },
+        };
+    }
+
+    // Grant access by tier key or Russian label, supporting dryRun=true.
+    async function grantByTier({ email: rawEmail, tier: rawTier, sendEmail: wantEmail = true, dryRun = false }) {
+        const email = normEmail(rawEmail);
+        const tier = resolveGrantTier(rawTier);
+        if (!EMAIL_RE.test(email)) {
+            return { status: 400, body: { error: 'Invalid email' } };
+        }
+        if (!tier) {
+            return {
+                status: 400,
+                body: { error: `tier must be one of: ${GRANT_TIERS.map((t) => t.key).join(', ')}` },
+            };
+        }
+        if (dryRun) {
+            const supabase = getSupabase();
+            const { data: offerRows } = await supabase
+                .from('course_offers')
+                .select('course_id, access_months, is_lifetime, courses(slug, title)')
+                .eq('lava_offer_id', tier.lavaId);
+            const courses = (offerRows || []).map((r) => r.courses?.slug).filter(Boolean);
+            return {
+                status: 200,
+                body: {
+                    dryRun: true,
+                    granted: false,
+                    email,
+                    tier: tier.key,
+                    tierLabel: tier.label,
+                    courses,
+                    sendEmail: wantEmail !== false,
+                },
+            };
+        }
+        const result = await fulfil({
+            contractId: `manual-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+            email,
+            lavaIds: [tier.lavaId],
+            source: 'manual',
+            sendEmail: wantEmail !== false,
+        });
+        if (result.status !== 'granted') {
+            return { status: 500, body: { error: result.error || `Не удалось: ${result.status}` } };
+        }
+        return {
+            status: 200,
+            body: {
+                granted: true,
+                email,
+                tier: tier.key,
+                tierLabel: tier.label,
+                courses: result.courseSlugs,
+                created: result.created,
+                emailSent: !!result.email?.sent,
+                emailError: result.email?.error || null,
+                loginLink: result.accessUrl,
+            },
+        };
+    }
+
+    return {
+        fulfil,
+        requestAccessEmail,
+        accessRedirect,
+        accessUrlFor,
+        reconcile,
+        status,
+        alert,
+        offerInfo,
+        verifyTeacher,
+        checkAccess,
+        grantByTier,
+    };
 }
