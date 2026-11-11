@@ -9,16 +9,23 @@ import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { createFakeServices } from './fake-services.mjs';
 import {
+    TG_CAPTION_LIMIT,
     buildLessonEmail,
     buildTelegramPost,
     createLessonNotifier,
+    cutText,
+    fitParagraphs,
+    htmlToBlocks,
     htmlToLines,
     inSendHours,
     lessonHasContent,
     lessonOpenedAt,
     nextSendTime,
+    pickCoverFile,
     readLessonNotifyConfig,
     shortLines,
+    storageObjectOf,
+    tgVisibleLength,
     weekIsOpen,
 } from '../lessonNotify.js';
 
@@ -90,15 +97,33 @@ function world({ env = {}, start = '2026-11-12T08:00:00Z' } = {}) {
         emails.push(msg);
         return `email-${emails.length}`;
     };
+    // Telegram: posts record what was sent. `fail` throws like a lost
+    // connection (no answer, so no status); `refusePhoto` answers 400 to a photo.
     const posts = [];
-    const tg = { fail: 0, updates: [] };
+    const tg = { fail: 0, refusePhoto: false, updates: [], picture: 'cover' };
     const telegram = {
         async sendMessage(chat, post) {
-            if (tg.fail > 0) { tg.fail -= 1; throw new Error('Telegram sendMessage 400: Bad Request: chat not found'); }
-            posts.push({ chat, ...post });
+            if (tg.fail > 0) { tg.fail -= 1; throw new Error('fetch failed'); }
+            posts.push({ chat, ...post, photo: null });
+            return 1000 + posts.length;
+        },
+        async sendPhoto(chat, { photo, caption, reply_markup }) {
+            if (tg.fail > 0) { tg.fail -= 1; throw new Error('fetch failed'); }
+            if (tg.refusePhoto) throw Object.assign(new Error('Telegram sendPhoto 400: Bad Request: IMAGE_PROCESS_FAILED'), { status: 400 });
+            posts.push({ chat, text: caption, reply_markup, photo });
             return 1000 + posts.length;
         },
         async getUpdates() { return tg.updates; },
+        async getMe() { return { id: 9176256937, username: 'vastu_design_uroki_bot' }; },
+        async getWebhookInfo() { return { url: '', pending_update_count: tg.updates.length }; },
+    };
+    // The picture, without rendering anything: 'cover', 'card', 'none' or 'throw'.
+    const pictureCalls = [];
+    const picture = async (lessons) => {
+        pictureCalls.push(lessons.map((l) => l.title));
+        if (tg.picture === 'throw') throw new Error('renderer broke');
+        if (tg.picture === 'none') return null;
+        return { jpeg: Buffer.from(`jpeg of ${lessons[0].title}`), width: 1280, height: 720, kind: tg.picture };
     };
     const alerts = [];
     const config = readLessonNotifyConfig({
@@ -120,10 +145,11 @@ function world({ env = {}, start = '2026-11-12T08:00:00Z' } = {}) {
         now: clock.now,
         sleep: async () => {},
         sendGapMs: 0,
+        picture,
     });
     const announcement = (dayId) => fake.db.lesson_announcements.find((a) => a.day_id === dayId);
     const rowsOf = (dayId) => fake.db.lesson_notifications.filter((r) => r.day_id === dayId);
-    return { fake, clock, c, w, s, lesson, existing, emails, keys, failSends, posts, tg, alerts, notifier, announcement, rowsOf };
+    return { fake, clock, c, w, s, lesson, existing, emails, keys, failSends, posts, tg, pictureCalls, alerts, notifier, announcement, rowsOf };
 }
 
 const recipients = (emails) => emails.map((e) => e.to).sort();
@@ -496,8 +522,157 @@ test("the bot's chats, to find the course channel's id", async () => {
         { update_id: 1, my_chat_member: { chat: { id: -1001234567890, title: 'Канал курса ВАСТУ-ДИЗАЙН', type: 'channel' }, new_chat_member: { status: 'administrator' } } },
         { update_id: 2, message: { chat: { id: 42, first_name: 'Tymur', type: 'private' } } },
     ];
-    assert.deepEqual(await wd.notifier.telegramChats(), [
-        { id: -1001234567890, type: 'channel', title: 'Канал курса ВАСТУ-ДИЗАЙН', botStatus: 'administrator' },
-        { id: 42, type: 'private', title: 'Tymur', botStatus: null },
+    assert.deepEqual(await wd.notifier.telegramChats(), {
+        bot: { id: 9176256937, username: 'vastu_design_uroki_bot' },
+        webhook: { url: '', pendingUpdates: 2, lastError: null },
+        updates: 2,
+        chats: [
+            { id: -1001234567890, type: 'channel', title: 'Канал курса ВАСТУ-ДИЗАЙН', botStatus: 'administrator' },
+            { id: 42, type: 'private', title: 'Tymur', botStatus: null },
+        ],
+    });
+    // Nothing pending: the answer says so instead of a bare empty list.
+    wd.tg.updates = [];
+    const none = await wd.notifier.telegramChats();
+    assert.deepEqual([none.updates, none.webhook.pendingUpdates, none.chats], [0, 0, []]);
+});
+
+// ------------------------------------------- the Telegram post (11 Nov 2026)
+// Tymur: «добавь какую-нибудь картинку на уведомлениях и разбей на абзацы,
+// чтобы лучше читался текст. Картинку с темой урока».
+
+const LESSON1_HTML = '<p>Вводный урок, с которого начинается вся работа с домом. Разбираем, на чём держится васту без эзотерики: почему дом — живой организм и наше зеркало и как он связан со здоровьем, деньгами, отношениями и внутренним состоянием.</p><p><br></p><p>Вы узнаете три закона природы, на которых строится взаимодействие человека и пространства: дом как живой организм, баланс и резонанс. Поймёте, как на вас влияет каждая вещь в доме, от чашки со сколом до завала в кладовке, и как пространство действует на тело, настроение и мысли. В конце урока вы получите простую формулу из трёх вопросов. С ней можно зайти в любую комнату и понять, что в ней действительно требует коррекции.</p>';
+
+test('a description reads in its own paragraphs: each <p> is a block, a list is one block, <br> breaks a line', () => {
+    assert.deepEqual(htmlToBlocks('<p>Первый абзац.</p><p><br></p><p>Второй<br>с переносом.</p><ol><li>Север</li><li>Юг</li></ol><p>Итог.</p>'), [
+        ['Первый абзац.'], ['Второй', 'с переносом.'], ['1. Север', '2. Юг'], ['Итог.'],
     ]);
+    assert.deepEqual(htmlToBlocks('<ul><li><p>Пункт</p></li><li>Ещё</li></ul>'), [['• Пункт', '• Ещё']]);
+    assert.deepEqual(htmlToBlocks(LESSON1_HTML).length, 2);
+});
+
+test('text is cut at a line, else a sentence, else a whole word — never mid-word', () => {
+    assert.equal(cutText('Коротко.', 50), 'Коротко.');
+    assert.equal(cutText('1. Север\n2. Юг\n3. Запад и восток', 20), '1. Север\n2. Юг');
+    assert.equal(cutText('Первое предложение здесь. Второе предложение длинное.', 40), 'Первое предложение здесь.');
+    const word = cutText('Очень длинное предложение без единой точки до самого конца строки', 30);
+    assert.ok(word.endsWith('…') && 'Очень длинное предложение без единой точки'.startsWith(word.slice(0, -1)), word);
+});
+
+test('paragraphs fill the room whole, and the next one is cut at a sentence when a useful part fits', () => {
+    const first = 'Первый абзац целиком.';
+    const second = `${'Второе предложение второго абзаца довольно длинное.'} ${'Третье предложение уже не поместится в оставшееся место никак.'}`;
+    assert.deepEqual(fitParagraphs([[first], [second]], 200), [first, second]);
+    assert.deepEqual(fitParagraphs([[first], [second]], first.length + 2 + 100), [first, 'Второе предложение второго абзаца довольно длинное.']);
+    assert.deepEqual(fitParagraphs([[first], [second]], first.length + 2 + 30), [first], 'too little room left: the paragraph is left out');
+});
+
+test('the caption under the photo: bold title, italic week, the description in paragraphs, the line «Урок уже…» last', () => {
+    const post = buildTelegramPost({ lessons: [L({ descriptionHtml: LESSON1_HTML })], appBase: 'https://a', limit: TG_CAPTION_LIMIT });
+    const parts = post.text.split('\n\n');
+    assert.equal(parts[0], '🤍 <b>Новый урок на платформе</b>');
+    assert.equal(parts[1], '<b>Урок 2. Стороны света и карта</b>\n<i>НЕДЕЛЯ 2. СТОРОНЫ СВЕТА</i>');
+    assert.ok(parts[2].startsWith('Вводный урок') && parts[2].endsWith('внутренним состоянием.'));
+    assert.ok(parts[3].startsWith('Вы узнаете') && parts[3].endsWith('требует коррекции.'), 'both paragraphs fit whole');
+    assert.equal(parts.at(-1), 'Урок уже в личном кабинете.');
+    assert.ok(tgVisibleLength(post.text) <= TG_CAPTION_LIMIT);
+});
+
+test('a long description is shortened at a paragraph or a sentence to stay within the 1024-character caption', () => {
+    const para = (n) => `<p>${Array.from({ length: 6 }, (_, i) => `Абзац ${n}, предложение ${i + 1} о том, как устроен дом и почему это важно.`).join(' ')}</p>`;
+    const html = [1, 2, 3, 4, 5].map(para).join('');
+    const post = buildTelegramPost({ lessons: [L({ descriptionHtml: html, title: 'Урок & <тема>' })], appBase: 'https://a', limit: TG_CAPTION_LIMIT });
+    const visible = tgVisibleLength(post.text);
+    assert.ok(visible <= TG_CAPTION_LIMIT && visible > 800, `uses the room: ${visible}`);
+    const desc = post.text.split('\n\n').slice(2, -1);
+    assert.ok(desc.length >= 2, 'whole paragraphs first');
+    for (const d of desc) assert.match(d, /\.$/, 'every paragraph ends on a sentence');
+    assert.ok(post.text.includes('<b>Урок &amp; &lt;тема&gt;</b>'));
+    // The same lesson as a text message has room for all of it.
+    assert.equal(buildTelegramPost({ lessons: [L({ descriptionHtml: html })], appBase: 'https://a' }).text.split('\n\n').length, 1 + 1 + 5 + 1);
+});
+
+test('several lessons under one photo: every title, within the caption limit', () => {
+    const lessons = [1, 2, 3].map((n) => L({ dayId: `d${n}`, dayOrder: n, title: `Урок ${n}`, descriptionHtml: LESSON1_HTML }));
+    const post = buildTelegramPost({ lessons, appBase: 'https://a', limit: TG_CAPTION_LIMIT });
+    assert.ok(tgVisibleLength(post.text) <= TG_CAPTION_LIMIT);
+    for (const n of [1, 2, 3]) assert.ok(post.text.includes(`<b>Урок ${n}</b>`));
+    assert.ok(post.text.startsWith('🤍 <b>Новые уроки на платформе</b>') && post.text.endsWith('Уроки уже в личном кабинете.'));
+    assert.equal(post.reply_markup.inline_keyboard.length, 3);
+});
+
+test("the cover is the lesson's presentation, and only a file in the platform's storage", () => {
+    const files = [
+        { title: 'Конспект.pdf', type: 'pdf', url: 'https://x.supabase.co/storage/v1/object/public/course-content/days/d/konspekt.pdf' },
+        { title: 'Урок 1 — презентация.pdf', type: 'pdf', url: 'https://sb.annaromeovastu.com/storage/v1/object/public/course-content/days/d/%D0%BF.pdf' },
+        { title: 'Ссылка', type: 'link', url: 'https://youtu.be/x' },
+    ];
+    assert.equal(pickCoverFile(files).title, 'Урок 1 — презентация.pdf');
+    assert.equal(pickCoverFile(files.slice(0, 1)).title, 'Конспект.pdf', 'no presentation: the first PDF');
+    assert.equal(pickCoverFile([files[2]]), null);
+    assert.deepEqual(storageObjectOf(files[1].url), { bucket: 'course-content', path: 'days/d/п.pdf' });
+    assert.deepEqual(storageObjectOf('https://x.supabase.co/storage/v1/object/sign/course-content/weeks/w/a.pdf?token=t'), { bucket: 'course-content', path: 'weeks/w/a.pdf' });
+    assert.equal(storageObjectOf('https://evil.example/file.pdf'), null);
+});
+
+// Lesson 1's two paragraphs and three more: too long for a caption whole.
+const LONG_HTML = `${LESSON1_HTML}${'<p>Ещё один абзац о доме, его сторонах и о том, что с ними делать на практике. </p>'.repeat(3).replace(/ <\/p>/g, ' Подробно — в уроке.</p>')}${'<p>Длинный абзац про карту квартиры и её центр, про стороны света и про то, как всё это проверить самостоятельно дома.</p>'.repeat(4)}`;
+
+async function postedLesson(wd) {
+    const day = wd.lesson(wd.w.w1.id, { title: 'Урок 2. Стороны света', order_index: 3, video_url: 'https://youtu.be/abc', description: LONG_HTML });
+    await settleAndRun(wd);
+    return day;
+}
+
+test('a new lesson goes to the channel as a photo, its caption and the «Открыть урок» button', async () => {
+    const wd = world();
+    const day = await postedLesson(wd);
+    assert.equal(wd.posts.length, 1);
+    assert.ok(Buffer.isBuffer(wd.posts[0].photo));
+    assert.ok(tgVisibleLength(wd.posts[0].text) <= TG_CAPTION_LIMIT, 'within the caption limit');
+    assert.ok(tgVisibleLength(buildTelegramPost({ lessons: [{ title: 'x', descriptionHtml: LONG_HTML, courseOrder: 0, weekOrder: 0, dayOrder: 0 }], appBase: 'https://a' }).text) > TG_CAPTION_LIMIT, 'the description really is too long whole');
+    assert.ok(wd.posts[0].text.includes('\n\nВы узнаете'), 'paragraphs kept');
+    assert.deepEqual(wd.posts[0].reply_markup.inline_keyboard[0][0].text, 'Открыть урок');
+    assert.deepEqual(wd.pictureCalls, [['Урок 2. Стороны света']]);
+    assert.equal(wd.announcement(day.id).tg_status, 'posted');
+});
+
+for (const [why, setup] of [
+    ['no picture could be made', (wd) => { wd.tg.picture = 'none'; }],
+    ['the renderer broke', (wd) => { wd.tg.picture = 'throw'; }],
+    ['Telegram refused the photo', (wd) => { wd.tg.refusePhoto = true; }],
+]) {
+    test(`${why}: the same post goes out as text, and the announcement still happens`, async () => {
+        const wd = world();
+        setup(wd);
+        const day = await postedLesson(wd);
+        assert.equal(wd.posts.length, 1);
+        assert.equal(wd.posts[0].photo, null);
+        assert.ok(wd.posts[0].text.includes('<b>Урок 2. Стороны света</b>') && wd.posts[0].text.includes('\n\nВы узнаете'));
+        assert.equal(wd.announcement(day.id).tg_status, 'posted');
+        assert.equal(wd.emails.length, 2);
+    });
+}
+
+test('a lost connection while sending the photo is not doubled as text: the post is tried again later', async () => {
+    const wd = world();
+    wd.tg.fail = 1;
+    const day = await postedLesson(wd);
+    assert.equal(wd.posts.length, 0, 'it may have gone out; no second copy as text');
+    assert.equal(wd.announcement(day.id).tg_status, 'failed');
+    wd.clock.advance(5 * MIN);
+    await wd.notifier.run();
+    assert.equal(wd.posts.length, 1);
+    assert.ok(wd.posts[0].photo);
+});
+
+test('the test send posts the photo version too, and a preview says which picture it would use', async () => {
+    const wd = world();
+    const sent = await wd.notifier.testSend({ dayId: wd.existing.lesson1.id, telegramChat: '1873528397' });
+    assert.equal(sent.telegramPicture, 'cover');
+    assert.ok(wd.posts[0].photo && wd.posts[0].chat === '1873528397');
+    const preview = await wd.notifier.testSend({ dayId: wd.existing.lesson1.id });
+    assert.deepEqual(preview.telegramPicture, { kind: 'cover', width: 1280, height: 720, bytes: Buffer.from('jpeg of Урок 1. Основы Васту и влияние дома на жизнь').length, source: null });
+    assert.ok(preview.telegramCaption.startsWith('🤍 <b>Новый урок на платформе</b>'));
+    assert.equal(wd.fake.db.lesson_announcements.length, 0);
 });

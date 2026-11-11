@@ -12,9 +12,11 @@
         "test": "node --test test/*.test.mjs"
     },
     "dependencies": {
+        "@napi-rs/canvas": "0.1.100",
         "@supabase/supabase-js": "^2.86.0",
         "clsx": "^2.0.0",
         "lucide-react": "^0.292.0",
+        "pdfjs-dist": "5.6.205",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-easy-crop": "^5.5.6",

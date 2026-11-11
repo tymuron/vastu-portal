@@ -35,6 +35,7 @@
 
 import crypto from 'crypto';
 import { EMAIL_LIGHT_ONLY_HEAD, EMAIL_RE, normEmail } from './fulfilment.js';
+import * as coverRenderers from './lessonCover.js';
 
 export const LESSON_NOTIFY_DEFAULT_COURSES = ['vastu-design-2026', 'vastu-design-2026-pro'];
 
@@ -193,10 +194,12 @@ const BLOCK_TAGS = new Set(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blo
 const SKIP_TAGS = new Set(['script', 'style']);
 const MARKER_ONLY = /^(•|\d+\.)$/;
 
-// HTML -> the lines a reader sees: paragraphs, <br>, list items as «• …»
-// (numbered «1. …» in an <ol>), entities decoded, blank lines dropped.
-export function htmlToLines(html) {
-    const out = [];
+// HTML -> what a reader sees, in blocks: each paragraph (its lines split at
+// <br>) and each list (its items as «• …», numbered «1. …» in an <ol>) is one
+// block. Entities decoded, empty paragraphs dropped.
+export function htmlToBlocks(html) {
+    const blocks = [];
+    let out = [];
     const lists = [];
     let line = '';
     let skipping = null;
@@ -204,6 +207,11 @@ export function htmlToLines(html) {
         const t = line.replace(/\s+/g, ' ').trim();
         if (t && !MARKER_ONLY.test(t)) out.push(t);
         line = '';
+    };
+    const endBlock = () => {
+        flush();
+        if (out.length) blocks.push(out);
+        out = [];
     };
     const re = /<(\/?)([a-z][a-z0-9]*)\b([^>]*)>|([^<]+)|</gi;
     const src = String(html ?? '');
@@ -223,7 +231,7 @@ export function htmlToLines(html) {
         if (tag === 'br') {
             flush();
         } else if (tag === 'ol' || tag === 'ul') {
-            flush();
+            endBlock();
             if (closing) lists.pop();
             else lists.push({ ordered: tag === 'ol', n: 0 });
         } else if (tag === 'li') {
@@ -237,11 +245,19 @@ export function htmlToLines(html) {
                 line = ordered ? `${list ? list.n : 1}. ` : '• ';
             }
         } else if (BLOCK_TAGS.has(tag)) {
-            flush();
+            // A paragraph inside a list item stays part of the list, and keeps
+            // the item's bullet when it opens right after it.
+            if (!lists.length) endBlock();
+            else if (!MARKER_ONLY.test(line.trim())) flush();
         }
     }
-    flush();
-    return out;
+    endBlock();
+    return blocks;
+}
+
+// The same, as plain lines.
+export function htmlToLines(html) {
+    return htmlToBlocks(html).flat();
 }
 
 function clip(text, max) {
@@ -314,8 +330,12 @@ export function lessonFingerprint(day, materialIds = []) {
     return crypto.createHash('sha256').update(JSON.stringify([...parts, [...materialIds].sort()])).digest('hex').slice(0, 32);
 }
 
-export function toLesson({ course, week, day, materialIds = [] }) {
+// `files`: the lesson's own materials ({ id, title, type, url, created_at }),
+// for its cover picture.
+export function toLesson({ course, week, day, materialIds, files = [] }) {
+    materialIds ??= files.map((f) => f.id);
     return {
+        files: [...files].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))),
         dayId: day.id,
         weekId: week.id,
         courseId: course.id,
@@ -362,14 +382,14 @@ export function planLessons({ courses, weeks, days, materials = [], announcement
     for (const m of materials) {
         if (!m.day_id) continue;
         if (!matsBy.has(m.day_id)) matsBy.set(m.day_id, []);
-        matsBy.get(m.day_id).push(m.id);
+        matsBy.get(m.day_id).push(m);
     }
     const plan = [];
     for (const day of days) {
         const week = weekBy.get(day.week_id);
         const course = week && courseBy.get(week.course_id);
         if (!course) continue;
-        const lesson = toLesson({ course, week, day, materialIds: matsBy.get(day.id) || [] });
+        const lesson = toLesson({ course, week, day, files: matsBy.get(day.id) || [] });
         const ann = annBy.get(day.id) || null;
         plan.push({ lesson, ann, ...classify(lesson, week, ann, now, cfg) });
     }
@@ -521,40 +541,165 @@ function tgEsc(s) {
     return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
 
-export function buildTelegramPost({ lessons, appBase }) {
+// Telegram counts these after the HTML is parsed: tags don't count, and an
+// escaped «&amp;» counts as one character.
+export const TG_CAPTION_LIMIT = 1024; // a photo's caption
+export const TG_TEXT_LIMIT = 4096; // a text message
+
+export function tgVisibleLength(html) {
+    return decodeEntities(String(html).replace(/<[^>]*>/g, '')).length;
+}
+
+// Text cut to at most `max` characters: at its last line break, else its last
+// sentence end, else its last whole word with «…». Never mid-word.
+export function cutText(text, max) {
+    if (text.length <= max) return text;
+    const head = text.slice(0, max);
+    const nl = head.lastIndexOf('\n');
+    if (nl >= max * 0.4) return head.slice(0, nl).trimEnd();
+    let end = -1;
+    for (const m of head.matchAll(/[.!?…](?=\s)/g)) end = m.index + 1;
+    if (/[.!?…]$/.test(head) && /\s/.test(text[max] ?? '')) end = max;
+    if (end >= max * 0.4) return head.slice(0, end);
+    const words = text.slice(0, max - 1);
+    const space = words.lastIndexOf(' ');
+    return `${(space > 0 ? words.slice(0, space) : words).replace(/[\s,.;:—–-]+$/, '')}…`;
+}
+
+// The description's paragraphs that fit in `room` characters with a blank
+// line between them: whole ones while they fit, then the next one cut at a
+// sentence (when a useful part of it fits), and nothing after.
+export function fitParagraphs(blocks, room) {
+    const out = [];
+    let used = 0;
+    for (const b of blocks) {
+        const text = b.join('\n');
+        const sep = out.length ? 2 : 0;
+        if (used + sep + text.length <= room) {
+            out.push(text);
+            used += sep + text.length;
+            continue;
+        }
+        const left = room - used - sep;
+        if (left >= 80) out.push(cutText(text, left));
+        break;
+    }
+    return out;
+}
+
+// The post: a heading, then per lesson its title (bold), week (italics) and
+// description in its own paragraphs, then «Урок уже в личном кабинете.».
+// `limit`: TG_CAPTION_LIMIT under a photo, TG_TEXT_LIMIT as a text message.
+export function buildTelegramPost({ lessons, appBase, limit = TG_TEXT_LIMIT }) {
     lessons = [...lessons].sort(byCourseOrder);
     const many = lessons.length > 1;
-    const blocks = lessons.map((l) => {
-        const { lines } = shortLines(l.descriptionHtml, many ? { maxLines: 3, maxChars: 240 } : { maxLines: 10, maxChars: 900 });
-        return [`<b>${tgEsc(l.title)}</b>`, ...(l.weekTitle ? [`<i>${tgEsc(l.weekTitle)}</i>`] : []), ...lines.map(tgEsc)].join('\n');
-    });
-    const text = [
-        many ? '🤍 <b>Новые уроки на платформе</b>' : '🤍 <b>Новый урок на платформе</b>',
-        ...blocks,
-        many ? 'Уроки уже в личном кабинете.' : 'Урок уже в личном кабинете.',
+    const head = `🤍 <b>${many ? 'Новые уроки на платформе' : 'Новый урок на платформе'}</b>`;
+    const foot = many ? 'Уроки уже в личном кабинете.' : 'Урок уже в личном кабинете.';
+    const heads = lessons.map((l) => [`<b>${tgEsc(l.title)}</b>`, ...(l.weekTitle ? [`<i>${tgEsc(l.weekTitle)}</i>`] : [])].join('\n'));
+    const descs = lessons.map((l) => htmlToBlocks(l.descriptionHtml));
+    const compose = (room) => [
+        head,
+        ...heads.map((h, i) => [h, ...fitParagraphs(descs[i], room).map(tgEsc)].join('\n\n')),
+        foot,
     ].join('\n\n');
+    // What's left for the descriptions once everything else is in, shared out.
+    const fixed = tgVisibleLength(compose(0));
+    let room = Math.floor((limit - fixed) / lessons.length) - 2;
+    if (many) room = Math.min(room, 400);
+    let text = compose(Math.max(0, room));
+    while (tgVisibleLength(text) > limit && room > 0) {
+        room -= 40;
+        text = compose(Math.max(0, room));
+    }
     const reply_markup = {
         inline_keyboard: lessons.slice(0, 8).map((l) => [{ text: many ? clip(`Открыть: ${l.title}`, 60) : 'Открыть урок', url: lessonUrl(appBase, l) }]),
     };
-    // Telegram's limit is 4096 characters; the descriptions are already short.
-    return { text: text.length > 4000 ? `${text.slice(0, 3990)}…` : text, reply_markup };
+    return { text, reply_markup };
 }
 
 // ---------------------------------------------------------------------------
-// Telegram Bot API. Errors never carry the token (it's in the URL).
+// The picture: the cover of the first lesson's presentation (page 1 of its
+// PDF), else a card in Anna's colours. null when neither can be made.
+// ---------------------------------------------------------------------------
+
+export const MATERIAL_COLUMNS = 'id, day_id, title, type, url, created_at';
+
+// The lesson's presentation: a PDF called «…презентация…», else its first PDF.
+export function pickCoverFile(files = []) {
+    const pdfs = files.filter((f) => f.type === 'pdf' || /\.pdf(?:$|[?#])/i.test(f.url || '') || /\.pdf$/i.test(f.title || ''));
+    return pdfs.find((f) => /презентац|presentation|слайд/i.test(f.title || '')) || pdfs[0] || null;
+}
+
+// A stored file link (…/storage/v1/object/public/<bucket>/<path>, through
+// whichever address the teacher was on) -> { bucket, path }. The server then
+// downloads it with its own key, so it never fetches an arbitrary address.
+export function storageObjectOf(url) {
+    const m = /\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?#]+)\/([^?#]+)/.exec(String(url || ''));
+    if (!m) return null;
+    try {
+        return { bucket: decodeURIComponent(m[1]), path: decodeURIComponent(m[2]) };
+    } catch {
+        return null;
+    }
+}
+
+function withTimeout(promise, ms, what) {
+    let timer;
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what}: no answer in ${ms / 1000} s`)), ms); }),
+    ]).finally(() => clearTimeout(timer));
+}
+
+// -> async (lessons) => { jpeg, width, height, kind: 'cover'|'card', source? } | null
+export function makeLessonPicture({ getSupabase, log = console, covers = coverRenderers }) {
+    return async function picture(lessons) {
+        const lesson = [...lessons].sort(byCourseOrder)[0];
+        if (!lesson) return null;
+        const file = pickCoverFile(lesson.files);
+        if (file) {
+            try {
+                const where = storageObjectOf(file.url);
+                if (!where) throw new Error('not a file in the platform storage');
+                const { data, error } = await withTimeout(getSupabase().storage.from(where.bucket).download(where.path), 60000, 'download');
+                if (error || !data) throw new Error(`download: ${error?.message || 'no data'}`);
+                const bytes = Buffer.from(await data.arrayBuffer());
+                const r = await withTimeout(covers.renderPdfCover(bytes), 60000, 'render');
+                return { ...r, kind: 'cover', source: file.title || where.path };
+            } catch (err) {
+                log.error(`lesson-notify: no cover from «${file.title}»: ${err?.message || err}`);
+            }
+        }
+        try {
+            const r = await withTimeout(covers.renderBrandCard({ title: lesson.title, week: lesson.weekTitle, course: lesson.courseTitle }), 30000, 'card');
+            return { ...r, kind: 'card' };
+        } catch (err) {
+            log.error(`lesson-notify: no brand card: ${err?.message || err}`);
+            return null;
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Telegram Bot API. Errors never carry the token (it's in the URL); an error
+// from an answer Telegram gave has its HTTP status in err.status.
 // ---------------------------------------------------------------------------
 
 export function makeTelegramClient({ token, base = 'https://api.telegram.org' }) {
     if (!token) return null;
-    async function call(method, payload) {
-        const resp = await fetch(`${base.replace(/\/$/, '')}/bot${token}/${method}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload || {}),
-        });
+    const url = (method) => `${base.replace(/\/$/, '')}/bot${token}/${method}`;
+    async function answer(method, resp) {
         const body = await resp.json().catch(() => null);
-        if (!resp.ok || !body?.ok) throw new Error(`Telegram ${method} ${resp.status}: ${body?.description || 'no answer'}`);
+        if (!resp.ok || !body?.ok) {
+            const err = new Error(`Telegram ${method} ${resp.status}: ${body?.description || 'no answer'}`);
+            err.status = resp.status;
+            throw err;
+        }
         return body.result;
+    }
+    async function call(method, payload) {
+        const resp = await fetch(url(method), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}) });
+        return answer(method, resp);
     }
     return {
         async sendMessage(chatId, { text, reply_markup }) {
@@ -567,9 +712,25 @@ export function makeTelegramClient({ token, base = 'https://api.telegram.org' })
             });
             return r?.message_id ?? null;
         },
-        // Chats the bot was added to in the last 24 h, for finding a channel's id.
+        async sendPhoto(chatId, { photo, caption, reply_markup }) {
+            const form = new FormData();
+            form.append('chat_id', String(chatId));
+            form.append('caption', caption);
+            form.append('parse_mode', 'HTML');
+            if (reply_markup) form.append('reply_markup', JSON.stringify(reply_markup));
+            form.append('photo', new Blob([photo], { type: 'image/jpeg' }), 'lesson.jpg');
+            const r = await answer('sendPhoto', await fetch(url('sendPhoto'), { method: 'POST', body: form }));
+            return r?.message_id ?? null;
+        },
+        // Chats the bot was added to or written in, last 24 h: for finding a channel's id.
         async getUpdates() {
-            return (await call('getUpdates', { allowed_updates: ['my_chat_member', 'message', 'channel_post'] })) || [];
+            return (await call('getUpdates', {})) || [];
+        },
+        async getMe() {
+            return call('getMe', {});
+        },
+        async getWebhookInfo() {
+            return call('getWebhookInfo', {});
         },
     };
 }
@@ -622,11 +783,39 @@ export function createLessonNotifier({
     now = () => Date.now(),
     sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
     sendGapMs = 600, // Resend allows 2 requests a second
+    picture = null, // async (lessons) => { jpeg, kind } | null; default: makeLessonPicture
 }) {
     const appBase = (appUrl || 'https://vastu-portal-app.onrender.com').replace(/\/$/, '');
     const spare = spareAppUrl ? spareAppUrl.replace(/\/$/, '') : null;
     const spareBase = spare && spare !== appBase ? spare : null;
     const chatFor = (slug) => config.telegram.chats[slug] || null;
+    const pictureFor = picture || makeLessonPicture({ getSupabase, log });
+
+    // One post: the picture with the text as its caption, or, with no picture
+    // (or when Telegram turns the photo down), the same text as a message.
+    // -> { messageId, picture: 'cover' | 'card' | null }
+    async function deliverPost(chat, lessons) {
+        let pic = null;
+        try {
+            pic = await pictureFor(lessons);
+        } catch (err) {
+            log.error(`lesson-notify: picture failed: ${err?.message || err}`);
+        }
+        if (pic?.jpeg?.length && telegram.sendPhoto) {
+            const caption = buildTelegramPost({ lessons, appBase, limit: TG_CAPTION_LIMIT });
+            try {
+                const messageId = await telegram.sendPhoto(chat, { photo: pic.jpeg, caption: caption.text, reply_markup: caption.reply_markup });
+                return { messageId, picture: pic.kind };
+            } catch (err) {
+                // Only a clear «no» to this photo falls back to text. A network
+                // error may hide a post that went out: that one is retried as is.
+                if (!(err?.status >= 400 && err.status < 500 && err.status !== 429)) throw err;
+                log.error(`lesson-notify: Telegram refused the photo (${err.message}); posting text`);
+            }
+        }
+        const messageId = await telegram.sendMessage(chat, buildTelegramPost({ lessons, appBase, limit: TG_TEXT_LIMIT }));
+        return { messageId, picture: null };
+    }
 
     let running = false;
     let lastRun = null;
@@ -642,7 +831,7 @@ export function createLessonNotifier({
             ? await rowsIn(supabase, 'days', 'id, week_id, title, description, video_url, rutube_url, homework_description, order_index, created_at', 'week_id', weeks.map((w) => w.id))
             : [];
         const dayIds = days.map((d) => d.id);
-        const materials = dayIds.length ? await rowsIn(supabase, 'materials', 'id, day_id', 'day_id', dayIds) : [];
+        const materials = dayIds.length ? await rowsIn(supabase, 'materials', MATERIAL_COLUMNS, 'day_id', dayIds) : [];
         let announcements = [];
         let missingTables = false;
         try {
@@ -761,9 +950,9 @@ export function createLessonNotifier({
             const lessons = mine.map((id) => lessonBy.get(id)).filter(Boolean);
             if (!lessons.length) continue;
             try {
-                const messageId = await telegram.sendMessage(chat, buildTelegramPost({ lessons, appBase }));
+                const { messageId, picture: kind } = await deliverPost(chat, lessons);
                 await rows(supabase.from('lesson_announcements').update({ tg_status: 'posted', tg_message_id: messageId, tg_error: null, updated_at: iso(now()) }).in('day_id', mine).select('day_id'), 'post done');
-                report.telegram.push({ chat, lessons: lessons.map((l) => l.title), messageId });
+                report.telegram.push({ chat, lessons: lessons.map((l) => l.title), messageId, picture: kind });
             } catch (err) {
                 const msg = String(err?.message || err);
                 await rows(supabase.from('lesson_announcements').update({ tg_status: 'failed', tg_error: msg.slice(0, 500), updated_at: iso(now()) }).in('day_id', mine).select('day_id'), 'post failed');
@@ -939,11 +1128,16 @@ export function createLessonNotifier({
         const [week] = await rows(supabase.from('weeks').select('id, course_id, title, order_index, is_locked, available_from').eq('id', day.week_id), 'week');
         const [course] = week ? await rows(supabase.from('courses').select('id, slug, title, order_index').eq('id', week.course_id), 'course') : [];
         if (!course) throw new Error('course not found');
-        const materials = await rows(supabase.from('materials').select('id, day_id').eq('day_id', day.id), 'materials');
-        const lesson = toLesson({ course, week, day, materialIds: materials.map((m) => m.id) });
+        const materials = await rows(supabase.from('materials').select(MATERIAL_COLUMNS).eq('day_id', day.id), 'materials');
+        const lesson = toLesson({ course, week, day, files: materials });
         const message = buildLessonEmail({ lessons: [lesson], appBase, spareBase });
-        const post = buildTelegramPost({ lessons: [lesson], appBase });
-        const out = { lesson: { title: lesson.title, course: lesson.courseTitle, url: lessonUrl(appBase, lesson) }, subject: message.subject, text: message.text, telegramText: post.text };
+        const caption = buildTelegramPost({ lessons: [lesson], appBase, limit: TG_CAPTION_LIMIT });
+        const out = {
+            lesson: { title: lesson.title, course: lesson.courseTitle, url: lessonUrl(appBase, lesson), coverFile: pickCoverFile(lesson.files)?.title || null },
+            subject: message.subject,
+            text: message.text,
+            telegramCaption: caption.text,
+        };
         if (email) {
             const to = normEmail(email);
             if (!EMAIL_RE.test(to)) throw new Error('invalid email');
@@ -954,16 +1148,37 @@ export function createLessonNotifier({
         }
         if (telegramChat) {
             if (!telegram) throw new Error('TELEGRAM_BOT_TOKEN not set');
-            out.telegramMessageId = await telegram.sendMessage(String(telegramChat), post);
+            const r = await deliverPost(String(telegramChat), [lesson]);
+            out.telegramMessageId = r.messageId;
+            out.telegramPicture = r.picture;
+        } else if (!email) {
+            // A preview only: say whether a picture can be made, without posting.
+            const pic = await pictureFor([lesson]).catch(() => null);
+            out.telegramPicture = pic ? { kind: pic.kind, width: pic.width, height: pic.height, bytes: pic.jpeg.length, source: pic.source || null } : null;
         }
         return out;
     }
 
+    // The chats in the bot's pending updates, with what Telegram says about the
+    // bot itself: an empty list next to `pendingUpdates: 0` means the updates
+    // were already taken (by another getUpdates caller) or are over 24 h old;
+    // a webhook `url` means updates go there instead.
     async function telegramChats() {
         if (!telegram) throw new Error('TELEGRAM_BOT_TOKEN not set');
+        const [me, hook] = await Promise.all([
+            telegram.getMe ? telegram.getMe().catch((e) => ({ error: e.message })) : null,
+            telegram.getWebhookInfo ? telegram.getWebhookInfo().catch((e) => ({ error: e.message })) : null,
+        ]);
+        let updates = [];
+        let updatesError = null;
+        try {
+            updates = await telegram.getUpdates();
+        } catch (err) {
+            updatesError = String(err?.message || err);
+        }
         const chats = new Map();
-        for (const u of await telegram.getUpdates()) {
-            const m = u.my_chat_member || u.message || u.channel_post;
+        for (const u of updates) {
+            const m = u.my_chat_member || u.chat_member || u.message || u.edited_message || u.channel_post || u.edited_channel_post;
             const c = m?.chat;
             if (!c) continue;
             chats.set(c.id, {
@@ -973,7 +1188,13 @@ export function createLessonNotifier({
                 botStatus: u.my_chat_member?.new_chat_member?.status || chats.get(c.id)?.botStatus || null,
             });
         }
-        return [...chats.values()];
+        return {
+            bot: me && !me.error ? { id: me.id, username: me.username } : me,
+            webhook: hook && !hook.error ? { url: hook.url || '', pendingUpdates: hook.pending_update_count ?? null, lastError: hook.last_error_message || null } : hook,
+            updates: updates.length,
+            ...(updatesError ? { updatesError } : {}),
+            chats: [...chats.values()],
+        };
     }
 
     function status() {

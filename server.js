@@ -1450,7 +1450,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET' && urlPath === '/api/admin/lesson-notify/telegram-chats') {
         if (!checkCronSecret(req, res)) return;
         lessonNotifier.telegramChats().then(
-            (chats) => sendJson(res, 200, { chats }),
+            (r) => sendJson(res, 200, r),
             (err) => sendJson(res, 400, { error: err?.message || 'Failed' })
         );
         return;
