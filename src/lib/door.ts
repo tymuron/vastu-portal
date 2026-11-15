@@ -9,76 +9,14 @@
 //                             so Supabase is fine to reach directly.
 // A visitor on the old onrender.com address sees no change.
 //
-// No imports: test/door.test.mjs loads this file straight into Node.
+// Only .js imports with explicit extensions: test/door.test.mjs loads this file
+// straight into Node, and lessonNotify.js shares the same plain .js module.
 
-const DOOR_DATABASE = 'https://sb.annaromeovastu.com';
-
-export function onDoor(hostname: string): boolean {
-    return hostname.endsWith('-ru.annaromeovastu.com');
-}
-
-export function databaseUrl(configured: string, hostname: string): string {
-    return onDoor(hostname) ? DOOR_DATABASE : configured;
-}
-
-// Anna's own sites on Render (see repo anna-front, README "Addresses"). Their
-// public addresses on annaromeovastu.com work both in Russia and abroad, so
-// every visitor gets the public address. The platform's own Render address
-// (vastu-portal-app.onrender.com) is intentionally not in this table.
-const ANNA_RENDER_SITES = new Map<string, string>([
-    ['annaromeo-vastu-karta', 'https://karta.annaromeovastu.com'],
-    ['annaromeo-vastu-course', 'https://kurs.annaromeovastu.com'],
-    ['annaromeo-venus', 'https://venus.annaromeovastu.com'],
-    ['annaromeo-vastu-color-test', 'https://test.annaromeovastu.com'],
-    ['vastu-business-landing', 'https://biz.annaromeovastu.com'],
-    ['annaromeo-vastu', 'https://annaromeovastu.com'],
-]);
-
-// Course 1's presentations live on lovable.app, which Russian home internet can't
-// reach either (3 of 20 connections, 3 Nov 2026). The Moscow server has a door for
-// each of these, so a new one goes in anna-front's Caddyfile as well.
-const LESSON_SITES = new Set([
-    'urokodin', 'urokdva', 'uroktri', 'urok4', 'urok4-1', 'urok4-2', 'urok4-3', 'urok4-4',
-    'urok5', 'urok6', 'urok7-8', 'sever', 'artvastu', 'vastukarta', 'vhody',
-]);
-
-// Course files and Anna's sites are stored as full links, written by whichever
-// address the teacher was on. Whatever is stored, show the visitor the one they can reach.
-export function doorFileLink(url: string, configured: string, hostname: string): string {
-    const site = url?.match(/^https?:\/\/([a-z0-9-]+)\.onrender\.com([/?#].*)?$/i);
-    const publicSite = site && ANNA_RENDER_SITES.get(site[1].toLowerCase());
-    if (publicSite) return `${publicSite}${site[2] || ''}`;
-
-    const lesson = url?.match(/^https:\/\/([a-z0-9-]+)\.lovable\.app([/?#].*)?$/);
-    if (lesson && LESSON_SITES.has(lesson[1])) {
-        if (onDoor(hostname)) return `https://${lesson[1]}-ru.annaromeovastu.com${lesson[2] || ''}`;
-        if (hostname === 'lk.annaromeovastu.com') return `https://${lesson[1]}.annaromeovastu.com${lesson[2] || ''}`;
-    }
-    if (configured) {
-        const target = databaseUrl(configured, hostname);
-        for (const origin of [configured, DOOR_DATABASE]) {
-            if (origin && url?.startsWith(`${origin}/`)) return target + url.slice(origin.length);
-        }
-    }
-    return url;
-}
-
-// Rewrites links inside rich-text HTML (lesson and homework descriptions)
-// through the same doorFileLink function.
-export function doorHtmlLinks(html: string, configured: string, hostname: string): string {
-    if (!html) return html;
-    return html
-        .replace(/<[a-z][^>]*>/gi, (tag) =>
-            tag.replace(/\b(href|src)(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>"']+))/gi, (whole, attr: string, eq: string, dq?: string, sq?: string, bare?: string) => {
-                const raw = dq ?? sq ?? bare ?? '';
-                const quote = dq !== undefined ? '"' : sq !== undefined ? "'" : '';
-                const trimmed = raw.trim();
-                const rewritten = doorFileLink(trimmed, configured, hostname);
-                return rewritten === trimmed ? whole : `${attr}${eq}${quote}${rewritten}${quote}`;
-            }),
-        )
-        .replace(/(<a\b[^>]*>)(\s*)(https?:\/\/[^\s<]+)(\s*<\/a>)/gi, (whole, open: string, lead: string, text: string, close: string) => {
-            const rewritten = doorFileLink(text, configured, hostname);
-            return rewritten === text ? whole : `${open}${lead}${rewritten}${close}`;
-        });
-}
+export {
+    databaseUrl,
+    doorFileLink,
+    doorHtmlLinks,
+    doorSrcLink,
+    doorTextLinks,
+    onDoor,
+} from './siteLinks.js';

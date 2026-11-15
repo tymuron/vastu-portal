@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, FileText, Download, ChevronRight, Loader2 } from 'lucide-react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useState } from 'react';
-import { fileLink } from '../../lib/supabase';
+import { fileLink, fileLinksInText } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 
 export default function WeekView() {
@@ -32,7 +32,7 @@ export default function WeekView() {
 
                     <h1 className="text-3xl md:text-4xl font-serif mb-4 relative z-10">{week.title}</h1>
                     <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed relative z-10">
-                        {week.description ? week.description.replace(/<[^>]+>/g, '') : ''}
+                        {week.description ? fileLinksInText(week.description.replace(/<[^>]+>/g, '')) : ''}
                     </p>
                 </div>
 
@@ -90,7 +90,7 @@ export default function WeekView() {
                                                 )}
                                             </div>
                                             <p className="text-sm text-vastu-text-light line-clamp-2 break-words">
-                                                {day.description ? day.description.replace(/<[^>]+>/g, '') : ''}
+                                                {day.description ? fileLinksInText(day.description.replace(/<[^>]+>/g, '')) : ''}
                                             </p>
                                         </div>
                                     </div>

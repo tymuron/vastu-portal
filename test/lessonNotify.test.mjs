@@ -786,3 +786,53 @@ test('the Telegram client sends the topic as message_thread_id, and nothing extr
     assert.equal(calls[3].body.has('message_thread_id'), false);
     assert.deepEqual(calls.map((c) => c.method), ['sendMessage', 'sendMessage', 'sendPhoto', 'sendPhoto']);
 });
+
+
+import { toLesson } from '../lessonNotify.js';
+
+test("new-lesson emails and Telegram posts rewrite Anna's Render site links in the description to public addresses", async () => {
+    const description = [
+        '<p>Постройте Васту-карту в конструкторе: <a href="https://annaromeo-vastu-karta.onrender.com/" rel="noopener noreferrer" target="_blank">annaromeo-vastu-karta.onrender.com</a>.</p>',
+        '<p>Главный сайт: <a href="https://annaromeo-vastu.onrender.com/about"><strong>https://annaromeo-vastu.onrender.com/about</strong></a>.</p>',
+    ].join('');
+
+    const wd = world();
+    const day = wd.lesson(wd.w.w1.id, {
+        title: 'Урок 2. Построение Васту-карты',
+        order_index: 3,
+        video_url: 'https://youtu.be/abc',
+        description,
+    });
+
+    const mapped = toLesson({ course: wd.c.base, week: wd.w.w1, day });
+    assert.ok(mapped.descriptionHtml.includes('href="https://karta.annaromeovastu.com/"'));
+    assert.ok(mapped.descriptionHtml.includes('>karta.annaromeovastu.com<'));
+    assert.ok(!mapped.descriptionHtml.includes('annaromeo-vastu-karta.onrender.com'));
+    assert.ok(!mapped.descriptionHtml.includes('annaromeo-vastu.onrender.com'));
+
+    await settleAndRun(wd);
+    assert.equal(wd.emails.length, 2);
+    for (const email of wd.emails) {
+        assert.ok(email.html.includes('karta.annaromeovastu.com'));
+        assert.ok(email.html.includes('https://annaromeovastu.com/about'));
+        assert.ok(email.text.includes('karta.annaromeovastu.com'));
+        assert.ok(email.text.includes('https://annaromeovastu.com/about'));
+        assert.ok(!email.html.includes('annaromeo-vastu-karta.onrender.com'));
+        assert.ok(!email.text.includes('annaromeo-vastu-karta.onrender.com'));
+        assert.ok(!email.html.includes('annaromeo-vastu.onrender.com'));
+        assert.ok(!email.text.includes('annaromeo-vastu.onrender.com'));
+    }
+
+    assert.equal(wd.posts.length, 1);
+    assert.ok(wd.posts[0].text.includes('karta.annaromeovastu.com'));
+    assert.ok(wd.posts[0].text.includes('https://annaromeovastu.com/about'));
+    assert.ok(!wd.posts[0].text.includes('annaromeo-vastu-karta.onrender.com'));
+    assert.ok(!wd.posts[0].text.includes('annaromeo-vastu.onrender.com'));
+
+    // Direct calls to buildLessonEmail and buildTelegramPost also rewrite raw descriptions.
+    const raw = L({ descriptionHtml: description });
+    const directEmail = buildLessonEmail({ lessons: [raw], appBase: 'https://lk.annaromeovastu.com' });
+    const directPost = buildTelegramPost({ lessons: [raw], appBase: 'https://lk.annaromeovastu.com' });
+    assert.ok(directEmail.text.includes('karta.annaromeovastu.com') && !directEmail.text.includes('onrender.com'));
+    assert.ok(directPost.text.includes('karta.annaromeovastu.com') && !directPost.text.includes('onrender.com'));
+});

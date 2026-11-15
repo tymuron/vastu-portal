@@ -3,7 +3,7 @@ import { PlayCircle, ChevronRight, ChevronLeft, FileText, Loader2, Play, BookOpe
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
-import { fileLink } from '../../lib/supabase';
+import { fileLink, fileLinksInText } from '../../lib/supabase';
 
 // Helper to strip HTML
 const stripHtml = (html: string) => {
@@ -120,7 +120,7 @@ export default function StudentDashboard() {
                         </button>
                         <h2 className="text-3xl md:text-5xl font-serif mb-6 break-words">{activeWeek.title}</h2>
                         <p className="text-vastu-light/70 max-w-2xl font-light leading-relaxed text-lg">
-                            {stripHtml(activeWeek.description || '')}
+                            {fileLinksInText(stripHtml(activeWeek.description || ''))}
                         </p>
                     </div>
                 </div>
@@ -149,7 +149,7 @@ export default function StudentDashboard() {
                                                     {day.title}
                                                 </h4>
                                                 <p className="text-xs text-vastu-text-light line-clamp-2 mt-0.5 break-words">
-                                                    {stripHtml(day.description || '')}
+                                                    {fileLinksInText(stripHtml(day.description || ''))}
                                                 </p>
                                             </div>
                                         </div>

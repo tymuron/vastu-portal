@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Loader2, BookOpen, ChevronRight } from 'lucide-react';
 import { useCourseContext } from '../../contexts/CourseContext';
+import { fileLinksInText } from '../../lib/supabase';
 
 export default function CoursePicker() {
     const navigate = useNavigate();
@@ -80,7 +81,7 @@ export default function CoursePicker() {
                                 </h2>
                                 {course.description && (
                                     <p className="text-vastu-text-light text-sm leading-relaxed line-clamp-3">
-                                        {stripHtml(course.description)}
+                                        {fileLinksInText(stripHtml(course.description))}
                                     </p>
                                 )}
                                 {isActive && (

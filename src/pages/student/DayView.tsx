@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
-import { fileLink, fileLinksInHtml } from '../../lib/supabase';
+import { fileLink, fileLinksInHtml, srcLink } from '../../lib/supabase';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
 import { useFileSave } from '../../hooks/useFileSave';
 import HomeworkSubmission from '../../components/HomeworkSubmission';
@@ -58,7 +58,7 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
                 {currentUrl ? (
                     <iframe
-                        src={fileLink(getVideoEmbedUrl(currentUrl))}
+                        src={srcLink(getVideoEmbedUrl(currentUrl))}
                         className="w-full h-full"
                         title={title}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

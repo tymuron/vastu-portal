@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, BookOpen, Lock, ChevronRight, Clock } from 'lucide-react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
+import { fileLinksInText } from '../../lib/supabase';
 
 const stripHtml = (html: string) => {
     const tmp = document.createElement('DIV');
@@ -49,7 +50,7 @@ export default function Modules() {
 
             <div className="grid sm:grid-cols-2 gap-4 md:gap-6">
                 {weeks.map((week) => {
-                    const desc = stripHtml(week.description || '');
+                    const desc = fileLinksInText(stripHtml(week.description || ''));
                     const lessonCount = week.days?.length || 0;
                     const locked = week.isLocked;
                     return (

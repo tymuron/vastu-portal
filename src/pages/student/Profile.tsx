@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fileLink, supabase } from '../../lib/supabase';
+import { srcLink, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { User, Camera, Save, Lock, Loader2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import Cropper from 'react-easy-crop';
@@ -28,7 +28,7 @@ export default function Profile() {
             setFullName(user.user_metadata?.full_name || '');
             // Add cache busting to ensure image updates immediately
             const url = user.user_metadata?.avatar_url;
-            setAvatarUrl(url ? `${fileLink(url)}?t=${new Date().getTime()}` : null);
+            setAvatarUrl(url ? `${srcLink(url)}?t=${new Date().getTime()}` : null);
         }
     }, [user]);
 
@@ -121,7 +121,7 @@ export default function Profile() {
                 .getPublicUrl(filePath);
 
             // Update local state immediately with cache busting
-            setAvatarUrl(`${fileLink(publicUrl)}?t=${new Date().getTime()}`);
+            setAvatarUrl(`${srcLink(publicUrl)}?t=${new Date().getTime()}`);
 
             // Save to profile
             await supabase.auth.updateUser({

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Paperclip, Send, Check, Loader2, X, Download } from 'lucide-react';
-import { fileLink, supabase } from '../lib/supabase';
+import { fileLink, fileLinksInText, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Submission {
@@ -279,7 +279,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                     )}
                 </div>
                 <div className="text-sm text-vastu-dark whitespace-pre-wrap break-words">
-                    {existing.teacher_feedback}
+                    {fileLinksInText(existing.teacher_feedback)}
                 </div>
             </div>
         )}

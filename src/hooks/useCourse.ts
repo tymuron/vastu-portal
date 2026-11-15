@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fileLink, fileLinksInHtml, supabase } from '../lib/supabase';
+import { fileLink, fileLinksInHtml, srcLink, supabase } from '../lib/supabase';
 import { Week, Day } from '../lib/types';
 import { MOCK_COURSE } from '../lib/data';
 import { useCourseContext } from '../contexts/CourseContext';
@@ -60,7 +60,7 @@ export function useWeeks() {
                     const transformedWeeks: Week[] = data.map((w) => ({
                         id: w.id,
                         title: w.title,
-                        description: w.description,
+                        description: w.description ? fileLinksInHtml(w.description) : w.description,
                         isLocked: w.is_locked || (w.available_from ? new Date(w.available_from) > new Date() : false),
                         availableFrom: w.available_from,
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,8 +68,8 @@ export function useWeeks() {
                             id: d.id,
                             title: d.title,
                             description: d.description ? fileLinksInHtml(d.description) : d.description,
-                            videoUrl: d.video_url ? fileLink(d.video_url) : d.video_url,
-                            rutubeUrl: d.rutube_url ? fileLink(d.rutube_url) : d.rutube_url,
+                            videoUrl: d.video_url ? srcLink(d.video_url) : d.video_url,
+                            rutubeUrl: d.rutube_url ? srcLink(d.rutube_url) : d.rutube_url,
                             date: d.date,
                             isCompleted: completedDayIds.has(d.id),
                             homeworkDescription: d.homework_description ? fileLinksInHtml(d.homework_description) : d.homework_description,
@@ -158,8 +158,8 @@ export function useDay(weekId: string | undefined, dayId: string | undefined) {
                     id: dayData.id,
                     title: dayData.title,
                     description: dayData.description ? fileLinksInHtml(dayData.description) : dayData.description,
-                    videoUrl: dayData.video_url ? fileLink(dayData.video_url) : dayData.video_url,
-                    rutubeUrl: dayData.rutube_url ? fileLink(dayData.rutube_url) : dayData.rutube_url,
+                    videoUrl: dayData.video_url ? srcLink(dayData.video_url) : dayData.video_url,
+                    rutubeUrl: dayData.rutube_url ? srcLink(dayData.rutube_url) : dayData.rutube_url,
                     date: dayData.date,
                     isCompleted,
                     homeworkDescription: dayData.homework_description ? fileLinksInHtml(dayData.homework_description) : dayData.homework_description,

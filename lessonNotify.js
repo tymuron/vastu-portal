@@ -36,6 +36,9 @@
 import crypto from 'crypto';
 import { EMAIL_LIGHT_ONLY_HEAD, EMAIL_RE, normEmail } from './fulfilment.js';
 import * as coverRenderers from './lessonCover.js';
+import { doorHtmlLinks } from './src/lib/siteLinks.js';
+
+const PUBLIC_PORTAL_HOST = 'lk.annaromeovastu.com';
 
 export const LESSON_NOTIFY_DEFAULT_COURSES = ['vastu-design-2026', 'vastu-design-2026-pro'];
 
@@ -355,7 +358,7 @@ export function toLesson({ course, week, day, materialIds, files = [] }) {
         weekOrder: week.order_index ?? 0,
         dayOrder: day.order_index ?? 0,
         title: String(day.title || '').trim(),
-        descriptionHtml: day.description || '',
+        descriptionHtml: doorHtmlLinks(day.description || '', '', PUBLIC_PORTAL_HOST),
         openedAt: lessonOpenedAt(week, day),
         hasContent: lessonHasContent(day, materialIds),
         fingerprint: lessonFingerprint(day, materialIds),
@@ -436,12 +439,16 @@ export function buildLessonEmail({ lessons, appBase, spareBase = null }) {
     const intro = many
         ? oneCourse ? `На курсе «${oneCourse}» открылись новые уроки.` : 'В личном кабинете открылись новые уроки.'
         : `На курсе «${lessons[0].courseTitle}» открылся новый урок.`;
-    const items = lessons.map((l) => ({
-        ...l,
-        url: lessonUrl(appBase, l),
-        spare: spareBase ? lessonUrl(spareBase, l) : null,
-        lines: shortLines(l.descriptionHtml, many ? { maxLines: 4, maxChars: 220 } : {}).lines,
-    }));
+    const items = lessons.map((l) => {
+        const descriptionHtml = doorHtmlLinks(l.descriptionHtml || '', '', PUBLIC_PORTAL_HOST);
+        return {
+            ...l,
+            descriptionHtml,
+            url: lessonUrl(appBase, l),
+            spare: spareBase ? lessonUrl(spareBase, l) : null,
+            lines: shortLines(descriptionHtml, many ? { maxLines: 4, maxChars: 220 } : {}).lines,
+        };
+    });
     const preheader = many ? items.map((l) => l.title).join(' · ') : items[0].lines.join(' ') || 'Урок уже в личном кабинете.';
 
     const btn = (href, label) =>
@@ -605,7 +612,7 @@ export function buildTelegramPost({ lessons, appBase, limit = TG_TEXT_LIMIT }) {
     const head = `🤍 <b>${many ? 'Новые уроки на платформе' : 'Новый урок на платформе'}</b>`;
     const foot = many ? 'Уроки уже в личном кабинете.' : 'Урок уже в личном кабинете.';
     const heads = lessons.map((l) => [`<b>${tgEsc(l.title)}</b>`, ...(l.weekTitle ? [`<i>${tgEsc(l.weekTitle)}</i>`] : [])].join('\n'));
-    const descs = lessons.map((l) => htmlToBlocks(l.descriptionHtml));
+    const descs = lessons.map((l) => htmlToBlocks(doorHtmlLinks(l.descriptionHtml || '', '', PUBLIC_PORTAL_HOST)));
     const compose = (room) => [
         head,
         ...heads.map((h, i) => [h, ...fitParagraphs(descs[i], room).map(tgEsc)].join('\n\n')),
