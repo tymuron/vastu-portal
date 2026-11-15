@@ -40,7 +40,7 @@ export default function Library() {
 
     const handleDownload = (e: React.MouseEvent, item: LibraryItem) => {
         e.stopPropagation();
-        save(item.file_url, item.title);
+        save(fileLink(item.file_url), item.title);
     };
 
     return (
@@ -70,7 +70,7 @@ export default function Library() {
                                 </div>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => window.open(item.file_url, '_blank')}
+                                        onClick={() => window.open(fileLink(item.file_url), '_blank')}
                                         className="p-2 text-gray-400 hover:text-[#422326] hover:bg-[#F4F2ED] rounded-lg transition-all duration-300"
                                         title="Открыть"
                                     >

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import FileSaveSheet from '../components/FileSaveSheet';
 import { SaveState, isStorageFile, saveFile, shareFile, sharesFiles } from '../lib/download';
+import { fileLink } from '../lib/supabase';
 
 // The ↓ buttons' save. On an iPhone or iPad the file goes to the share sheet,
 // where «Сохранить в Файлы» is, and FileSaveSheet says what is happening:
@@ -22,17 +23,18 @@ export function useFileSave() {
     }, []);
 
     const save = useCallback((fileUrl: string, fileTitle: string) => {
-        if (!sharesFiles(navigator) || !isStorageFile(fileUrl)) {
-            saveFile(fileUrl, fileTitle);
+        const url = fileLink(fileUrl);
+        if (!sharesFiles(navigator) || !isStorageFile(url)) {
+            saveFile(url, fileTitle);
             return;
         }
         run.current?.abort();
         const controller = new AbortController();
         run.current = controller;
         setTitle(fileTitle);
-        void shareFile(fileUrl, fileTitle, {
+        void shareFile(url, fileTitle, {
             nav: navigator,
-            fetchFile: (url) => fetch(url, { signal: controller.signal }),
+            fetchFile: (u) => fetch(u, { signal: controller.signal }),
             onState: (s) => {
                 if (!controller.signal.aborted) setState(s.step === 'done' ? null : s);
             },

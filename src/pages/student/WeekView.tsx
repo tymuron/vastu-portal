@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, FileText, Download, ChevronRight, Loader2 } from 'lucide-react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useState } from 'react';
+import { fileLink } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 
 export default function WeekView() {
@@ -109,7 +110,7 @@ export default function WeekView() {
                                             <h4 className="font-medium text-vastu-dark truncate">{material.title}</h4>
                                             <p className="text-xs text-vastu-text-light uppercase tracking-wider mb-2">{material.type}</p>
                                             <a
-                                                href={material.url}
+                                                href={fileLink(material.url)}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 className="text-sm text-vastu-gold hover:text-vastu-dark font-medium flex items-center gap-1 transition-colors"

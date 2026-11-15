@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Download, FileText, Search, Paperclip, Send, Check, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { fileLink, supabase } from '../../lib/supabase';
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)$/i;
 const isImageFile = (name: string | null | undefined) =>
@@ -157,7 +157,7 @@ export default function Submissions() {
                         const { data: signed } = await supabase
                             .storage.from('homework_files')
                             .createSignedUrl(s.file_url!, 3600);
-                        if (signed?.signedUrl) urlMap.set(s.id, signed.signedUrl);
+                        if (signed?.signedUrl) urlMap.set(s.id, fileLink(signed.signedUrl));
                     }));
                     if (!cancelled) setSignedUrls(urlMap);
                 }

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { resilientAuthStorage } from './browserStorage';
-import { databaseUrl, doorFileLink } from './door';
+import { databaseUrl, doorFileLink, doorHtmlLinks } from './door';
 
 // These environment variables will be needed
 const configuredUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -34,6 +34,9 @@ export const supabase = createClient(
     }
 );
 
-// A course file's link, through the address this visitor can reach. See ./door.
+// A course file or Anna's site link, through the address this visitor can reach. See ./door.
 export const fileLink = (url: string): string =>
-    configuredUrl ? doorFileLink(url, configuredUrl, window.location.hostname) : url;
+    doorFileLink(url, configuredUrl || '', window.location.hostname);
+
+export const fileLinksInHtml = (html: string): string =>
+    doorHtmlLinks(html, configuredUrl || '', window.location.hostname);

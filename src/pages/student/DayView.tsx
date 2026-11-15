@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, FileText, Video, File, ChevronRight, ChevronLeft, Loader2, Youtube } from 'lucide-react';
 import { useWeeks, useDay } from '../../hooks/useCourse';
+import { fileLink, fileLinksInHtml } from '../../lib/supabase';
 import { getVideoEmbedUrl, cn } from '../../lib/utils';
 import { useFileSave } from '../../hooks/useFileSave';
 import HomeworkSubmission from '../../components/HomeworkSubmission';
@@ -57,7 +58,7 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
                 {currentUrl ? (
                     <iframe
-                        src={getVideoEmbedUrl(currentUrl)}
+                        src={fileLink(getVideoEmbedUrl(currentUrl))}
                         className="w-full h-full"
                         title={title}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -106,7 +107,7 @@ export default function DayView() {
     // Straight from the tap: see hooks/useFileSave.tsx.
     const handleDownload = (e: React.MouseEvent, material: { url: string, title: string }) => {
         e.preventDefault();
-        save(material.url, material.title);
+        save(fileLink(material.url), material.title);
     };
 
     return (
@@ -139,7 +140,7 @@ export default function DayView() {
                         <h1 className="text-2xl md:text-3xl font-serif text-vastu-dark mb-4 break-words">{day.title}</h1>
                         <div
                             className="text-vastu-text-light leading-relaxed text-base font-light prose prose-stone max-w-none break-words [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-4 [&_img]:max-w-full [&_img]:h-auto [&_table]:block [&_table]:overflow-x-auto [&_pre]:overflow-x-auto"
-                            dangerouslySetInnerHTML={{ __html: day.description || '' }}
+                            dangerouslySetInnerHTML={{ __html: fileLinksInHtml(day.description || '') }}
                         />
                     </div>
                 </div>
@@ -234,7 +235,7 @@ export default function DayView() {
                                         className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-vastu-gold/50 hover:bg-vastu-light/30 transition-all group"
                                     >
                                         <a
-                                            href={material.url}
+                                            href={fileLink(material.url)}
                                             target="_blank"
                                             rel="noreferrer"
                                             className="flex-1 flex items-center gap-3 min-w-0"
@@ -286,7 +287,7 @@ export default function DayView() {
                             <div className="space-y-4">
                                 <div
                                     className="text-sm text-vastu-text-light prose prose-sm max-w-none break-words [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:list-decimal [&>ol]:pl-5 [&>p]:mb-2 [&_img]:max-w-full [&_img]:h-auto [&_table]:block [&_table]:overflow-x-auto [&_pre]:overflow-x-auto"
-                                    dangerouslySetInnerHTML={{ __html: day.homeworkDescription }}
+                                    dangerouslySetInnerHTML={{ __html: fileLinksInHtml(day.homeworkDescription) }}
                                 />
 
                                 {day.materials.filter(m => m.isHomework).length > 0 && (
@@ -298,7 +299,7 @@ export default function DayView() {
                                                 className="flex items-center gap-2 p-2 rounded-lg bg-orange-50 border border-orange-100 hover:bg-orange-100 transition-colors group"
                                             >
                                                 <a
-                                                    href={material.url}
+                                                    href={fileLink(material.url)}
                                                     target="_blank"
                                                     rel="noreferrer"
                                                     className="flex-1 flex items-center gap-2 min-w-0"

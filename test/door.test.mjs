@@ -61,3 +61,94 @@ test('the welcome email carries the spare link only when there is one', () => {
     assert.ok(!without.html.includes('Запасная ссылка'));
     assert.ok(!without.text.includes('Запасная ссылка'));
 });
+
+
+import { doorHtmlLinks } from '../src/lib/door.ts';
+
+test("Anna's Render sites become their public addresses on annaromeovastu.com for every visitor", () => {
+    for (const host of ['lk-ru.annaromeovastu.com', 'lk.annaromeovastu.com', 'vastu-portal-app.onrender.com', 'localhost']) {
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-karta.onrender.com/', SUPABASE, host),
+            'https://karta.annaromeovastu.com/',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-karta.onrender.com', SUPABASE, host),
+            'https://karta.annaromeovastu.com',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-karta.onrender.com/map/2?north=15&grid=9#zones', SUPABASE, host),
+            'https://karta.annaromeovastu.com/map/2?north=15&grid=9#zones',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-karta.onrender.com?x=1#top', SUPABASE, host),
+            'https://karta.annaromeovastu.com?x=1#top',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-course.onrender.com/mk/?utm=1#buy', SUPABASE, host),
+            'https://kurs.annaromeovastu.com/mk/?utm=1#buy',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-venus.onrender.com/', SUPABASE, host),
+            'https://venus.annaromeovastu.com/',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-color-test.onrender.com/result?c=gold', SUPABASE, host),
+            'https://test.annaromeovastu.com/result?c=gold',
+        );
+        assert.equal(
+            doorFileLink('https://vastu-business-landing.onrender.com/#tariffs', SUPABASE, host),
+            'https://biz.annaromeovastu.com/#tariffs',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu.onrender.com/about', SUPABASE, host),
+            'https://annaromeovastu.com/about',
+        );
+        // The platform's own Render address is never rewritten.
+        assert.equal(
+            doorFileLink('https://vastu-portal-app.onrender.com/', SUPABASE, host),
+            'https://vastu-portal-app.onrender.com/',
+        );
+        assert.equal(
+            doorFileLink('https://vastu-portal-app.onrender.com/access?t=abc#1', SUPABASE, host),
+            'https://vastu-portal-app.onrender.com/access?t=abc#1',
+        );
+        // Foreign or spoofed addresses are left alone.
+        assert.equal(
+            doorFileLink('https://someone-else.onrender.com/', SUPABASE, host),
+            'https://someone-else.onrender.com/',
+        );
+        assert.equal(
+            doorFileLink('https://annaromeo-vastu-karta.onrender.com.evil.example/', SUPABASE, host),
+            'https://annaromeo-vastu-karta.onrender.com.evil.example/',
+        );
+    }
+    // Works even when no database URL is configured, while lovable and storage behave as before.
+    assert.equal(doorFileLink('https://annaromeo-vastu-karta.onrender.com/', '', 'localhost'), 'https://karta.annaromeovastu.com/');
+    assert.equal(doorFileLink('https://urok4-1.lovable.app/', SUPABASE, 'lk-ru.annaromeovastu.com'), 'https://urok4-1-ru.annaromeovastu.com/');
+    assert.equal(doorFileLink('https://urok4-1.lovable.app/', SUPABASE, 'vastu-portal-app.onrender.com'), 'https://urok4-1.lovable.app/');
+    assert.equal(doorFileLink(SUPABASE + FILE, SUPABASE, 'lk-ru.annaromeovastu.com'), DOOR + FILE);
+    assert.equal(doorFileLink(DOOR + FILE, SUPABASE, 'lk.annaromeovastu.com'), SUPABASE + FILE);
+});
+
+test('links in lesson and homework HTML descriptions go through doorFileLink too', () => {
+    const html = [
+        '<p>Откройте <a href="https://annaromeo-vastu-karta.onrender.com/plan?a=1&amp;b=2#grid" rel="noopener noreferrer" target="_blank">Конструктор Васту-карт</a>.</p>',
+        '<p>Прямая ссылка: <a href="https://annaromeo-vastu-karta.onrender.com/">https://annaromeo-vastu-karta.onrender.com/</a></p>',
+        `<p>Презентация: <a href='https://urokdva.lovable.app/slide/2'>слайд</a> и файл <a href="${SUPABASE}${FILE}">PDF</a></p>`,
+        '<p>Платформа <a href="https://vastu-portal-app.onrender.com/login">вход</a> и <a href="https://t.me/tymuron">Telegram</a>.</p>',
+    ].join('\n');
+
+    const onMoscow = doorHtmlLinks(html, SUPABASE, 'lk-ru.annaromeovastu.com');
+    assert.ok(onMoscow.includes('href="https://karta.annaromeovastu.com/plan?a=1&amp;b=2#grid"'));
+    assert.ok(onMoscow.includes('<a href="https://karta.annaromeovastu.com/">https://karta.annaromeovastu.com/</a>'));
+    assert.ok(onMoscow.includes("href='https://urokdva-ru.annaromeovastu.com/slide/2'"));
+    assert.ok(onMoscow.includes(`href="${DOOR}${FILE}"`));
+    assert.ok(onMoscow.includes('href="https://vastu-portal-app.onrender.com/login"'));
+    assert.ok(onMoscow.includes('href="https://t.me/tymuron"'));
+
+    const onRender = doorHtmlLinks(html, SUPABASE, 'vastu-portal-app.onrender.com');
+    assert.ok(onRender.includes('href="https://karta.annaromeovastu.com/plan?a=1&amp;b=2#grid"'));
+    assert.ok(onRender.includes("href='https://urokdva.lovable.app/slide/2'"));
+    assert.ok(onRender.includes(`href="${SUPABASE}${FILE}"`));
+    assert.equal(doorHtmlLinks('', SUPABASE, 'lk-ru.annaromeovastu.com'), '');
+});

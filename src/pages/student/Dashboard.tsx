@@ -3,6 +3,7 @@ import { PlayCircle, ChevronRight, ChevronLeft, FileText, Loader2, Play, BookOpe
 import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
+import { fileLink } from '../../lib/supabase';
 
 // Helper to strip HTML
 const stripHtml = (html: string) => {
@@ -196,7 +197,7 @@ export default function StudentDashboard() {
                                         activeWeek.weekMaterials.map((material) => (
                                             <a
                                                 key={material.id}
-                                                href={material.url}
+                                                href={fileLink(material.url)}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 className="flex items-start gap-3 p-2 rounded-lg hover:bg-white transition-colors group"

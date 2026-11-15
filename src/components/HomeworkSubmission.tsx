@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Paperclip, Send, Check, Loader2, X, Download } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { fileLink, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Submission {
@@ -57,7 +57,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                     const { data: signed } = await supabase
                         .storage.from('homework_files')
                         .createSignedUrl(data.file_url, 3600);
-                    if (!cancelled) setSignedUrl(signed?.signedUrl || null);
+                    if (!cancelled) setSignedUrl(signed?.signedUrl ? fileLink(signed.signedUrl) : null);
                 }
             }
             setLoading(false);
@@ -145,7 +145,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                 const { data: signed } = await supabase
                     .storage.from('homework_files')
                     .createSignedUrl(filePath, 3600);
-                setSignedUrl(signed?.signedUrl || null);
+                setSignedUrl(signed?.signedUrl ? fileLink(signed.signedUrl) : null);
             } else {
                 setSignedUrl(null);
             }
@@ -214,7 +214,7 @@ export default function HomeworkSubmission({ dayId }: { dayId: string }) {
                     <Paperclip size={14} className="text-vastu-gold shrink-0" />
                     <div className="flex-1 min-w-0 text-sm text-vastu-dark truncate">{existing.file_name}</div>
                     {signedUrl && (
-                        <a href={signedUrl} target="_blank" rel="noreferrer"
+                        <a href={fileLink(signedUrl)} target="_blank" rel="noreferrer"
                            className="p-1 text-vastu-gold hover:text-vastu-dark" title="Открыть">
                             <Download size={14} />
                         </a>

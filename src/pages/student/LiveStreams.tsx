@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { fileLink, supabase } from '../../lib/supabase';
 import { LiveStream } from '../../lib/types';
 import { Calendar, Clock, Video, Youtube } from 'lucide-react';
 import { cn, getVideoEmbedUrl } from '../../lib/utils';
@@ -54,7 +54,7 @@ const VideoPlayer = ({ youtubeUrl, rutubeUrl, title }: { youtubeUrl?: string, ru
             <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative group">
                 {currentUrl ? (
                     <iframe
-                        src={getVideoEmbedUrl(currentUrl)}
+                        src={fileLink(getVideoEmbedUrl(currentUrl))}
                         className="w-full h-full"
                         title={title}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -96,7 +96,12 @@ export default function LiveStreams() {
                 .order('date', { ascending: false });
 
             if (error) throw error;
-            setStreams(data || []);
+            setStreams((data || []).map((stream) => ({
+                ...stream,
+                video_url: stream.video_url ? fileLink(stream.video_url) : stream.video_url,
+                rutube_url: stream.rutube_url ? fileLink(stream.rutube_url) : stream.rutube_url,
+                audio_url: stream.audio_url ? fileLink(stream.audio_url) : stream.audio_url,
+            })));
         } catch (error) {
             console.error('Error fetching streams:', error);
         } finally {
