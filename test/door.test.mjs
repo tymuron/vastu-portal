@@ -225,3 +225,184 @@ test('HTML and plain text rewrite href, visible link text (with or without schem
     );
     assert.equal(doorHtmlLinks('', SUPABASE, 'lk-ru.annaromeovastu.com'), '');
 });
+
+import fs from 'node:fs';
+
+test('inline tags are transparent when matching neighbours and split hostnames across tag boundaries', () => {
+    const MOSCOW = 'lk-ru.annaromeovastu.com';
+    const PUBLIC = 'lk.annaromeovastu.com';
+
+    // Exact cases from round 3 point 1: must not misfire across inline tag boundaries.
+    for (const host of [MOSCOW, PUBLIC]) {
+        assert.equal(
+            doorHtmlLinks('<p>hello@<strong>annaromeovastu.com</strong></p>', SUPABASE, host),
+            '<p>hello@<strong>annaromeovastu.com</strong></p>',
+        );
+        assert.equal(
+            doorHtmlLinks('<p><strong>lk.</strong>annaromeovastu.com</p>', SUPABASE, host),
+            '<p><strong>lk.</strong>annaromeovastu.com</p>',
+        );
+        assert.equal(
+            doorHtmlLinks('<strong>annaromeovastu.com</strong>.evil.example', SUPABASE, host),
+            '<strong>annaromeovastu.com</strong>.evil.example',
+        );
+    }
+
+    // Split www.annaromeovastu.com: rewrites whole host to www-ru on the door (no www.www-ru), untouched on public.
+    assert.equal(
+        doorHtmlLinks('<p><strong>www.</strong>annaromeovastu.com</p>', SUPABASE, MOSCOW),
+        '<p><strong>www-ru.annaromeovastu.com</strong></p>',
+    );
+    assert.equal(
+        doorHtmlLinks('<p><strong>www.</strong>annaromeovastu.com</p>', SUPABASE, PUBLIC),
+        '<p><strong>www.</strong>annaromeovastu.com</p>',
+    );
+
+    // Every transparent inline tag (a, strong, em, u, s, span, b, i) sees neighbours across boundaries.
+    for (const tag of ['a', 'strong', 'em', 'u', 's', 'span', 'b', 'i']) {
+        const emailHtml = `<p>hello@<${tag}>annaromeovastu.com</${tag}></p>`;
+        assert.equal(doorHtmlLinks(emailHtml, SUPABASE, MOSCOW), emailHtml);
+        const subHtml = `<p><${tag}>evil.</${tag}>karta.annaromeovastu.com</p>`;
+        assert.equal(doorHtmlLinks(subHtml, SUPABASE, MOSCOW), subHtml);
+        const suffixHtml = `<p><${tag}>annaromeovastu.com</${tag}>.evil.example</p>`;
+        assert.equal(doorHtmlLinks(suffixHtml, SUPABASE, MOSCOW), suffixHtml);
+    }
+
+    // Split Anna's own site across multiple inline tags rewrites cleanly in place.
+    assert.equal(
+        doorHtmlLinks('<p><b>annaromeo-vastu</b>-<i>karta</i>.<u>onrender</u>.<s>com</s>/plan</p>', SUPABASE, PUBLIC),
+        '<p><b>karta.annaromeovastu.com</b><i></i><u></u><s></s>/plan</p>',
+    );
+    assert.equal(
+        doorHtmlLinks('<p>https://<span>annaromeo-vastu-course.onrender.com</span>/mk</p>', SUPABASE, MOSCOW),
+        '<p>https://<span>kurs-ru.annaromeovastu.com</span>/mk</p>',
+    );
+    assert.equal(
+        doorHtmlLinks('<p><a href="https://annaromeo-venus.onrender.com/"><em>annaromeo-venus</em>.onrender.com</a></p>', SUPABASE, PUBLIC),
+        '<p><a href="https://venus.annaromeovastu.com/"><em>venus.annaromeovastu.com</em></a></p>',
+    );
+
+    // Block tags and <br> still separate blocks so adjacent paragraphs/lines do not glue together.
+    assert.equal(
+        doorHtmlLinks('<p>hello@</p><p>annaromeovastu.com</p>', SUPABASE, MOSCOW),
+        '<p>hello@</p><p>www-ru.annaromeovastu.com</p>',
+    );
+    assert.equal(
+        doorHtmlLinks('<p>hello@<br>annaromeovastu.com</p>', SUPABASE, MOSCOW),
+        '<p>hello@<br>www-ru.annaromeovastu.com</p>',
+    );
+});
+
+test('unchanged public addresses in text stay completely untouched, and changed addresses replace only the hostname', () => {
+    for (const host of ['lk.annaromeovastu.com', 'vastu-portal-app.onrender.com', 'localhost']) {
+        assert.equal(doorTextLinks('AnnaRomeoVastu.com', host), 'AnnaRomeoVastu.com');
+        assert.equal(doorTextLinks('http://annaromeovastu.com/kurs', host), 'http://annaromeovastu.com/kurs');
+        assert.equal(doorTextLinks('http://AnnaRomeoVastu.com/Kurs', host), 'http://AnnaRomeoVastu.com/Kurs');
+        assert.equal(doorTextLinks('Karta.AnnaRomeoVastu.com/Map', host), 'Karta.AnnaRomeoVastu.com/Map');
+        assert.equal(doorTextLinks('http://WWW.AnnaRomeoVastu.com/About', host), 'http://WWW.AnnaRomeoVastu.com/About');
+
+        assert.equal(
+            doorHtmlLinks('<p>Сайт AnnaRomeoVastu.com и раздел http://annaromeovastu.com/kurs</p>', SUPABASE, host),
+            '<p>Сайт AnnaRomeoVastu.com и раздел http://annaromeovastu.com/kurs</p>',
+        );
+
+        // When the host does change (Render -> public), only the hostname is replaced; scheme and path case stay as written.
+        assert.equal(
+            doorTextLinks('http://annaromeo-vastu-karta.onrender.com/Kurs', host),
+            'http://karta.annaromeovastu.com/Kurs',
+        );
+        assert.equal(
+            doorTextLinks('HTTP://AnnaRomeo-Vastu-Course.OnRender.com/MK', host),
+            'HTTP://kurs.annaromeovastu.com/MK',
+        );
+    }
+
+    // On the Moscow door, public -> -ru changes only the hostname and keeps http:// and path casing.
+    assert.equal(
+        doorTextLinks('http://annaromeovastu.com/kurs', 'lk-ru.annaromeovastu.com'),
+        'http://www-ru.annaromeovastu.com/kurs',
+    );
+    assert.equal(
+        doorTextLinks('AnnaRomeoVastu.com/Kurs', 'lk-ru.annaromeovastu.com'),
+        'www-ru.annaromeovastu.com/Kurs',
+    );
+});
+
+test("Anna's address inside a foreign URL's query, fragment or path is never rewritten", () => {
+    const cases = [
+        'https://t.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/',
+        'https://t.me/share/url?url=https://annaromeovastu.com/kurs&text=Vastu',
+        'https://example.com/page?next=annaromeo-vastu-karta.onrender.com#https://annaromeovastu.com',
+        'https://example.com/#https://annaromeo-vastu-karta.onrender.com/map',
+        'https://example.com/#!https://annaromeo-vastu-karta.onrender.com/map',
+        'https://web.archive.org/web/2026/https://annaromeo-vastu-karta.onrender.com/',
+        '//t.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/',
+        't.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/',
+    ];
+
+    for (const host of ['lk-ru.annaromeovastu.com', 'lk.annaromeovastu.com', 'vastu-portal-app.onrender.com']) {
+        for (const url of cases) {
+            assert.equal(doorTextLinks(`Поделиться: ${url}.`, host), `Поделиться: ${url}.`);
+            assert.equal(doorHtmlLinks(`<p>Поделиться: ${url}</p>`, SUPABASE, host), `<p>Поделиться: ${url}</p>`);
+        }
+        assert.equal(
+            doorHtmlLinks('<p>https://t.me/share/url?text=hi&amp;url=https://annaromeo-vastu-karta.onrender.com/</p>', SUPABASE, host),
+            '<p>https://t.me/share/url?text=hi&amp;url=https://annaromeo-vastu-karta.onrender.com/</p>',
+        );
+        assert.equal(
+            doorHtmlLinks('<p>https://t.me/share/url?url=<strong>https://annaromeo-vastu-karta.onrender.com/</strong></p>', SUPABASE, host),
+            '<p>https://t.me/share/url?url=<strong>https://annaromeo-vastu-karta.onrender.com/</strong></p>',
+        );
+    }
+
+    // When Anna's site IS the URL's own host, it still rewrites cleanly without touching its query/fragment.
+    assert.equal(
+        doorTextLinks('https://annaromeo-vastu-karta.onrender.com/plan?share=https://t.me/tymuron#zones', 'lk.annaromeovastu.com'),
+        'https://karta.annaromeovastu.com/plan?share=https://t.me/tymuron#zones',
+    );
+    assert.equal(
+        doorTextLinks('https://annaromeo-vastu-karta.onrender.com/plan?share=https://t.me/tymuron#zones', 'lk-ru.annaromeovastu.com'),
+        'https://karta-ru.annaromeovastu.com/plan?share=https://t.me/tymuron#zones',
+    );
+});
+
+test('tags that fail attribute tokenization (such as unquoted apostrophes) stay untouched and never enter text mode', () => {
+    const unquotedApostrophe = '<img src="https://annaromeo-vastu-karta.onrender.com/grid.png" alt=Anna\'s>';
+    const customAttrs = '<div data-url="https://annaromeo-vastu-karta.onrender.com/" title=Anna\'s>';
+
+    for (const host of ['lk-ru.annaromeovastu.com', 'lk.annaromeovastu.com', 'vastu-portal-app.onrender.com']) {
+        assert.equal(doorHtmlLinks(unquotedApostrophe, SUPABASE, host), unquotedApostrophe);
+        assert.equal(doorHtmlLinks(customAttrs, SUPABASE, host), customAttrs);
+    }
+
+    // A later apostrophe in text must not merge with the unquoted apostrophe inside <img ... alt=Anna's>.
+    assert.equal(
+        doorHtmlLinks(`${unquotedApostrophe}<p>It's annaromeo-vastu-karta.onrender.com</p>`, SUPABASE, 'lk.annaromeovastu.com'),
+        `${unquotedApostrophe}<p>It's karta.annaromeovastu.com</p>`,
+    );
+    assert.equal(
+        doorHtmlLinks('<div title="unclosed>annaromeo-vastu-karta.onrender.com</div>', SUPABASE, 'lk.annaromeovastu.com'),
+        '<div title="unclosed>karta.annaromeovastu.com</div>',
+    );
+});
+
+test('performance: 50,000-character [a-z0-9-] strings process in under 100 ms without regex lookbehind', () => {
+    const source = fs.readFileSync(new URL('../src/lib/siteLinks.js', import.meta.url), 'utf8');
+    assert.ok(!source.includes('(?<=') && !source.includes('(?<!'), 'no regex lookbehind for pre-16.4 Safari');
+
+    const longChain = 'a1-b2-'.repeat(8334).slice(0, 50_000);
+    assert.equal(longChain.length, 50_000);
+
+    const t0 = performance.now();
+    const outText = doorTextLinks(longChain, 'lk-ru.annaromeovastu.com');
+    const textMs = performance.now() - t0;
+    assert.equal(outText, longChain);
+    assert.ok(textMs < 100, `doorTextLinks on 50k chars took ${textMs.toFixed(2)} ms (expected < 100 ms)`);
+
+    const longHtml = `<p>${longChain}</p>`;
+    const t1 = performance.now();
+    const outHtml = doorHtmlLinks(longHtml, SUPABASE, 'lk-ru.annaromeovastu.com');
+    const htmlMs = performance.now() - t1;
+    assert.equal(outHtml, longHtml);
+    assert.ok(htmlMs < 100, `doorHtmlLinks on 50k chars took ${htmlMs.toFixed(2)} ms (expected < 100 ms)`);
+});

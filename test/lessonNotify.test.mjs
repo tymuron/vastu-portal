@@ -836,3 +836,50 @@ test("new-lesson emails and Telegram posts rewrite Anna's Render site links in t
     assert.ok(directEmail.text.includes('karta.annaromeovastu.com') && !directEmail.text.includes('onrender.com'));
     assert.ok(directPost.text.includes('karta.annaromeovastu.com') && !directPost.text.includes('onrender.com'));
 });
+
+test('new-lesson emails and Telegram posts preserve unchanged public addresses, foreign share URLs, inline-split neighbours and unquoted-apostrophe tags', async () => {
+    const description = [
+        '<p><img src="https://annaromeo-vastu-karta.onrender.com/pic.png" alt=Anna\'s> Сайт AnnaRomeoVastu.com и http://annaromeovastu.com/kurs</p>',
+        '<p>Почта hello@<strong>annaromeovastu.com</strong>, <strong>lk.</strong>annaromeovastu.com и <strong>annaromeo-vastu-karta</strong>.onrender.com/map</p>',
+        '<p>Шер: https://t.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/ и http://annaromeo-vastu-course.onrender.com/mk</p>',
+    ].join('');
+
+    const wd = world();
+    const day = wd.lesson(wd.w.w1.id, {
+        title: 'Урок 3. Проверка адресов в описании',
+        order_index: 3,
+        video_url: 'https://youtu.be/abc',
+        description,
+    });
+
+    const mapped = toLesson({ course: wd.c.base, week: wd.w.w1, day });
+    assert.ok(mapped.descriptionHtml.includes('<img src="https://annaromeo-vastu-karta.onrender.com/pic.png" alt=Anna\'s>'));
+    assert.ok(mapped.descriptionHtml.includes('AnnaRomeoVastu.com'));
+    assert.ok(mapped.descriptionHtml.includes('http://annaromeovastu.com/kurs'));
+
+    await settleAndRun(wd);
+    assert.equal(wd.emails.length, 2);
+    for (const email of wd.emails) {
+        for (const body of [email.html, email.text]) {
+            assert.ok(body.includes('AnnaRomeoVastu.com'), 'public domain casing untouched');
+            assert.ok(body.includes('http://annaromeovastu.com/kurs'), 'http on unchanged public site untouched');
+            assert.ok(body.includes('hello@annaromeovastu.com'), 'split email untouched');
+            assert.ok(body.includes('lk.annaromeovastu.com'), 'split platform host untouched');
+            assert.ok(body.includes('karta.annaromeovastu.com/map'), 'split Render host rewritten');
+            assert.ok(body.includes('https://t.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/'), 'foreign share URL query untouched');
+            assert.ok(body.includes('http://kurs.annaromeovastu.com/mk'), 'changed Render host replaces only hostname, keeping http://');
+            assert.ok(!body.includes('alt=Anna'), 'unparsed <img> tag never leaked into text');
+        }
+    }
+
+    assert.equal(wd.posts.length, 1);
+    const tgText = wd.posts[0].text;
+    assert.ok(tgText.includes('AnnaRomeoVastu.com'));
+    assert.ok(tgText.includes('http://annaromeovastu.com/kurs'));
+    assert.ok(tgText.includes('hello@annaromeovastu.com'));
+    assert.ok(tgText.includes('lk.annaromeovastu.com'));
+    assert.ok(tgText.includes('karta.annaromeovastu.com/map'));
+    assert.ok(tgText.includes('https://t.me/share/url?url=https://annaromeo-vastu-karta.onrender.com/'));
+    assert.ok(tgText.includes('http://kurs.annaromeovastu.com/mk'));
+    assert.ok(!tgText.includes('alt=Anna'));
+});

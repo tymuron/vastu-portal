@@ -100,67 +100,231 @@ export function doorSrcLink(url, configured, hostname) {
     return rewriteStorageLink(url, configured, hostname);
 }
 
-const TEXT_SITE_RE = /(https?:\/\/|\/\/)?([a-z0-9-]+\.onrender\.com|(?:[a-z0-9-]+\.)?annaromeovastu\.com)/gi;
+const URL_CHUNK_RE = /[a-z0-9._~:/?#@!$&+=,;%-]+/gi;
+const CHUNK_HOST_RE = /^(https?:\/\/|\/\/)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?=$|[/?#]|[.,;:!?]+$)/i;
+const CYRILLIC_LETTER_RE = /[а-яё]/i;
+const HTML_ENTITY_RE = /&(?:#(\d+)|#x([0-9a-f]+)|([a-z][a-z0-9]*));/gi;
+const SINGLE_URL_CHAR_RE = /^[a-z0-9._~:/?#@!$&+=,;%-]$/i;
+const NAMED_URL_ENTITIES = {
+    amp: '&',
+    apos: "'",
+    colon: ':',
+    commat: '@',
+    equals: '=',
+    gt: '>',
+    lt: '<',
+    num: '#',
+    period: '.',
+    quest: '?',
+    quot: '"',
+    sol: '/',
+};
 
-// Rewrites Anna's site addresses inside visible text (plain text from the DB and
-// text between HTML tags). Preserves whether a scheme was written: bare hostnames
-// stay bare (no https:// added), https?:// becomes https://, // stays //.
-export function doorTextLinks(text, hostname) {
-    if (!text) return text;
-    const door = onDoor(hostname);
-    return text.replace(TEXT_SITE_RE, (whole, scheme, rawHost, offset, str) => {
-        const entry = ANNA_SITES_BY_HOST.get(rawHost.toLowerCase());
-        if (!entry) return whole;
-
-        const prev = offset > 0 ? str[offset - 1] : '';
-        if (prev === ':') {
-            if (offset >= 2 && /[a-z0-9+.-]/i.test(str[offset - 2])) return whole;
-        } else if (scheme) {
-            if (/[a-z0-9_.@/-]/i.test(prev)) return whole;
-        } else if (/[a-z0-9_.@/=-]/i.test(prev)) {
-            return whole;
+function maskHtmlEntities(text) {
+    if (!text.includes('&')) return text;
+    return text.replace(HTML_ENTITY_RE, (whole, dec, hex, named) => {
+        let ch = '';
+        if (dec !== undefined) {
+            const code = Number(dec);
+            if (code > 0 && code <= 0x10ffff) ch = String.fromCodePoint(code);
+        } else if (hex !== undefined) {
+            const code = parseInt(hex, 16);
+            if (code > 0 && code <= 0x10ffff) ch = String.fromCodePoint(code);
+        } else if (named !== undefined) {
+            ch = NAMED_URL_ENTITIES[named.toLowerCase()] || ' ';
         }
-
-        const after = str.slice(offset + whole.length);
-        if (/^[a-z0-9_-]|^\.[a-z0-9-]|^@|^:[0-9a-z/@]/i.test(after)) return whole;
-
-        const targetHost = door ? entry.door : entry.public;
-        const targetScheme = !scheme ? '' : scheme === '//' ? '//' : 'https://';
-        return `${targetScheme}${targetHost}`;
+        const fill = ch.length === 1 && SINGLE_URL_CHAR_RE.test(ch) ? ch : ' ';
+        return fill.repeat(whole.length);
     });
 }
 
-const HTML_TOKEN_RE = /<!--[\s\S]*?-->|<(\/?)([a-z][a-z0-9]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>|([^<]+)|</gi;
+function findTextHostEdits(scanText, door) {
+    const edits = [];
+    URL_CHUNK_RE.lastIndex = 0;
+    let chunkMatch;
+    while ((chunkMatch = URL_CHUNK_RE.exec(scanText)) !== null) {
+        const chunk = chunkMatch[0];
+        const chunkStart = chunkMatch.index;
+        if (chunkStart > 0 && CYRILLIC_LETTER_RE.test(scanText[chunkStart - 1])) continue;
+
+        const hostMatch = CHUNK_HOST_RE.exec(chunk);
+        if (!hostMatch) continue;
+
+        const scheme = hostMatch[1] || '';
+        const rawHost = hostMatch[2];
+        const lowerHost = rawHost.toLowerCase();
+        const entry = ANNA_SITES_BY_HOST.get(lowerHost);
+        if (!entry) continue;
+
+        const afterHost = chunk[scheme.length + rawHost.length];
+        const chunkEnd = chunkStart + chunk.length;
+        if (
+            afterHost !== '/' &&
+            afterHost !== '?' &&
+            afterHost !== '#' &&
+            chunkEnd < scanText.length &&
+            CYRILLIC_LETTER_RE.test(scanText[chunkEnd])
+        ) {
+            continue;
+        }
+
+        const targetHost = door ? entry.door : entry.public;
+        if (lowerHost === targetHost) continue;
+
+        const hostStart = chunkStart + scheme.length;
+        edits.push({ start: hostStart, end: hostStart + rawHost.length, text: targetHost });
+    }
+    return edits;
+}
+
+// Rewrites Anna's site addresses inside visible text (plain text from the DB and
+// text inside HTML blocks). Leaves the text untouched when the target host is
+// already written (preserving case and scheme), and replaces only the hostname
+// when the address actually changes.
+export function doorTextLinks(text, hostname) {
+    if (!text) return text;
+    const edits = findTextHostEdits(text, onDoor(hostname));
+    if (!edits.length) return text;
+    const parts = [];
+    let pos = 0;
+    for (const ed of edits) {
+        if (ed.start > pos) parts.push(text.slice(pos, ed.start));
+        parts.push(ed.text);
+        pos = ed.end;
+    }
+    if (pos < text.length) parts.push(text.slice(pos));
+    return parts.join('');
+}
+
+const INLINE_TAGS = new Set(['a', 'strong', 'em', 'u', 's', 'span', 'b', 'i']);
+const HTML_TOKEN_RE = /<!--[\s\S]*?-->|<(\/?)([a-z][a-z0-9]*)\b((?:[^<>"'=]|=\s*(?:"[^"]*"|'[^']*')|=)*)>|<[^\s<>][^<>]*>|([^<]+)|</gi;
+const HTML_FALLBACK_TAG_RE = /^<\/?([a-z][a-z0-9]*)\b/i;
 const HTML_ATTR_RE = /\b(href|src)(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>"']+))/gi;
 
 // Rewrites href, src and visible text inside rich-text HTML descriptions.
+// Inline formatting tags are treated as transparent so hostnames and neighbours
+// split across tag boundaries are matched on the concatenated block text.
 export function doorHtmlLinks(html, configured, hostname) {
     if (!html) return html;
+    const door = onDoor(hostname);
+    const result = [];
+    let blockTokens = [];
+    let blockTextParts = [];
+    let blockLen = 0;
     let rawTag = null;
-    return html.replace(HTML_TOKEN_RE, (whole, closing, tagName, attrs, textNode) => {
-        if (whole.startsWith('<!--')) return whole;
+
+    const flushBlock = () => {
+        if (!blockTokens.length) return;
+        if (!blockLen) {
+            for (const tok of blockTokens) result.push(tok.raw);
+            blockTokens = [];
+            return;
+        }
+        const blockText = blockTextParts.length === 1 ? blockTextParts[0] : blockTextParts.join('');
+        const edits = findTextHostEdits(maskHtmlEntities(blockText), door);
+        if (!edits.length) {
+            for (const tok of blockTokens) result.push(tok.raw);
+        } else {
+            let ei = 0;
+            for (const tok of blockTokens) {
+                if (tok.type !== 'text') {
+                    result.push(tok.raw);
+                    continue;
+                }
+                while (ei < edits.length && edits[ei].end <= tok.start) ei += 1;
+                if (ei >= edits.length || edits[ei].start >= tok.end) {
+                    result.push(tok.raw);
+                    continue;
+                }
+                let out = '';
+                let pos = tok.start;
+                while (ei < edits.length && edits[ei].start < tok.end) {
+                    const ed = edits[ei];
+                    if (ed.start > pos) out += tok.raw.slice(pos - tok.start, ed.start - tok.start);
+                    if (ed.start >= tok.start) out += ed.text;
+                    if (ed.end <= tok.end) {
+                        pos = ed.end;
+                        ei += 1;
+                    } else {
+                        pos = tok.end;
+                        break;
+                    }
+                }
+                if (pos < tok.end) out += tok.raw.slice(pos - tok.start);
+                result.push(out);
+            }
+        }
+        blockTokens = [];
+        blockTextParts = [];
+        blockLen = 0;
+    };
+
+    HTML_TOKEN_RE.lastIndex = 0;
+    let m;
+    while ((m = HTML_TOKEN_RE.exec(html)) !== null) {
+        const [whole, closing, tagName, attrs, textNode] = m;
+        if (whole.startsWith('<!--')) {
+            if (rawTag) result.push(whole);
+            else blockTokens.push({ type: 'raw', raw: whole });
+            continue;
+        }
         if (tagName !== undefined) {
             const lower = tagName.toLowerCase();
-            if (lower === 'script' || lower === 'style') {
-                if (closing === '/') rawTag = null;
-                else if (!/\/\s*$/.test(attrs)) rawTag = lower;
+            if (rawTag) {
+                if (closing === '/' && lower === rawTag) rawTag = null;
+                result.push(whole);
+                continue;
             }
-            if (closing === '/') return whole;
-            const nextAttrs = attrs.replace(HTML_ATTR_RE, (attrWhole, attr, eq, dq, sq, bare, attrOffset, attrStr) => {
-                if (attrOffset > 0 && /[a-z0-9_:-]/i.test(attrStr[attrOffset - 1])) return attrWhole;
-                const raw = dq ?? sq ?? bare ?? '';
-                const quote = dq !== undefined ? '"' : sq !== undefined ? "'" : '';
-                const trimmed = raw.trim();
-                const rewritten = attr.toLowerCase() === 'src'
-                    ? doorSrcLink(trimmed, configured, hostname)
-                    : doorFileLink(trimmed, configured, hostname);
-                return rewritten === trimmed ? attrWhole : `${attr}${eq}${quote}${rewritten}${quote}`;
-            });
-            return nextAttrs === attrs ? whole : `<${closing}${tagName}${nextAttrs}>`;
+            let rewrittenTag = whole;
+            if (closing !== '/') {
+                const nextAttrs = attrs.replace(HTML_ATTR_RE, (attrWhole, attr, eq, dq, sq, bare, attrOffset, attrStr) => {
+                    if (attrOffset > 0 && /[a-z0-9_:-]/i.test(attrStr[attrOffset - 1])) return attrWhole;
+                    const raw = dq ?? sq ?? bare ?? '';
+                    const quote = dq !== undefined ? '"' : sq !== undefined ? "'" : '';
+                    const trimmed = raw.trim();
+                    const rewritten = attr.toLowerCase() === 'src'
+                        ? doorSrcLink(trimmed, configured, hostname)
+                        : doorFileLink(trimmed, configured, hostname);
+                    return rewritten === trimmed ? attrWhole : `${attr}${eq}${quote}${rewritten}${quote}`;
+                });
+                if (nextAttrs !== attrs) rewrittenTag = `<${closing}${tagName}${nextAttrs}>`;
+            }
+            if (lower === 'script' || lower === 'style') {
+                flushBlock();
+                if (closing !== '/' && !/\/\s*$/.test(attrs)) rawTag = lower;
+                result.push(rewrittenTag);
+            } else if (INLINE_TAGS.has(lower)) {
+                blockTokens.push({ type: 'raw', raw: rewrittenTag });
+            } else {
+                flushBlock();
+                result.push(rewrittenTag);
+            }
+            continue;
         }
-        if (textNode !== undefined) {
-            return rawTag ? textNode : doorTextLinks(textNode, hostname);
+        if (textNode === undefined && whole.length > 1) {
+            // Fallback for tags the attribute grammar could not parse (e.g. unquoted apostrophe):
+            // never treat <...> as visible text; return the tag unchanged.
+            const fallbackName = HTML_FALLBACK_TAG_RE.exec(whole)?.[1]?.toLowerCase();
+            if (rawTag) {
+                if (whole.startsWith('</') && fallbackName === rawTag) rawTag = null;
+                result.push(whole);
+            } else if (fallbackName && INLINE_TAGS.has(fallbackName)) {
+                blockTokens.push({ type: 'raw', raw: whole });
+            } else {
+                flushBlock();
+                result.push(whole);
+            }
+            continue;
         }
-        return whole;
-    });
+        if (rawTag) {
+            result.push(whole);
+        } else {
+            const start = blockLen;
+            blockLen += whole.length;
+            blockTextParts.push(whole);
+            blockTokens.push({ type: 'text', raw: whole, start, end: blockLen });
+        }
+    }
+    flushBlock();
+    return result.join('');
 }
