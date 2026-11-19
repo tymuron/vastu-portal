@@ -6,6 +6,7 @@ import { loginPathFor } from '../../lib/loginNext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
+import ExtensionOffers from '../ExtensionOffers';
 
 export default function StudentLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -63,21 +64,24 @@ export default function StudentLayout() {
     if (!coursesError && courses.length === 0) {
         return (
             <div className="min-h-screen bg-vastu-light flex items-center justify-center p-6">
-                <div className="bg-white rounded-2xl border border-gray-100 p-10 max-w-lg w-full text-center shadow-sm">
-                    <div className="w-14 h-14 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold mx-auto mb-5">
-                        <BookOpen size={26} />
+                <div className="max-w-lg w-full space-y-6">
+                    <ExtensionOffers />
+                    <div className="bg-white rounded-2xl border border-gray-100 p-10 w-full text-center shadow-sm">
+                        <div className="w-14 h-14 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold mx-auto mb-5">
+                            <BookOpen size={26} />
+                        </div>
+                        <h1 className="font-serif text-2xl text-vastu-dark mb-3">Доступ к курсам</h1>
+                        <p className="text-vastu-text-light leading-relaxed mb-6">
+                            У вас пока нет доступа к курсам. После оплаты вы получите письмо с доступом.
+                        </p>
+                        <button
+                            onClick={() => signOut()}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm text-vastu-text-light hover:text-vastu-dark transition-colors"
+                        >
+                            <LogOut size={16} />
+                            <span>Выйти из аккаунта</span>
+                        </button>
                     </div>
-                    <h1 className="font-serif text-2xl text-vastu-dark mb-3">Доступ к курсам</h1>
-                    <p className="text-vastu-text-light leading-relaxed mb-6">
-                        У вас пока нет доступа к курсам. После оплаты вы получите письмо с доступом.
-                    </p>
-                    <button
-                        onClick={() => signOut()}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm text-vastu-text-light hover:text-vastu-dark transition-colors"
-                    >
-                        <LogOut size={16} />
-                        <span>Выйти из аккаунта</span>
-                    </button>
                 </div>
             </div>
         );

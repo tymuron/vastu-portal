@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
 import { fileLink, fileLinksInText } from '../../lib/supabase';
+import ExtensionOffers from '../../components/ExtensionOffers';
 
 // Helper to strip HTML
 const stripHtml = (html: string) => {
@@ -54,6 +55,7 @@ export default function StudentDashboard() {
     if (isExpired) {
         return (
             <div className="animate-fade-in max-w-2xl mx-auto">
+                <ExtensionOffers className="mb-6" />
                 <div className="bg-white rounded-2xl border border-gray-100 p-10 md:p-14 text-center">
                     <Lock size={32} className="mx-auto text-vastu-text-light mb-4" />
                     <h2 className="font-serif text-2xl text-vastu-dark mb-3">Доступ к курсу истёк</h2>
@@ -68,6 +70,7 @@ export default function StudentDashboard() {
     if (weeks.length === 0) {
         return (
             <div className="animate-fade-in max-w-2xl mx-auto">
+                <ExtensionOffers className="mb-6" />
                 <div className="bg-white rounded-2xl border border-gray-100 p-10 md:p-14 text-center">
                     <div className="w-14 h-14 rounded-full bg-vastu-light flex items-center justify-center text-vastu-gold mx-auto mb-5">
                         <BookOpen size={26} />
@@ -89,6 +92,7 @@ export default function StudentDashboard() {
 
     return (
         <div className="animate-fade-in">
+            <ExtensionOffers className="mb-6" />
             {showWarning && activeCourseExpiresAt && (
                 <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-4 mb-6 flex items-center gap-3">
                     <AlertCircle size={20} />

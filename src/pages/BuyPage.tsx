@@ -23,10 +23,12 @@ const TEXT = {
     ru: {
         thanksTitle: 'Спасибо! Оплата прошла',
         thanks1: 'В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой в личный кабинет, в Telegram-канал и чат курса.',
+        extendThanks1: 'Спасибо! Доступ продлён — новая дата придёт письмом. Обновите страницу кабинета.',
         thanks2: 'Не видите письма через 10 минут — загляните в «Спам» и «Промоакции» или запросите ссылку ещё раз.',
         sendLink: 'Прислать ссылку для входа',
         badLink: 'Неверная ссылка на оплату. Проверьте URL или свяжитесь с автором.',
         intro: 'Введите email, на который придёт доступ к курсу. Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и в Telegram-чат курса.',
+        extendIntro: 'Введите email, с которым вы входите в личный кабинет: продление добавится к вашему доступу. После оплаты на эту почту придёт письмо с новой датой.',
         failed: 'Оплата не прошла. Чаще всего банк отклоняет карту — попробуйте через СБП или другой картой.',
         notFound: 'Этот оффер не найден на стороне Lava. Свяжитесь с автором.',
         invoiceFailed: 'Не удалось создать счёт. Попробуйте ещё раз.',
@@ -40,10 +42,12 @@ const TEXT = {
     uk: {
         thanksTitle: 'Дякуємо! Оплата пройшла',
         thanks1: 'Протягом кількох хвилин на вашу пошту прийде лист від Anna Romeo з посиланням в особистий кабінет, у Telegram-канал і чат курсу.',
+        extendThanks1: 'Дякуємо! Доступ продовжено — нова дата прийде листом. Оновіть сторінку кабінету.',
         thanks2: 'Не бачите листа за 10 хвилин — зазирніть у «Спам» і «Промоакції» або запросіть посилання ще раз.',
         sendLink: 'Надіслати посилання для входу',
         badLink: 'Неправильне посилання на оплату. Перевірте URL або зв’яжіться з авторкою.',
         intro: 'Введіть email, на який прийде доступ до курсу. Одразу після оплати на цю пошту прийде лист із посиланням в особистий кабінет і в Telegram-чат курсу. Навчання проходить російською мовою.',
+        extendIntro: 'Введіть email, з яким ви входите в особистий кабінет: продовження додасться до вашого доступу. Після оплати на цю пошту прийде лист із новою датою.',
         failed: 'Оплата не пройшла. Найчастіше банк відхиляє картку — спробуйте іншу картку.',
         notFound: 'Цей тариф не знайдено на боці Lava. Зв’яжіться з авторкою.',
         invoiceFailed: 'Не вдалося створити рахунок. Спробуйте ще раз.',
@@ -123,12 +127,13 @@ function BuyThanks() {
     const lang = useLang();
     const t = TEXT[lang];
     const [searchParams] = useSearchParams();
+    const isExtend = searchParams.get('extend') === '1';
     const offerText = lang === 'ru' ? OFFER_TEXT[(searchParams.get('offer') || '').toLowerCase()] : undefined;
     return (
         <Shell>
             <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
                 <p className="text-vastu-gold font-serif text-2xl">{t.thanksTitle}</p>
-                <p>{offerText?.thanks1 || t.thanks1}</p>
+                <p>{isExtend ? t.extendThanks1 : (offerText?.thanks1 || t.thanks1)}</p>
                 <p className="text-vastu-light/60">{t.thanks2}</p>
                 <a
                     href="/forgot-password"
@@ -148,12 +153,14 @@ function BuyForm({ offerId }: { offerId?: string }) {
     // Ukraine: card in € or $ only.
     const currencies = lang === 'uk' ? ALLOWED_CURRENCIES.filter((c) => c !== 'RUB') : ALLOWED_CURRENCIES;
     const paymentFailed = searchParams.get('failed') === '1';
+    const isExtend = searchParams.get('extend') === '1';
+    const initialEmail = (searchParams.get('email') || '').trim();
     const queryCurrency = (searchParams.get('currency') || '').toUpperCase();
     const initialCurrency: Currency = (currencies as readonly string[]).includes(queryCurrency)
         ? (queryCurrency as Currency)
         : 'EUR';
 
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(initialEmail);
     const [currency, setCurrency] = useState<Currency>(initialCurrency);
     const [method, setMethod] = useState<Method>('sbp');
     const [submitting, setSubmitting] = useState(false);
@@ -177,6 +184,13 @@ function BuyForm({ offerId }: { offerId?: string }) {
     const offerInfo = offer && offer !== 'missing' ? offer : null;
     const price = offerInfo?.prices[currency];
 
+    useEffect(() => {
+        if (!offerInfo || offerInfo.prices[currency] != null) return;
+        const available = (lang === 'uk' ? ALLOWED_CURRENCIES.filter((c) => c !== 'RUB') : ALLOWED_CURRENCIES)
+            .find((c) => offerInfo.prices[c] != null);
+        if (available) setCurrency(available);
+    }, [offerInfo, currency, lang]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!offerIsValid) return;
@@ -187,7 +201,14 @@ function BuyForm({ offerId }: { offerId?: string }) {
             const resp = await fetch('/api/lava/invoice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim(), offerId, currency, method, ...(lang === 'uk' ? { lang } : {}) })
+                body: JSON.stringify({
+                    email: email.trim(),
+                    offerId,
+                    currency,
+                    method,
+                    ...(lang === 'uk' ? { lang } : {}),
+                    ...(isExtend ? { extend: true } : {}),
+                })
             });
             const data = await resp.json().catch(() => ({}));
 
@@ -224,7 +245,11 @@ function BuyForm({ offerId }: { offerId?: string }) {
                             )}
                         </div>
                     )}
-                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">{(lang === 'ru' && offerId && OFFER_TEXT[offerId.toLowerCase()]?.intro) || t.intro}</p>
+                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">
+                        {isExtend
+                            ? t.extendIntro
+                            : (lang === 'ru' && offerId && OFFER_TEXT[offerId.toLowerCase()]?.intro) || t.intro}
+                    </p>
 
                     {paymentFailed && !error && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">

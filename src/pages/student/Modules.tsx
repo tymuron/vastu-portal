@@ -3,6 +3,7 @@ import { Loader2, BookOpen, Lock, ChevronRight, Clock } from 'lucide-react';
 import { useWeeks } from '../../hooks/useCourse';
 import { useCourseContext } from '../../contexts/CourseContext';
 import { fileLinksInText } from '../../lib/supabase';
+import ExtensionOffers from '../../components/ExtensionOffers';
 
 const stripHtml = (html: string) => {
     const tmp = document.createElement('DIV');
@@ -35,6 +36,7 @@ export default function Modules() {
     if (weeks.length === 0) {
         return (
             <div className="max-w-2xl">
+                <ExtensionOffers className="mb-6" />
                 <h1 className="font-serif text-3xl text-vastu-dark mb-3">Модули</h1>
                 <p className="text-vastu-text-light">В этом курсе пока нет модулей.</p>
             </div>
@@ -43,6 +45,7 @@ export default function Modules() {
 
     return (
         <div className="max-w-5xl">
+            <ExtensionOffers className="mb-6" />
             <div className="mb-8">
                 <h1 className="font-serif text-3xl md:text-4xl text-vastu-dark mb-2">Модули курса</h1>
                 <p className="text-vastu-text-light">Выберите любой модуль, чтобы перейти к его урокам.</p>

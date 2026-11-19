@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, BookOpen, ChevronRight } from 'lucide-react';
 import { useCourseContext } from '../../contexts/CourseContext';
 import { fileLinksInText } from '../../lib/supabase';
+import ExtensionOffers from '../../components/ExtensionOffers';
 
 export default function CoursePicker() {
     const navigate = useNavigate();
@@ -37,6 +38,7 @@ export default function CoursePicker() {
 
     return (
         <div className="animate-fade-in max-w-5xl">
+            <ExtensionOffers className="mb-8" />
             <div className="mb-8">
                 <h1 className="text-3xl md:text-4xl font-serif text-vastu-dark mb-3">Выберите курс</h1>
                 <p className="text-vastu-text-light">
