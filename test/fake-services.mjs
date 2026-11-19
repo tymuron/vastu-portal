@@ -22,12 +22,14 @@ const UNIQUE = {
     lava_invoices: [['contract_id']],
     lesson_announcements: [['day_id']],
     lesson_notifications: [['day_id', 'user_id']],
+    support_chat_access: [['contract_id'], ['join_token']],
 };
 
 export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId = 'mono-store', monoSignKey = 'mono-sign-key' } = {}) {
     const db = {
         courses: [], course_offers: [], user_entitlements: [], profiles: [], purchases: [], lava_invoices: [],
         weeks: [], days: [], materials: [], lesson_announcements: [], lesson_notifications: [],
+        support_chat_access: [],
     };
     const users = new Map(); // id -> user
     const tokens = new Map(); // hashed_token -> { userId, type }
@@ -35,6 +37,12 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
     const invoices = []; // lava contracts of our API key, newest first
     const products = []; // lava catalog: { id, title, offers: [{ id, prices: [{currency, amount}] }] }
     const sent = [];
+    // Fake Telegram Bot API state (recorded, never sent externally).
+    const telegramCalls = [];
+    const telegramMembers = new Map(); // `${chatId}:${userId}` -> status
+    const telegramRevokedLinks = new Set();
+    let telegramInviteSeq = 0;
+    let telegramWebhook = null;
     // webhook: where the fake "lava checkout" delivers payment.success, as lava would.
     const control = { resendFailures: 0, lavaPageSize: Infinity, webhook: null };
 
@@ -87,6 +95,10 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
                 const re = new RegExp(`^${f.val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`);
                 return v != null && re.test(String(v));
             }
+            case 'not': {
+                const dot = f.val.indexOf('.');
+                return !matches(row, { col: f.col, op: f.val.slice(0, dot), val: f.val.slice(dot + 1) });
+            }
             default: throw new Error(`fake postgrest: unsupported op ${f.op}`);
         }
     }
@@ -119,7 +131,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
             for (const k of ['user_id', 'course_slugs', 'error', 'email_sent_at', 'email_id', 'email_error', 'matched_lava_id', 'amount', 'currency']) r[k] ??= null;
         }
         if (table === 'user_entitlements') { r.granted_at ??= nowIso(); r.expires_at ??= null; r.reminder_sent_at ??= null; }
-        if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; }
+        if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; r.access_from ??= 'course_start'; r.support_chat_months ??= null; }
         if (table === 'days') r.created_at ??= nowIso();
         if (table === 'lesson_announcements') {
             r.status ??= 'settling'; r.ready_at ??= nowIso(); r.tg_attempts ??= 0;
@@ -129,6 +141,10 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
         if (table === 'lesson_notifications') {
             r.status ??= 'pending'; r.attempts ??= 0; r.created_at ??= nowIso(); r.updated_at ??= nowIso();
             for (const k of ['email_id', 'error', 'sent_at']) r[k] ??= null;
+        }
+        if (table === 'support_chat_access') {
+            r.created_at ??= nowIso();
+            for (const k of ['user_id', 'telegram_user_id', 'invite_link', 'invited_at', 'joined_at', 'reminder_sent_at', 'removed_at', 'removed_note']) r[k] ??= null;
         }
         return r;
     }
@@ -165,13 +181,15 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
                 inserted.push(row);
                 if (table === 'profiles') continue;
             }
-            return prefer.includes('return=representation') ? send(res, 201, inserted) : send(res, 201, null);
+            if (!prefer.includes('return=representation')) return send(res, 201, null);
+            return send(res, 201, wantObject ? inserted[0] : inserted);
         }
         if (req.method === 'PATCH') {
             const filters = parseFilters(params);
             const rows = db[table].filter((r) => filters.every((f) => matches(r, f)));
             for (const r of rows) Object.assign(r, body);
-            return prefer.includes('return=representation') ? send(res, 200, rows) : send(res, 204, null);
+            if (!prefer.includes('return=representation')) return send(res, 204, null);
+            return send(res, 200, wantObject ? rows[0] : rows);
         }
         if (req.method === 'DELETE') {
             const filters = parseFilters(params);
@@ -352,6 +370,61 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
         return r.status;
     }
 
+    // -------------------------------------------------------------- telegram
+    function telegramApi(req, res, token, method, body) {
+        const payload = body || {};
+        telegramCalls.push({ token, method, payload });
+        if (method === 'sendMessage') {
+            return send(res, 200, {
+                ok: true,
+                result: { message_id: telegramCalls.length, chat: { id: payload.chat_id }, text: payload.text },
+            });
+        }
+        if (method === 'createChatInviteLink') {
+            const invite_link = `https://t.me/+fake_invite_${++telegramInviteSeq}`;
+            return send(res, 200, {
+                ok: true,
+                result: {
+                    invite_link,
+                    name: payload.name || '',
+                    member_limit: payload.member_limit,
+                    expire_date: payload.expire_date,
+                    is_revoked: false,
+                },
+            });
+        }
+        if (method === 'revokeChatInviteLink') {
+            telegramRevokedLinks.add(payload.invite_link);
+            return send(res, 200, { ok: true, result: { invite_link: payload.invite_link, is_revoked: true } });
+        }
+        if (method === 'getChatMember') {
+            const status = telegramMembers.get(`${payload.chat_id}:${payload.user_id}`) || 'member';
+            return send(res, 200, { ok: true, result: { status, user: { id: payload.user_id } } });
+        }
+        if (method === 'banChatMember') {
+            telegramMembers.set(`${payload.chat_id}:${payload.user_id}`, 'kicked');
+            return send(res, 200, { ok: true, result: true });
+        }
+        if (method === 'unbanChatMember') {
+            const key = `${payload.chat_id}:${payload.user_id}`;
+            if (!payload.only_if_banned || telegramMembers.get(key) === 'kicked') {
+                telegramMembers.set(key, 'left');
+            }
+            return send(res, 200, { ok: true, result: true });
+        }
+        if (method === 'setWebhook') {
+            telegramWebhook = payload;
+            return send(res, 200, { ok: true, result: true });
+        }
+        if (method === 'getWebhookInfo') {
+            return send(res, 200, { ok: true, result: telegramWebhook || { url: '' } });
+        }
+        if (method === 'getMe') {
+            return send(res, 200, { ok: true, result: { id: 999999, is_bot: true, username: 'fake_support_bot' } });
+        }
+        return send(res, 404, { ok: false, description: `fake telegram: unknown method ${method}` });
+    }
+
     // ---------------------------------------------------------------- resend
     function resend(req, res, body) {
         if (control.resendFailures > 0) {
@@ -366,6 +439,11 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
     // --------------------------------------------------------------- control
     const api = {
         db, users, sent, invoices, products, control, monoOrders,
+        telegramCalls, telegramMembers, telegramRevokedLinks,
+        getTelegramWebhook: () => telegramWebhook,
+        setChatMemberStatus(chatId, userId, status) {
+            telegramMembers.set(`${chatId}:${userId}`, status);
+        },
         createUser,
         seed(table, rows) { for (const r of rows) db[table].push(withDefaults(table, r)); },
         // A contract created through /buy: lava's invoice + our lava_invoices row.
@@ -420,6 +498,8 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
                 const pay = p.match(/^\/__pay\/([^/]+)$/);
                 if (pay) return fakeCheckout(req, res, pay[1]);
                 if (p === '/emails' && req.method === 'POST') return resend(req, res, body);
+                const tg = p.match(/^\/bot([^/]+)\/([A-Za-z0-9_]+)$/);
+                if (tg && req.method === 'POST') return telegramApi(req, res, tg[1], tg[2], body);
                 if (p === '/__state') return send(res, 200, { db, sent, users: [...users.values()].map(pub) });
                 return send(res, 404, { message: `fake: no route ${req.method} ${p}` });
             } catch (err) {
