@@ -54,3 +54,32 @@ services:
         sync: false
       - key: LESSON_NOTIFY_TELEGRAM
         sync: false
+      # «Васту для бизнеса» evergreen tariffs + support chat bot (supportChat.js)
+      - key: BIZ_SELF_LAVA_OFFER
+        sync: false
+      - key: BIZ_SUPPORT_LAVA_OFFER
+        sync: false
+      - key: SUPPORT_CHAT
+        sync: false
+      - key: SUPPORT_CHAT_BOT_TOKEN
+        sync: false
+      - key: SUPPORT_CHAT_BOT_USERNAME
+        sync: false
+      - key: SUPPORT_CHAT_ID
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+
+  # Hourly cron for the «Васту для бизнеса» support chat bot (T-7d reminder +
+  # expiry removal). Harmless while SUPPORT_CHAT=off.
+  - type: cron
+    name: vastu-support-chat-cron
+    env: node
+    schedule: "0 * * * *"
+    buildCommand: "true"
+    startCommand: 'curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" "${APP_URL%/}/api/cron/support-chat"'
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false

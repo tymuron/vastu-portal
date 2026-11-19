@@ -12,14 +12,17 @@ import {
     TG_STANDARD_CHANNEL_URL,
     TG_VIP_CHANNEL_URL,
     TG_VIP_CHAT_URL,
+    availableGrantTiers,
     createFulfilment,
     getcourseTier,
     makeResendSender,
     normEmail,
+    tierLavaId,
 } from './fulfilment.js';
 import { createMono } from './mono.js';
 import { clientIp, createRateLimiter } from './ratelimit.js';
 import { createLessonNotifier, makeTelegramClient, readLessonNotifyConfig } from './lessonNotify.js';
+import { createSupportChat, makeSupportTelegramClient, readSupportChatConfig } from './supportChat.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -205,6 +208,9 @@ function pickPaymentId(payload) {
     );
 }
 
+// Support chat bot config (supportChat.js). Off unless SUPPORT_CHAT=dry-run|live.
+const supportChatConfig = readSupportChatConfig(process.env);
+
 // One fulfilment service for the webhook, the sales poll and /grant — see
 // fulfilment.js for why buyers never depend on Supabase's mailer.
 const fulfilment = createFulfilment({
@@ -219,6 +225,16 @@ const fulfilment = createFulfilment({
     reconcileSince: RECONCILE_SINCE,
     supabaseUrl: SUPABASE_URL,
     serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+    supportChatBotUsername: supportChatConfig.botUsername,
+});
+
+const supportChat = createSupportChat({
+    getSupabase: getSupabaseAdmin,
+    telegram: makeSupportTelegramClient({ token: supportChatConfig.botToken, base: process.env.TELEGRAM_API_BASE }),
+    config: supportChatConfig,
+    appUrl: APP_URL,
+    webhookBaseUrl: process.env.RENDER_EXTERNAL_URL || APP_URL,
+    alert: fulfilment.alert,
 });
 
 const mono = createMono({
@@ -343,13 +359,21 @@ async function handleLavaWebhook(req, res) {
             invoiceOfferId = invoiceRow?.offer_id || null;
         }
 
+        const paidAt =
+            payload?.timestamp ||
+            payload?.datetime ||
+            payload?.paidAt ||
+            payload?.createdAt ||
+            new Date().toISOString();
+
         const result = await fulfilment.fulfil({
             contractId: paymentId || `webhook-${offerId}-${normEmail(email)}-${payload?.timestamp || Date.now()}`,
             email,
             lavaIds: [invoiceOfferId, offerId],
             source: 'webhook',
             amount: payload?.amount ?? null,
-            currency: payload?.currency ?? null
+            currency: payload?.currency ?? null,
+            paidAt,
         });
 
         if (result.status === 'unmapped') {
@@ -565,6 +589,7 @@ async function handleGetcourseOrder(req, res) {
     }
     const tierKey = getcourseTier({ tier: params.tier, positions });
     const tier = GRANT_TIERS.find((t) => t.key === tierKey);
+    const tierOfferId = tierLavaId(tier);
 
     const paid = moneyOf(params.paid);
     if (paid === 0) {
@@ -588,18 +613,20 @@ async function handleGetcourseOrder(req, res) {
     }
 
     const contractId = `gk-${order}`;
-    // The tier's lava id maps to courses; the GetCourse names ride along so an
-    // unmapped order says what it was.
-    const lavaIds = [tier?.lavaId, `getcourse:${positions || params.offers || '—'}`].filter(Boolean);
+    // The tier's lava id maps to courses; if unset (e.g. biz tier before offer
+    // id is configured), leave it out so fulfilment takes the unmapped -> alert
+    // Tymur path. The GetCourse names ride along so an unmapped order says what it was.
+    const lavaIds = [tierOfferId, `getcourse:${positions || params.offers || tierKey || '—'}`].filter(Boolean);
     const amount = moneyOf(params.cost) ?? paid;
 
     if (params.dry === '1') {
-        sendJson(res, 200, { dryRun: true, contractId, email, tier: tierKey, amount, paid, seen });
+        sendJson(res, 200, { dryRun: true, contractId, email, tier: tierKey, configured: !!tierOfferId, amount, paid, seen });
         return;
     }
 
     try {
-        const result = await fulfilment.fulfil({ contractId, email, lavaIds, source: 'webhook', amount, currency: 'RUB' });
+        const paidAt = params.paid_at || params.payed_at || new Date().toISOString();
+        const result = await fulfilment.fulfil({ contractId, email, lavaIds, source: 'webhook', amount, currency: 'RUB', paidAt });
         if (result.status !== 'granted') {
             // unmapped / bad email: recorded and alerted; a retry can't help.
             sendJson(res, 200, { granted: false, reason: result.error || result.status });
@@ -1043,7 +1070,7 @@ async function handleAdminRetry(req, res) {
     const contractId = String(payload?.contractId || '');
     const { data: p, error } = await getSupabaseAdmin()
         .from('purchases')
-        .select('contract_id, email, lava_ids, source')
+        .select('contract_id, email, lava_ids, source, created_at')
         .eq('contract_id', contractId)
         .maybeSingle();
     if (error || !p) {
@@ -1056,6 +1083,7 @@ async function handleAdminRetry(req, res) {
             email: p.email,
             lavaIds: p.lava_ids || [],
             source: p.source,
+            paidAt: p.created_at || new Date().toISOString(),
             resend: true
         });
         sendJson(res, 200, result);
@@ -1365,7 +1393,7 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET' && (urlPath === '/api/admin/tiers' || urlPath === '/api/teacher/tiers')) {
         checkCronOrTeacher(req, res).then((ok) => {
             if (!ok) return;
-            sendJson(res, 200, { tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })) });
+            sendJson(res, 200, { tiers: availableGrantTiers().map(({ key, label }) => ({ key, label })) });
         });
         return;
     }
@@ -1375,6 +1403,7 @@ const server = http.createServer((req, res) => {
         sendJson(res, 200, {
             ...fulfilment.status(),
             lessonNotify: lessonNotifier.status(),
+            supportChat: supportChat.summaryStatus(),
             getcourse: { enabled: !!GETCOURSE_WEBHOOK_KEY },
             monobank: {
                 enabled: mono.configured,
@@ -1474,6 +1503,59 @@ const server = http.createServer((req, res) => {
     if (req.method === 'GET' && urlPath === '/api/admin/lesson-notify/telegram-chats') {
         if (!checkCronSecret(req, res)) return;
         lessonNotifier.telegramChats().then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 400, { error: err?.message || 'Failed' })
+        );
+        return;
+    }
+
+    // Support chat Telegram bot webhook (secret header required; always 200 once verified).
+    if (req.method === 'POST' && urlPath === '/api/telegram/support-bot') {
+        if (!secretMatches(req.headers['x-telegram-bot-api-secret-token'], supportChatConfig.webhookSecret)) {
+            sendJson(res, 401, { error: 'Unauthorized' });
+            return;
+        }
+        readJsonBody(req).then(
+            (update) => supportChat.handleUpdate(update).then(
+                () => sendJson(res, 200, { ok: true }),
+                () => sendJson(res, 200, { ok: true })
+            ),
+            (err) => {
+                if (err?.code === 'PAYLOAD_TOO_LARGE') sendJson(res, 413, { error: 'Payload too large' });
+                else sendJson(res, 400, { error: 'Bad body' });
+            }
+        );
+        return;
+    }
+
+    // Support chat hourly cron: 7-day reminder DM + expiry ban/unban.
+    if (req.method === 'POST' && urlPath === '/api/cron/support-chat') {
+        if (!checkCronSecret(req, res)) return;
+        const dryRun = /(?:^|[?&])dryRun=1(?:&|$)/.test(req.url.split('?')[1] || '');
+        supportChat.run({ dryRun }).then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    // Support chat admin status: counts and next 20 expiries (never exposes tokens).
+    if (req.method === 'GET' && urlPath === '/api/admin/support-chat') {
+        if (!checkCronSecret(req, res)) return;
+        supportChat.adminStatus().then(
+            (r) => sendJson(res, 200, r),
+            (err) => sendJson(res, 500, { error: err?.message || 'Internal error' })
+        );
+        return;
+    }
+
+    // One-time admin helper to register the Telegram webhook with allowed_updates.
+    if (req.method === 'POST' && urlPath === '/api/admin/support-chat/set-webhook') {
+        if (!checkCronSecret(req, res)) return;
+        readJsonBody(req).then(
+            (body) => supportChat.setWebhook({ url: body?.url }),
+            () => { throw new Error('Bad body'); }
+        ).then(
             (r) => sendJson(res, 200, r),
             (err) => sendJson(res, 400, { error: err?.message || 'Failed' })
         );
@@ -1748,6 +1830,15 @@ if (lessonNotifyConfig.mode !== 'off' && SUPABASE_SERVICE_ROLE_KEY) {
     console.log(`lesson notifications: ${lessonNotifyConfig.mode}, every ${lessonNotifyConfig.intervalMs / 60000} min`);
 } else {
     console.log('lesson notifications are OFF (LESSON_NOTIFY)');
+}
+
+if (supportChatConfig.mode !== 'off') {
+    if (supportChatConfig.problems.length) {
+        console.warn('support chat:', supportChatConfig.problems.join('; '));
+    }
+    console.log(`support chat bot: ${supportChatConfig.mode}`);
+} else {
+    console.log('support chat bot is OFF (SUPPORT_CHAT)');
 }
 
 // Who watches the watchdog: it checks this server from outside, and this server checks
