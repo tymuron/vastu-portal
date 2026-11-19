@@ -5,11 +5,13 @@
 //   - POST /api/telegram/support-bot  — Telegram webhook (secret header checked)
 //   - POST /api/cron/support-chat     — hourly cron: T-7d reminder + expiry removal
 //   - GET  /api/admin/support-chat    — counts and next 20 expiries (no tokens)
-//   - POST /api/admin/support-chat/set-webhook — one-time admin webhook setup
+//   - POST /api/admin/support-chat/set-webhook — re-registers the webhook on demand
+//     (server.js also registers it on every boot)
 //
 // SUPPORT_CHAT = off (default) | dry-run | live.
 // ---------------------------------------------------------------------------
 
+import crypto from 'node:crypto';
 import { formatDateRu } from './fulfilment.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -55,16 +57,24 @@ export function readSupportChatConfig(env = process.env) {
         problems.push(`SUPPORT_CHAT=«${env.SUPPORT_CHAT}» не понят (нужно off, dry-run или live) — бот выключен`);
     }
 
-    const botToken = String(env.SUPPORT_CHAT_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN || '').trim() || null;
+    // The support bot has a token of its own and never borrows TELEGRAM_BOT_TOKEN: that is the lessons
+    // bot, which reads its updates with getUpdates, and the webhook registered on boot would stop that.
+    const botToken = String(env.SUPPORT_CHAT_BOT_TOKEN || '').trim() || null;
     const botUsername = String(env.SUPPORT_CHAT_BOT_USERNAME || '').trim().replace(/^@+/, '') || null;
     const chatId = String(env.SUPPORT_CHAT_ID || '').trim() || null;
-    const webhookSecret = String(env.TELEGRAM_WEBHOOK_SECRET || '').trim() || null;
+    // Telegram echoes this in X-Telegram-Bot-Api-Secret-Token. Unless one is set explicitly it is derived
+    // from the bot token (whoever holds the token controls the bot anyway), so the token is the only
+    // secret anyone has to paste.
+    const explicitSecret = String(env.TELEGRAM_WEBHOOK_SECRET || '').trim() || null;
+    const webhookSecret = explicitSecret || (botToken ? deriveWebhookSecret(botToken) : null);
 
     if (mode !== 'off') {
-        if (!botToken) problems.push('Не задан SUPPORT_CHAT_BOT_TOKEN (и TELEGRAM_BOT_TOKEN)');
+        if (!botToken) problems.push('Не задан SUPPORT_CHAT_BOT_TOKEN — у бота чата поддержки свой токен (токен бота уроков не подходит)');
         if (!botUsername) problems.push('Не задан SUPPORT_CHAT_BOT_USERNAME — в письмах не будет кнопки чата поддержки');
         if (!chatId) problems.push('Не задан SUPPORT_CHAT_ID — бот не знает id закрытого чата');
-        if (!webhookSecret) problems.push('Не задан TELEGRAM_WEBHOOK_SECRET — вебхук Telegram будет отклонять все запросы');
+        if (explicitSecret && !/^[A-Za-z0-9_-]{1,256}$/.test(explicitSecret)) {
+            problems.push('TELEGRAM_WEBHOOK_SECRET: Telegram принимает только латиницу, цифры, _ и - (до 256 символов), вебхук не зарегистрируется');
+        }
     }
 
     return {
@@ -75,6 +85,11 @@ export function readSupportChatConfig(env = process.env) {
         webhookSecret,
         problems,
     };
+}
+
+// Webhook secret derived from the bot token: 64 hex characters, which Telegram accepts as secret_token.
+export function deriveWebhookSecret(botToken) {
+    return crypto.createHmac('sha256', String(botToken)).update('vastu-support-chat-webhook').digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -412,11 +427,11 @@ export function createSupportChat({
         }
     }
 
-    // Explicit admin-only helper: registers the Telegram webhook with
-    // allowed_updates = ['message', 'chat_member']. Never called automatically.
+    // Registers the Telegram webhook with allowed_updates = ['message', 'chat_member'].
+    // server.js calls it on every boot; the admin endpoint can call it again.
     async function setWebhook({ url } = {}) {
-        if (!telegram) throw new Error('SUPPORT_CHAT_BOT_TOKEN / TELEGRAM_BOT_TOKEN not configured');
-        if (!config.webhookSecret) throw new Error('TELEGRAM_WEBHOOK_SECRET not configured');
+        if (!telegram) throw new Error('SUPPORT_CHAT_BOT_TOKEN not configured');
+        if (!config.webhookSecret) throw new Error('webhook secret not configured');
         const webhookUrl = String(url || `${baseUrl}/api/telegram/support-bot`).trim();
         const allowed_updates = ['message', 'chat_member'];
         const ok = await telegram.setWebhook({

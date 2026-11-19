@@ -29,10 +29,10 @@ A modern educational platform for Vastu courses.
 | `BIZ_SELF_LAVA_OFFER` | UUID оффера Lava для тарифа «Самостоятельно» (35 000 ₽) |
 | `BIZ_SUPPORT_LAVA_OFFER` | UUID оффера Lava для тарифа «С поддержкой» (50 000 ₽) |
 | `SUPPORT_CHAT` | Режим бота: `off` (по умолчанию) \| `dry-run` \| `live` |
-| `SUPPORT_CHAT_BOT_TOKEN` | Токен бота Telegram (если не задан, берётся `TELEGRAM_BOT_TOKEN`) |
+| `SUPPORT_CHAT_BOT_TOKEN` | Токен отдельного бота чата поддержки (обязателен). Токен бота уроков `TELEGRAM_BOT_TOKEN` здесь не используется: вебхук, который сервер регистрирует при запуске, остановил бы его `getUpdates` |
 | `SUPPORT_CHAT_BOT_USERNAME` | Username бота без `@` (для кнопки `https://t.me/<username>?start=<token>` в письме) |
 | `SUPPORT_CHAT_ID` | ID закрытого Telegram-чата поддержки (например, `-1001234567890`) |
-| `TELEGRAM_WEBHOOK_SECRET` | Секретная строка для заголовка `X-Telegram-Bot-Api-Secret-Token` на `POST /api/telegram/support-bot` |
+| `TELEGRAM_WEBHOOK_SECRET` | Необязательно. Секрет для заголовка `X-Telegram-Bot-Api-Secret-Token` на `POST /api/telegram/support-bot` (латиница, цифры, `_`, `-`). Если не задан, выводится из `SUPPORT_CHAT_BOT_TOKEN` |
 
 Для рассрочки через GetCourse процесс должен передавать тариф явно: `tier=biz-self` или `tier=biz-support` (из названия позиций бизнес-тарифы не угадываются).
 
@@ -40,8 +40,8 @@ A modern educational platform for Vastu courses.
 
 1. **Применить миграцию** [`supabase/migrations/20261119_biz_evergreen.sql`](supabase/migrations/20261119_biz_evergreen.sql) в Supabase SQL Editor (добавляет `course_offers.access_from`, `course_offers.support_chat_months` и таблицу `support_chat_access` с включённым RLS без политик).
 2. **Заполнить и выполнить шаблон офферов** [`supabase/biz-evergreen-offers.template.sql`](supabase/biz-evergreen-offers.template.sql), подставив реальные UUID `<BIZ_SELF_LAVA_OFFER>` и `<BIZ_SUPPORT_LAVA_OFFER>` (и при необходимости product UUID из Lava).
-3. **Добавить переменные окружения** на Render (`BIZ_SELF_LAVA_OFFER`, `BIZ_SUPPORT_LAVA_OFFER`, `SUPPORT_CHAT_BOT_TOKEN` или `TELEGRAM_BOT_TOKEN`, `SUPPORT_CHAT_BOT_USERNAME`, `SUPPORT_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`), временно выставив `SUPPORT_CHAT=dry-run`. Убедиться, что бот добавлен администратором в закрытый чат с правами создавать пригласительные ссылки и удалять участников.
-4. **Зарегистрировать вебхук Telegram** вручную через админ-эндпоинт (автоматически на старте он не вызывается):
+3. **Добавить переменные окружения** на Render (`BIZ_SELF_LAVA_OFFER`, `BIZ_SUPPORT_LAVA_OFFER`, `SUPPORT_CHAT_BOT_TOKEN`, `SUPPORT_CHAT_BOT_USERNAME`, `SUPPORT_CHAT_ID`), временно выставив `SUPPORT_CHAT=dry-run`. Убедиться, что бот добавлен администратором в закрытый чат с правами создавать пригласительные ссылки и удалять участников.
+4. **Вебхук Telegram** сервер регистрирует сам при каждом запуске (в логе `support chat webhook set: …`; если Telegram его не принял, приходит письмо на `ALERT_EMAIL`). Перерегистрировать вручную можно через админ-эндпоинт:
    ```bash
    curl -X POST https://<host>/api/admin/support-chat/set-webhook \
      -H "x-cron-secret: $CRON_SECRET" \

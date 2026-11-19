@@ -33,6 +33,7 @@ import {
 import {
     SUPPORT_CHAT_MESSAGES,
     createSupportChat,
+    deriveWebhookSecret,
     makeSupportTelegramClient,
     readSupportChatConfig,
 } from '../supportChat.js';
@@ -648,18 +649,29 @@ test('cron dry-run and off: dry-run logs and sends/writes nothing; off does noth
     assert.ok(off.fake.db.support_chat_access.every((r) => r.reminder_sent_at === null && r.removed_at === null));
 });
 
-test('config token fallback, poll/manual timestamps, renewal protection in cron, and next-20 cap without tokens', async () => {
-    // SUPPORT_CHAT_BOT_TOKEN falls back to TELEGRAM_BOT_TOKEN
-    const cfgFallback = readSupportChatConfig({
+test('config: own bot token (no lessons-bot fallback), derived webhook secret, poll/manual timestamps, renewal protection in cron, and next-20 cap without tokens', async () => {
+    // No fallback to the lessons bot's TELEGRAM_BOT_TOKEN: a webhook on that bot would stop its getUpdates
+    const cfgNoFallback = readSupportChatConfig({
         SUPPORT_CHAT: 'live',
         TELEGRAM_BOT_TOKEN: 'shared-tg-token',
         SUPPORT_CHAT_BOT_USERNAME: '@anna_bot',
         SUPPORT_CHAT_ID: CHAT_ID,
-        TELEGRAM_WEBHOOK_SECRET: WEBHOOK_SECRET,
     });
-    assert.equal(cfgFallback.botToken, 'shared-tg-token');
-    assert.equal(cfgFallback.botUsername, 'anna_bot');
-    assert.deepEqual(cfgFallback.problems, []);
+    assert.equal(cfgNoFallback.botToken, null);
+    assert.equal(cfgNoFallback.webhookSecret, null);
+    assert.equal(cfgNoFallback.botUsername, 'anna_bot');
+    assert.ok(cfgNoFallback.problems.some((p) => p.includes('SUPPORT_CHAT_BOT_TOKEN')));
+
+    // Without TELEGRAM_WEBHOOK_SECRET the secret is derived from the bot token; an explicit one wins
+    const ownBot = { SUPPORT_CHAT: 'live', SUPPORT_CHAT_BOT_TOKEN: BOT_TOKEN, SUPPORT_CHAT_BOT_USERNAME: BOT_USERNAME, SUPPORT_CHAT_ID: CHAT_ID };
+    const cfgDerived = readSupportChatConfig(ownBot);
+    assert.match(cfgDerived.webhookSecret, /^[0-9a-f]{64}$/);
+    assert.equal(cfgDerived.webhookSecret, deriveWebhookSecret(BOT_TOKEN));
+    assert.notEqual(deriveWebhookSecret('654321:another-token'), cfgDerived.webhookSecret);
+    assert.deepEqual(cfgDerived.problems, []);
+    assert.equal(readSupportChatConfig({ ...ownBot, TELEGRAM_WEBHOOK_SECRET: WEBHOOK_SECRET }).webhookSecret, WEBHOOK_SECRET);
+    const cfgBadSecret = readSupportChatConfig({ ...ownBot, TELEGRAM_WEBHOOK_SECRET: 'not allowed!' });
+    assert.ok(cfgBadSecret.problems.some((p) => p.includes('TELEGRAM_WEBHOOK_SECRET')));
 
     // Poll uses invoice datetime; manual /grant uses now
     const w = makeSupportWorld({ mode: 'live', nowMs: Date.parse('2027-05-20T12:00:00Z') });
@@ -744,6 +756,15 @@ test('config token fallback, poll/manual timestamps, renewal protection in cron,
 // 3. Full HTTP e2e tests against the real server.js
 // ---------------------------------------------------------------------------
 
+async function waitForTelegramCalls(fake, method, count, ms = 5000) {
+    const end = Date.now() + ms;
+    for (;;) {
+        const calls = fake.telegramCalls.filter((c) => c.method === method);
+        if (calls.length >= count || Date.now() > end) return calls;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+}
+
 async function startServer({ fakeUrl, envExtra = {} }) {
     const port = 25000 + Math.floor(Math.random() * 20000);
     const app = `http://127.0.0.1:${port}`;
@@ -822,8 +843,13 @@ test('e2e (configured): GetCourse biz-support, Lava self vs support, webhook 401
     });
 
     try {
-        // setWebhook MUST NOT be called automatically on boot
-        assert.equal(fake.telegramCalls.filter((c) => c.method === 'setWebhook').length, 0);
+        // The webhook is registered on boot (the support bot has its own token), with the configured secret
+        const bootCalls = await waitForTelegramCalls(fake, 'setWebhook', 1);
+        assert.equal(bootCalls.length, 1);
+        assert.equal(bootCalls[0].token, BOT_TOKEN);
+        assert.equal(bootCalls[0].payload.url, `${app}/api/telegram/support-bot`);
+        assert.equal(bootCalls[0].payload.secret_token, WEBHOOK_SECRET);
+        assert.deepEqual(bootCalls[0].payload.allowed_updates, ['message', 'chat_member']);
 
         // /api/admin/tiers includes biz-self and biz-support when env is set
         const tiersResp = await fetch(`${app}/api/admin/tiers`, { headers: { 'x-cron-secret': CRON_SECRET } });
@@ -832,7 +858,7 @@ test('e2e (configured): GetCourse biz-support, Lava self vs support, webhook 401
         assert.ok(tierKeys.includes('biz-self'));
         assert.ok(tierKeys.includes('biz-support'));
 
-        // Admin registers webhook explicitly -> allowed_updates = ['message', 'chat_member']
+        // The admin endpoint can register it again -> allowed_updates = ['message', 'chat_member']
         const setWh = await fetch(`${app}/api/admin/support-chat/set-webhook`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
@@ -978,6 +1004,60 @@ test('e2e (configured): GetCourse biz-support, Lava self vs support, webhook 401
         assert.equal(adminJson.counts.pendingJoin, 1);
         assert.equal(adminJson.nextExpiries.length, 2);
         assert.equal(adminJson.nextExpiries[0].join_token, undefined);
+    } finally {
+        proc.kill();
+        await fake.close();
+    }
+});
+
+test('e2e (token only): webhook registered on boot with a secret derived from the token; that secret works, others are refused; the lessons bot token is never used', async () => {
+    const fake = createFakeServices({ lavaApiKey: 'lava-key' });
+    const fakePort = await fake.listen();
+    const fakeUrl = `http://127.0.0.1:${fakePort}`;
+    seedCourses(fake);
+
+    const { app, proc } = await startServer({
+        fakeUrl,
+        envExtra: {
+            BIZ_SELF_LAVA_OFFER: BIZ_SELF_OFFER,
+            BIZ_SUPPORT_LAVA_OFFER: BIZ_SUPPORT_OFFER,
+            SUPPORT_CHAT: 'live',
+            SUPPORT_CHAT_BOT_TOKEN: BOT_TOKEN,
+            SUPPORT_CHAT_BOT_USERNAME: BOT_USERNAME,
+            SUPPORT_CHAT_ID: CHAT_ID,
+            TELEGRAM_WEBHOOK_SECRET: '',
+            TELEGRAM_BOT_TOKEN: 'lessons-bot-token',
+        },
+    });
+
+    try {
+        const bootCalls = await waitForTelegramCalls(fake, 'setWebhook', 1);
+        assert.equal(bootCalls.length, 1);
+        assert.equal(bootCalls[0].token, BOT_TOKEN);
+        const derived = deriveWebhookSecret(BOT_TOKEN);
+        assert.equal(bootCalls[0].payload.secret_token, derived);
+
+        const wrong = await fetch(`${app}/api/telegram/support-bot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': 'wrong-secret' },
+            body: JSON.stringify({ message: { chat: { id: 7001, type: 'private' }, from: { id: 7001 }, text: '/start' } }),
+        });
+        assert.equal(wrong.status, 401);
+        assert.equal(fake.telegramCalls.filter((c) => c.method === 'sendMessage').length, 0);
+
+        // /start without a join token, with the derived secret -> 200 and the polite "not found" reply
+        const good = await fetch(`${app}/api/telegram/support-bot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Telegram-Bot-Api-Secret-Token': derived },
+            body: JSON.stringify({ message: { chat: { id: 7001, type: 'private' }, from: { id: 7001 }, text: '/start' } }),
+        });
+        assert.equal(good.status, 200);
+        const replies = await waitForTelegramCalls(fake, 'sendMessage', 1);
+        assert.equal(replies.length, 1);
+        assert.equal(replies[0].payload.chat_id, 7001);
+        assert.equal(replies[0].payload.text, SUPPORT_CHAT_MESSAGES.notFound);
+
+        assert.ok(fake.telegramCalls.every((c) => c.token === BOT_TOKEN), 'every Telegram call uses the support bot token');
     } finally {
         proc.kill();
         await fake.close();

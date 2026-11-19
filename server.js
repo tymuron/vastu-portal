@@ -1836,6 +1836,23 @@ if (supportChatConfig.mode !== 'off') {
     if (supportChatConfig.problems.length) {
         console.warn('support chat:', supportChatConfig.problems.join('; '));
     }
+    // The support bot has its own token (never the lessons bot's), so its webhook is registered on every
+    // boot: the URL and secret follow the env by themselves and nobody has to call the admin endpoint.
+    if (supportChatConfig.botToken) {
+        setTimeout(() => {
+            supportChat.setWebhook().then(
+                (r) => console.log(`support chat webhook set: ${r.url}`),
+                (err) => {
+                    console.error('support chat webhook NOT set:', err?.message || err);
+                    void fulfilment.alert(
+                        'бот чата поддержки не подключился',
+                        `Telegram не принял вебхук бота чата поддержки «Васту для бизнеса»: ${err?.message || err}. ` +
+                        'Пока это так, бот не отвечает покупателям тарифа «С поддержкой».'
+                    );
+                }
+            );
+        }, 1000);
+    }
     // Hourly reminder + expiry removal, on the same in-process timer as the other jobs (no separate paid
     // Render cron service). POST /api/cron/support-chat still runs it on demand.
     if (SUPABASE_SERVICE_ROLE_KEY) {
