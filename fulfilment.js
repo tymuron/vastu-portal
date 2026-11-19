@@ -241,6 +241,11 @@ export function addMonthsIso(base, months) {
     return d.toISOString();
 }
 
+const RU_MONTHS_GENITIVE = [
+    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
 export function formatDateRu(iso) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
@@ -250,23 +255,49 @@ export function formatDateRu(iso) {
     return `${dd}.${mm}.${yyyy}`;
 }
 
+export function formatDateRuLong(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getUTCDate()} ${RU_MONTHS_GENITIVE[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// Thin space (\u2009) as thousands separator: 3500 -> "3 500", 10000 -> "10 000".
+export function formatPriceRub(priceRub) {
+    const n = Number(priceRub);
+    if (!Number.isFinite(n)) return '';
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+}
+
 // expires_at for one course_offers row with its course attached as
 // row.courses. null = lifetime.
 //   - is_lifetime offer                    -> null
+//   - access_from === 'extend'             -> if currentExpiresAt === null (lifetime), null;
+//     otherwise add months to the later of (paidAt/now, currentExpiresAt if in the future)
 //   - access_from === 'purchase'           -> paidAt (or now) + months
 //   - access_from === 'course_start' (def) -> course.starts_at + months; but if that window has
 //     already closed at paidAt (or now), paidAt + months: a closed course is sold as a recording,
 //     and nobody is granted access that is over the moment it is given
 //   - months from offer.access_months, else course.access_duration_months
 //   - missing anchor date or months        -> null (lifetime)
-export function computeExpiresAt(offerRow, paidAt = null) {
+export function computeExpiresAt(offerRow, paidAt = null, currentExpiresAt = undefined) {
     if (!offerRow) return null;
     if (offerRow.is_lifetime) return null;
     const course = offerRow.courses || null;
     const months = offerRow.access_months ?? course?.access_duration_months;
     if (months == null) return null;
     const grantedAt = paidAt != null ? paidAt : new Date().toISOString();
-    if ((offerRow.access_from || 'course_start') === 'purchase') return addMonthsIso(grantedAt, months);
+    const mode = offerRow.access_from || 'course_start';
+    if (mode === 'extend') {
+        if (currentExpiresAt === null) return null;
+        const grantedMs = new Date(grantedAt).getTime();
+        const currentMs = currentExpiresAt !== undefined ? Date.parse(currentExpiresAt) : NaN;
+        const base =
+            !Number.isNaN(currentMs) && !Number.isNaN(grantedMs) && currentMs > grantedMs
+                ? currentExpiresAt
+                : grantedAt;
+        return addMonthsIso(base, months);
+    }
+    if (mode === 'purchase') return addMonthsIso(grantedAt, months);
     const fromStart = addMonthsIso(course?.starts_at || null, months);
     const grantedMs = new Date(grantedAt).getTime();
     if (fromStart && !Number.isNaN(grantedMs) && Date.parse(fromStart) <= grantedMs) {
@@ -315,13 +346,14 @@ export async function upsertEntitlement(supabase, userId, courseId, expiresAt, s
         return updErr || null;
     }
 
-    // Both non-null -> keep the latest expiry.
+    // Both non-null -> keep the latest expiry (and clear reminder_sent_at so
+    // the new access window gets its own expiry reminder later).
     const existingMs = new Date(existing.expires_at).getTime();
     const incomingMs = new Date(expiresAt).getTime();
     if (incomingMs > existingMs) {
         const { error: updErr } = await supabase
             .from('user_entitlements')
-            .update({ expires_at: expiresAt })
+            .update({ expires_at: expiresAt, reminder_sent_at: null })
             .eq('id', existing.id);
         return updErr || null;
     }
@@ -589,6 +621,87 @@ ${EMAIL_LIGHT_ONLY_HEAD}
     return { subject, html, text };
 }
 
+// Short confirmation email after a paid access extension (access_from = 'extend').
+// Uses the same durable access link as the welcome email, with no Telegram links
+// and no support-chat button.
+export function buildExtensionEmail({ courseTitle, expiresAt, accessUrl, spareUrl }) {
+    const cleanTitle = String(courseTitle || '').trim().replace(/^«|»$/g, '');
+    const dateStr = expiresAt ? formatDateRuLong(expiresAt) : '';
+    const headline = cleanTitle
+        ? dateStr
+            ? `Доступ к курсу «${cleanTitle}» продлён до ${dateStr}`
+            : `Доступ к курсу «${cleanTitle}» продлён`
+        : dateStr
+            ? `Доступ к курсу продлён до ${dateStr}`
+            : 'Доступ к курсу продлён';
+
+    const subject = headline;
+    const btn = (href, label) =>
+        `<a href="${esc(href)}" style="display:inline-block;background-color:#422326;color:#F2EDE2;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;padding:13px 24px;border:1px solid #422326;margin:6px 4px;">${esc(label)}</a>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+${EMAIL_LIGHT_ONLY_HEAD}
+<title>${esc(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F2EDE2;font-family:Georgia,'Times New Roman',serif;color:#422326;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F2EDE2;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#F2EDE2;">
+          <tr>
+            <td align="center" style="padding:24px 24px 8px 24px;">
+              <div style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:34px;color:#422326;letter-spacing:0.5px;">Anna Romeo</div>
+              <div style="margin-top:10px;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:#8a6a3b;font-variant:small-caps;">Васту &amp; дизайн портал</div>
+            </td>
+          </tr>
+          <tr><td style="padding:8px 24px;"><hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" /></td></tr>
+          <tr>
+            <td align="center" style="padding:8px 24px;">
+              <h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-weight:400;font-size:30px;color:#422326;margin:0 0 16px 0;">Здравствуйте 🤍</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px 0 24px;font-size:16px;line-height:1.75;color:#422326;">
+              <p style="margin:0 0 16px 0;">${esc(headline)}.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 24px 8px 24px;">
+              ${btn(accessUrl, 'Войти в личный кабинет')}
+            </td>
+          </tr>
+          ${spareUrl ? `<tr><td align="center" style="padding:0 24px 8px 24px;font-size:14px;color:#7a5a3a;">Страница не открывается? <a href="${esc(spareUrl)}" style="color:#8a6a3b;">Запасная ссылка</a></td></tr>` : ''}
+          <tr><td style="padding:24px 24px 8px 24px;"><hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" /></td></tr>
+          <tr>
+            <td align="center" style="padding:0 24px 32px 24px;font-size:14px;line-height:1.6;color:#7a5a3a;font-style:italic;">
+              <p style="margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-size:18px;">Anna Romeo</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    const text = [
+        'Здравствуйте!',
+        '',
+        `${headline}.`,
+        '',
+        `Войти в личный кабинет: ${accessUrl}`,
+        ...(spareUrl ? [`Страница не открывается? Запасная ссылка: ${spareUrl}`] : []),
+        '',
+        'Anna Romeo',
+    ].join('\n');
+
+    return { subject, html, text };
+}
+
 export function makeResendSender({ apiKey, from, base = 'https://api.resend.com' }) {
     return async function sendEmail({ to, subject, html, text, idempotencyKey }) {
         if (!apiKey) throw new Error('RESEND_API_KEY not configured');
@@ -788,6 +901,17 @@ export function createFulfilment({
         return sendEmail({ to: email, subject, html, text, idempotencyKey });
     }
 
+    async function sendExtensionEmail({ user, courseTitle, expiresAt, idempotencyKey }) {
+        const email = normEmail(user.email);
+        const { subject, html, text } = buildExtensionEmail({
+            courseTitle,
+            expiresAt,
+            accessUrl: accessUrlFor(email),
+            spareUrl: spareUrlFor(email),
+        });
+        return sendEmail({ to: email, subject, html, text, idempotencyKey });
+    }
+
     // The moment access counts from (access_from = 'purchase'). A time is used only if it is
     // plausible: a real date from 2024 on. That guards against a payload that sends seconds where
     // milliseconds are expected (read as January 1970, which would close access at once) or
@@ -870,10 +994,19 @@ export function createFulfilment({
                 const prevExpiryByCourse = new Map((prevEnts || []).map((e) => [e.course_id, e.expires_at]));
 
                 let extendedEntitlement = false;
+                const newExpiryByCourse = new Map();
                 for (const row of rows) {
-                    const expiresAt = computeExpiresAt(row, paidAtIso);
-                    if (prevExpiryByCourse.has(row.course_id)) {
-                        const prev = prevExpiryByCourse.get(row.course_id);
+                    const hasPrev = prevExpiryByCourse.has(row.course_id);
+                    const prev = hasPrev ? prevExpiryByCourse.get(row.course_id) : undefined;
+                    // On email retry or manual resend of an already-granted extension,
+                    // do not add months a second time — keep the stored expiry.
+                    if (existing?.status === 'granted' && row.access_from === 'extend') {
+                        newExpiryByCourse.set(row.course_id, prev ?? null);
+                        continue;
+                    }
+                    const expiresAt = computeExpiresAt(row, paidAtIso, prev);
+                    newExpiryByCourse.set(row.course_id, expiresAt);
+                    if (hasPrev) {
                         if (prev !== null && (expiresAt === null || new Date(expiresAt).getTime() > new Date(prev).getTime())) {
                             extendedEntitlement = true;
                         }
@@ -940,18 +1073,27 @@ export function createFulfilment({
                     ...(unlockedSomething ? {} : { email_skipped_reason: 'повторная оплата — доступ уже был' }),
                 });
 
+                const isPureExtension = rows.length > 0 && rows.every((r) => r.access_from === 'extend');
+
                 let emailResult = { sent: false, skipped: !wantEmail || !unlockedSomething };
                 if (wantEmail && unlockedSomething && (resend || !existing?.email_sent_at)) {
                     const emailAttempts = (existing?.email_attempts || 0) + 1;
                     try {
-                        const id = await sendWelcome(supabase, {
-                            contractId,
-                            user,
-                            courses,
-                            reason: 'purchase',
-                            idempotencyKey: `welcome/${contractId}/${emailAttempts}`,
-                            supportChat: supportChatLinkFor(supportChatRow, supportChatMonths || 6),
-                        });
+                        const id = isPureExtension
+                            ? await sendExtensionEmail({
+                                user,
+                                courseTitle: courses[0]?.title || '',
+                                expiresAt: newExpiryByCourse.get(rows[0].course_id) ?? null,
+                                idempotencyKey: `extension/${contractId}/${emailAttempts}`,
+                            })
+                            : await sendWelcome(supabase, {
+                                contractId,
+                                user,
+                                courses,
+                                reason: 'purchase',
+                                idempotencyKey: `welcome/${contractId}/${emailAttempts}`,
+                                supportChat: supportChatLinkFor(supportChatRow, supportChatMonths || 6),
+                            });
                         await updatePurchase(supabase, contractId, {
                             email_sent_at: new Date().toISOString(),
                             email_id: id,

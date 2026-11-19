@@ -111,9 +111,16 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
         }
         const limit = params.get('limit');
         if (limit) rows = rows.slice(0, Number(limit));
-        // The one embed the SPA uses: `courses(...)` next to a course_id.
-        const embedCourses = /(^|,)\s*courses(!inner)?\(/.test(params.get('select') || '');
-        return rows.map((r) => (embedCourses && r.course_id ? { ...r, courses: db.courses.find((c) => c.id === r.course_id) || null } : { ...r }));
+        // Embeds used by the SPA and server crons: `courses(...)` and `profiles(...)`.
+        const selectStr = params.get('select') || '';
+        const embedCourses = /(^|,)\s*courses(!inner)?\(/.test(selectStr);
+        const embedProfiles = /(^|,)\s*profiles(!inner)?\(/.test(selectStr);
+        return rows.map((r) => {
+            const out = { ...r };
+            if (embedCourses && r.course_id) out.courses = db.courses.find((c) => c.id === r.course_id) || null;
+            if (embedProfiles && r.user_id) out.profiles = db.profiles.find((p) => p.id === r.user_id) || null;
+            return out;
+        });
     }
     function violates(table, row, except) {
         for (const cols of UNIQUE[table] || []) {
@@ -131,7 +138,7 @@ export function createFakeServices({ lavaApiKey = 'lava-test-key', monoStoreId =
             for (const k of ['user_id', 'course_slugs', 'error', 'email_sent_at', 'email_id', 'email_error', 'matched_lava_id', 'amount', 'currency']) r[k] ??= null;
         }
         if (table === 'user_entitlements') { r.granted_at ??= nowIso(); r.expires_at ??= null; r.reminder_sent_at ??= null; }
-        if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; r.access_from ??= 'course_start'; r.support_chat_months ??= null; }
+        if (table === 'course_offers') { r.match_on ??= 'offer'; r.is_lifetime ??= false; r.access_months ??= null; r.access_from ??= 'course_start'; r.support_chat_months ??= null; r.extension_label ??= null; r.price_rub ??= null; }
         if (table === 'days') r.created_at ??= nowIso();
         if (table === 'lesson_announcements') {
             r.status ??= 'settling'; r.ready_at ??= nowIso(); r.tg_attempts ??= 0;

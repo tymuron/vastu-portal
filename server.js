@@ -14,6 +14,7 @@ import {
     TG_VIP_CHAT_URL,
     availableGrantTiers,
     createFulfilment,
+    formatPriceRub,
     getcourseTier,
     makeResendSender,
     normEmail,
@@ -437,6 +438,7 @@ async function handleCreateInvoice(req, res) {
     const method = String(payload?.method || 'card').toLowerCase() === 'sbp' && currency === 'RUB' ? 'sbp' : 'card';
     // The Ukrainian landing (/ua/) opens /buy with ?lang=uk; keep it on the way back.
     const lang = payload?.lang === 'uk' ? 'uk' : null;
+    const extend = payload?.extend === true || payload?.extend === '1' || payload?.extend === 1;
 
     if (!EMAIL_RE.test(email)) {
         sendJson(res, 400, { error: 'Invalid email' });
@@ -452,6 +454,8 @@ async function handleCreateInvoice(req, res) {
     }
 
     const appBase = APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com';
+    const extendParam = extend ? '&extend=1' : '';
+    const langParam = lang ? `&lang=${lang}` : '';
     try {
         const lavaResp = await fetch(`${LAVA_API_BASE}/api/v3/invoice`, {
             method: 'POST',
@@ -468,9 +472,9 @@ async function handleCreateInvoice(req, res) {
                 // Back to us after paying: a page that says what happens next,
                 // or the same tariff with a hint to try СБП / another card.
                 // ?offer= lets the thanks page say what this tariff includes (chat or not).
-                successful_return_url: `${appBase}/buy/thanks?offer=${offerId}${lang ? `&lang=${lang}` : ''}`,
-                failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1${lang ? `&lang=${lang}` : ''}`,
-                cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}${lang ? `&lang=${lang}` : ''}`
+                successful_return_url: `${appBase}/buy/thanks?offer=${offerId}${extendParam}${langParam}`,
+                failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1${extendParam}${langParam}`,
+                cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}${extendParam}${langParam}`
             })
         });
 
@@ -1129,6 +1133,135 @@ async function handleAccessRequest(req, res) {
     sendJson(res, 200, { ok: true });
 }
 
+const EXTENSION_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function defaultExtensionLabel(months) {
+    if (months === 1) return '1 месяц';
+    if (months === 12) return '1 год';
+    if (months != null) return `${months} мес.`;
+    return 'Продлить';
+}
+
+// GET /api/student/extensions
+// Authenticated with the student's Supabase access token (Authorization: Bearer).
+// Returns only the current user's expired or expiring-within-14-days entitlements
+// whose course has at least one course_offers row with access_from = 'extend'.
+async function handleStudentExtensions(req, res) {
+    res.setHeader('Cache-Control', 'no-store');
+    const authHeader = req.headers['authorization'];
+    const match = typeof authHeader === 'string' ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+    const token = match ? match[1].trim() : '';
+    if (!token) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+
+    let supabase;
+    try {
+        supabase = getSupabaseAdmin();
+    } catch {
+        sendJson(res, 500, { error: 'Endpoint not configured' });
+        return;
+    }
+
+    const { data: userData, error: authErr } = await supabase.auth.getUser(token);
+    const userId = userData?.user?.id;
+    if (authErr || !userId) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+    }
+
+    const { data: entitlements, error: entErr } = await supabase
+        .from('user_entitlements')
+        .select('course_id, expires_at')
+        .eq('user_id', userId);
+    if (entErr) {
+        sendJson(res, 500, { error: entErr.message });
+        return;
+    }
+
+    const nowMs = Date.now();
+    const horizonMs = nowMs + EXTENSION_WINDOW_MS;
+    const eligible = (entitlements || []).filter((e) => {
+        if (!e.expires_at) return false;
+        const expMs = Date.parse(e.expires_at);
+        return !Number.isNaN(expMs) && expMs <= horizonMs;
+    });
+
+    if (!eligible.length) {
+        sendJson(res, 200, { items: [] });
+        return;
+    }
+
+    const courseIds = [...new Set(eligible.map((e) => e.course_id).filter(Boolean))];
+    const { data: offerRows, error: offerErr } = await supabase
+        .from('course_offers')
+        .select('course_id, lava_offer_id, access_months, extension_label, price_rub')
+        .eq('access_from', 'extend')
+        .in('course_id', courseIds);
+    if (offerErr) {
+        sendJson(res, 500, { error: offerErr.message });
+        return;
+    }
+
+    const offersByCourse = new Map();
+    for (const o of offerRows || []) {
+        const list = offersByCourse.get(o.course_id) || [];
+        list.push(o);
+        offersByCourse.set(o.course_id, list);
+    }
+
+    const extendCourseIds = [...offersByCourse.keys()];
+    if (!extendCourseIds.length) {
+        sendJson(res, 200, { items: [] });
+        return;
+    }
+
+    const { data: courses, error: courseErr } = await supabase
+        .from('courses')
+        .select('id, slug, title, is_active, access_duration_months')
+        .in('id', extendCourseIds);
+    if (courseErr) {
+        sendJson(res, 500, { error: courseErr.message });
+        return;
+    }
+    const courseById = new Map((courses || []).map((c) => [c.id, c]));
+
+    const items = [];
+    for (const ent of eligible) {
+        const course = courseById.get(ent.course_id);
+        const rawOffers = offersByCourse.get(ent.course_id);
+        if (!course || course.is_active === false || !rawOffers?.length) continue;
+
+        const offers = rawOffers
+            .map((o) => {
+                const months = o.access_months ?? course.access_duration_months ?? null;
+                return {
+                    offer_id: o.lava_offer_id,
+                    months,
+                    label: o.extension_label || defaultExtensionLabel(months),
+                    price_rub: o.price_rub ?? null,
+                };
+            })
+            .sort((a, b) => (a.months ?? Infinity) - (b.months ?? Infinity) || String(a.offer_id).localeCompare(String(b.offer_id)));
+
+        items.push({
+            course_slug: course.slug,
+            course_title: course.title,
+            expires_at: ent.expires_at,
+            expired: Date.parse(ent.expires_at) <= nowMs,
+            offers,
+        });
+    }
+
+    items.sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at));
+    sendJson(res, 200, { items });
+}
+
 // ---------------------------------------------------------------------------
 // Daily expiry-reminder cron
 // ---------------------------------------------------------------------------
@@ -1142,8 +1275,23 @@ function formatDateRu(iso) {
     return `${dd}.${mm}.${yyyy}`;
 }
 
-function buildExpiryEmailHtml({ courseTitle, expiresAtIso, loginUrl }) {
+function buildExpiryEmailHtml({ courseTitle, expiresAtIso, loginUrl, extensionOffers = [], appBase = '', email = '' }) {
     const dateStr = formatDateRu(expiresAtIso);
+    const extButtonsBlock = extensionOffers.length && appBase
+        ? `<tr>
+            <td align="center" style="padding:12px 24px 8px 24px;">
+              ${extensionOffers.map((o) => {
+                  const params = new URLSearchParams();
+                  if (email) params.set('email', email);
+                  params.set('extend', '1');
+                  const href = `${appBase}/buy/${encodeURIComponent(o.lava_offer_id)}?${params.toString()}`;
+                  const label = o.extension_label || defaultExtensionLabel(o.access_months);
+                  const text = o.price_rub != null ? `${label} — ${formatPriceRub(o.price_rub)} ₽` : label;
+                  return `<a href="${escHtml(href)}" style="display:inline-block;background-color:#F2EDE2;color:#422326;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:13px;letter-spacing:0.12em;padding:12px 22px;border:1px solid #422326;margin:6px 4px;">${escHtml(text)}</a>`;
+              }).join('\n              ')}
+            </td>
+          </tr>`
+        : '';
     // Cream bg / burgundy / Cormorant aesthetic to match the invite email.
     return `<!DOCTYPE html>
 <html lang="ru">
@@ -1185,6 +1333,7 @@ ${EMAIL_LIGHT_ONLY_HEAD}
               <a href="${loginUrl}" style="display:inline-block;background-color:#422326;color:#F2EDE2;text-decoration:none;font-family:Georgia,'Times New Roman',serif;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;padding:14px 28px;border:1px solid #422326;">Войти в личный кабинет</a>
             </td>
           </tr>
+          ${extButtonsBlock}
           <tr>
             <td style="padding:24px 24px 8px 24px;">
               <hr style="border:none;border-top:1px solid #d9c9a8;margin:24px 0;" />
@@ -1252,9 +1401,30 @@ async function handleExpiryReminders(req, res) {
         let sent = 0;
         let failed = 0;
 
-        const loginUrl =
-            (APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com') +
-            '/login';
+        const appBase = APP_URL ? APP_URL.replace(/\/$/, '') : 'https://vastu-portal-app.onrender.com';
+        const loginUrl = `${appBase}/login`;
+
+        const courseIds = [...new Set((rows || []).map((r) => r.course_id).filter(Boolean))];
+        const extendOffersByCourse = new Map();
+        if (courseIds.length) {
+            const { data: extOffers, error: extErr } = await supabase
+                .from('course_offers')
+                .select('course_id, lava_offer_id, access_months, extension_label, price_rub')
+                .eq('access_from', 'extend')
+                .in('course_id', courseIds);
+            if (extErr) {
+                console.error('expiry-reminders extension offers query error:', extErr.message);
+            } else {
+                for (const o of extOffers || []) {
+                    const list = extendOffersByCourse.get(o.course_id) || [];
+                    list.push(o);
+                    extendOffersByCourse.set(o.course_id, list);
+                }
+                for (const list of extendOffersByCourse.values()) {
+                    list.sort((a, b) => (a.access_months ?? Infinity) - (b.access_months ?? Infinity));
+                }
+            }
+        }
 
         // 4. Send sequentially — volume is tiny and we want to be polite to Resend.
         for (const row of rows || []) {
@@ -1269,7 +1439,10 @@ async function handleExpiryReminders(req, res) {
             const html = buildExpiryEmailHtml({
                 courseTitle,
                 expiresAtIso: row.expires_at,
-                loginUrl
+                loginUrl,
+                extensionOffers: extendOffersByCourse.get(row.course_id) || [],
+                appBase,
+                email,
             });
 
             const body = {
@@ -1627,6 +1800,14 @@ const server = http.createServer((req, res) => {
                 sendJson(res, 502, { error: 'catalog unavailable' });
             }
         );
+        return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/student/extensions') {
+        handleStudentExtensions(req, res).catch((err) => {
+            console.error('handleStudentExtensions threw:', err);
+            sendJson(res, 500, { error: 'Internal error' });
+        });
         return;
     }
 
