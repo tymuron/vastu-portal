@@ -259,6 +259,7 @@ export function createMono({ storeId, signKey, base = 'https://u2.monobank.com.u
                     source: via === 'sweep' ? 'poll' : 'webhook',
                     amount: st.total_sum ?? null,
                     currency: 'UAH',
+                    paidAt: new Date().toISOString(),
                 });
                 return { state, subState: sub, granted: r.status === 'granted' };
             }

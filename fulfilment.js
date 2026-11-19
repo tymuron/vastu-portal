@@ -69,10 +69,10 @@ export const COURSE_WELCOME = {
     },
     'vastu-2': {
         name: '«Васту для бизнеса»',
-        links: [
-            { label: 'Канал потока', url: TG_STANDARD_CHANNEL_URL },
-            { label: 'Чат потока', url: TG_GENERAL_CHAT_URL },
-        ],
+        // The May stream's channel/chat belong to the finished cohort — new
+        // evergreen buyers never get them. Support buyers get a personal bot
+        // deep-link button from support_chat_access instead.
+        links: [],
     },
     'vastu-2-vip': {
         tier: 'VIP',
@@ -88,29 +88,62 @@ export const COURSE_WELCOME = {
 // Tiers offered on /grant. Each points at the lava product/offer id a real
 // purchase would carry, so a manual grant gives exactly what a purchase gives
 // (same courses, same expiry) through the same course_offers mapping.
+// Tiers with `envKey` read their offer id from env; when unset they stay
+// hidden from /grant and are treated as unmapped by GetCourse.
 export const GRANT_TIERS = [
     { key: 'design-base', label: 'Васту-дизайн · Основной', lavaId: 'ed760ac8-79d2-4f9e-9255-baeba0bdd1ac' },
     { key: 'design-pro', label: 'Васту-дизайн · Наставничество', lavaId: '34229951-b58e-424a-b1d1-d26823fd0373' },
     { key: 'standard', label: 'Васту для бизнеса · Стандарт', lavaId: 'caa3c132-dca3-438d-b424-eafff3dd3033' },
     { key: 'vip', label: 'Васту для бизнеса · VIP', lavaId: '1daaffb0-e3aa-44a9-98f6-5e1a986a79b3' },
+    {
+        key: 'biz-self',
+        label: 'Васту для бизнеса · Самостоятельно',
+        envKey: 'BIZ_SELF_LAVA_OFFER',
+        get lavaId() { return String(process.env.BIZ_SELF_LAVA_OFFER || '').trim() || null; },
+    },
+    {
+        key: 'biz-support',
+        label: 'Васту для бизнеса · С поддержкой',
+        envKey: 'BIZ_SUPPORT_LAVA_OFFER',
+        get lavaId() { return String(process.env.BIZ_SUPPORT_LAVA_OFFER || '').trim() || null; },
+    },
 ];
 
-export function resolveGrantTier(input) {
+export function tierLavaId(tier, env = process.env) {
+    if (!tier) return null;
+    if (tier.envKey) return String(env?.[tier.envKey] || '').trim() || null;
+    return tier.lavaId || null;
+}
+
+export function availableGrantTiers(env = process.env) {
+    return GRANT_TIERS
+        .map((t) => ({ key: t.key, label: t.label, lavaId: tierLavaId(t, env) }))
+        .filter((t) => !!t.lavaId);
+}
+
+export function resolveGrantTier(input, env = process.env) {
     const raw = String(input || '').trim().toLowerCase().replace(/ё/g, 'е');
     if (!raw) return null;
-    const exact = GRANT_TIERS.find((t) => t.key === raw || t.label.toLowerCase().replace(/ё/g, 'е') === raw);
+    const tiers = availableGrantTiers(env);
+    const exact = tiers.find((t) => t.key === raw || t.label.toLowerCase().replace(/ё/g, 'е') === raw);
     if (exact) return exact;
     if (/наставнич|design-pro|васту-дизайн.*(?:про|vip|вип)|тариф\s*про/.test(raw)) {
-        return GRANT_TIERS.find((t) => t.key === 'design-pro');
+        return tiers.find((t) => t.key === 'design-pro') || null;
     }
     if (/основн|design-base|базов|васту-дизайн/.test(raw)) {
-        return GRANT_TIERS.find((t) => t.key === 'design-base');
+        return tiers.find((t) => t.key === 'design-base') || null;
+    }
+    if (/бизнес.*поддержк|^с поддержк|biz-support/.test(raw)) {
+        return tiers.find((t) => t.key === 'biz-support') || null;
+    }
+    if (/бизнес.*самостоятельн|^самостоятельн|biz-self/.test(raw)) {
+        return tiers.find((t) => t.key === 'biz-self') || null;
     }
     if (/бизнес.*(?:vip|вип)|^(?:vip|вип)$/.test(raw)) {
-        return GRANT_TIERS.find((t) => t.key === 'vip');
+        return tiers.find((t) => t.key === 'vip') || null;
     }
     if (/бизнес.*стандарт|^стандарт$/.test(raw)) {
-        return GRANT_TIERS.find((t) => t.key === 'standard');
+        return tiers.find((t) => t.key === 'standard') || null;
     }
     return null;
 }
@@ -130,10 +163,11 @@ export function channelOf(contractId, source) {
 //   vastu-course_75   «Основной тариф» 75 000 ₽        -> design-base
 //   vastu-course_55   «Тариф МК» 55 000 ₽ (Основной)   -> design-base
 //   vastu-course_175  «VIP-тариф» 175 000 ₽            -> design-pro (Наставничество)
-// The process call names the tier outright (tier=design-base|design-pro);
-// without it the offer names from {object.positions} decide. Anything else
-// is left unmapped and alerts Tymur — never guessed.
-const GETCOURSE_TIER_KEYS = ['design-base', 'design-pro'];
+// The process call names the tier outright (tier=design-base|design-pro|biz-self|biz-support);
+// without it, only the design offer names from {object.positions} decide.
+// Biz tiers are never inferred from offer names — anything else is left
+// unmapped and alerts Tymur, never guessed.
+const GETCOURSE_TIER_KEYS = ['design-base', 'design-pro', 'biz-self', 'biz-support'];
 export function getcourseTier({ tier, positions }) {
     const named = String(tier || '').trim().toLowerCase();
     if (GETCOURSE_TIER_KEYS.includes(named)) return named;
@@ -199,23 +233,42 @@ export function readAccessToken(secret, token, now = Date.now()) {
 // Entitlements
 // ---------------------------------------------------------------------------
 
-// expires_at for one course_offers row with its course attached as
-// row.courses. null = lifetime.
-//   - is_lifetime offer                    -> null
-//   - access_months on the offer           -> starts_at + that many months
-//   - else access_duration_months of course -> starts_at + that many months
-//   - course without starts_at / months    -> null (lifetime)
-export function computeExpiresAt(offerRow) {
-    if (!offerRow) return null;
-    if (offerRow.is_lifetime) return null;
-    const course = offerRow.courses || null;
-    const startsAt = course?.starts_at || null;
-    const months = offerRow.access_months ?? course?.access_duration_months;
-    if (!startsAt || months == null) return null;
-    const d = new Date(startsAt);
+export function addMonthsIso(base, months) {
+    if (base == null || months == null) return null;
+    const d = new Date(base);
     if (Number.isNaN(d.getTime())) return null;
     d.setUTCMonth(d.getUTCMonth() + Number(months));
     return d.toISOString();
+}
+
+export function formatDateRu(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+}
+
+// expires_at for one course_offers row with its course attached as
+// row.courses. null = lifetime.
+//   - is_lifetime offer                    -> null
+//   - access_from === 'purchase'           -> paidAt (or now) + months
+//   - access_from === 'course_start' (def) -> course.starts_at + months
+//   - months from offer.access_months, else course.access_duration_months
+//   - missing anchor date or months        -> null (lifetime)
+export function computeExpiresAt(offerRow, paidAt = null) {
+    if (!offerRow) return null;
+    if (offerRow.is_lifetime) return null;
+    const course = offerRow.courses || null;
+    const months = offerRow.access_months ?? course?.access_duration_months;
+    if (months == null) return null;
+    const accessFrom = offerRow.access_from || 'course_start';
+    const anchor = accessFrom === 'purchase'
+        ? (paidAt != null ? paidAt : new Date().toISOString())
+        : (course?.starts_at || null);
+    if (!anchor) return null;
+    return addMonthsIso(anchor, months);
 }
 
 // Manual per-row upsert into public.user_entitlements with VIP-aware merge.
@@ -377,9 +430,19 @@ export function welcomeContent(courses) {
     };
 }
 
+// Copy for the support-chat section of the welcome email (only shown when a
+// purchase created a support_chat_access row).
+export const SUPPORT_CHAT_EMAIL_COPY = {
+    heading: 'Чат поддержки в Telegram',
+    buttonLabel: 'Войти в чат поддержки',
+    line: (expiresDate, months = 6) =>
+        `Поддержка в чате — ${months} месяцев с даты покупки${expiresDate ? `, до ${expiresDate}` : ''}.`,
+};
+
 // reason: 'purchase' (just bought) | 'request' (asked for a login link)
 // returning: true when the account has logged in before (knows its password)
-export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, spareUrl, returning, reason = 'purchase' }) {
+// supportChat: optional { url, expiresAt, months } for a purchase with a support_chat_access row
+export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, spareUrl, returning, reason = 'purchase', supportChat = null }) {
     const c = welcomeContent(courses);
     const loginHost = loginUrl.replace(/^https?:\/\//, '').replace(/\/login$/, '');
     const courseLine = c.name
@@ -418,6 +481,18 @@ export function buildWelcomeEmail({ email, courses, accessUrl, loginUrl, spareUr
               <p style="margin:0;">${reason === 'request' ? 'И на всякий случай ссылки на канал и чат:' : 'Делюсь ссылками — вступайте сразу, все объявления будут там:'}</p>
            </td></tr>
            <tr><td align="center" style="padding:8px 24px 8px 24px;">${c.links.map((l) => btn(l.url, l.label)).join('\n')}</td></tr>`
+        : '';
+
+    const supportDate = supportChat?.expiresAt ? formatDateRu(supportChat.expiresAt) : '';
+    const supportLine = supportChat?.url
+        ? SUPPORT_CHAT_EMAIL_COPY.line(supportDate, supportChat.months || 6)
+        : '';
+    const supportChatBlock = supportChat?.url
+        ? `<tr><td style="padding:16px 24px 0 24px;font-size:16px;line-height:1.75;color:#422326;">
+              <p style="margin:0 0 8px 0;font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:20px;">${esc(SUPPORT_CHAT_EMAIL_COPY.heading)}</p>
+              <p style="margin:0;">${esc(supportLine)}</p>
+           </td></tr>
+           <tr><td align="center" style="padding:8px 24px 8px 24px;">${btn(supportChat.url, SUPPORT_CHAT_EMAIL_COPY.buttonLabel)}</td></tr>`
         : '';
 
     const html = `<!DOCTYPE html>
@@ -460,6 +535,7 @@ ${EMAIL_LIGHT_ONLY_HEAD}
           ${returning ? `<tr><td align="center" style="padding:0 24px 8px 24px;font-size:14px;color:#7a5a3a;"><a href="${esc(accessUrl)}" style="color:#8a6a3b;">Не помню пароль — задать новый</a></td></tr>` : ''}
           ${spareUrl ? `<tr><td align="center" style="padding:0 24px 8px 24px;font-size:14px;color:#7a5a3a;">Страница не открывается? <a href="${esc(spareUrl)}" style="color:#8a6a3b;">Запасная ссылка</a></td></tr>` : ''}
           ${tgBlock}
+          ${supportChatBlock}
           <tr>
             <td style="padding:16px 24px;font-size:15px;line-height:1.7;color:#422326;">
               ${c.start && reason === 'purchase' ? `<p style="margin:0 0 12px 0;"><strong>Старт потока — ${esc(c.start)}.</strong> Очень жду 🙌</p>` : ''}
@@ -491,6 +567,14 @@ ${EMAIL_LIGHT_ONLY_HEAD}
         returning ? `Не помните пароль — задайте новый: ${accessUrl}` : `Дальше входите на ${loginHost} с почтой ${email} и этим паролем.`,
         ...(spareUrl ? [`Страница не открывается? Запасная ссылка: ${spareUrl}`] : []),
         ...(c.links.length ? ['', 'Telegram:', ...c.links.map((l) => `${l.label}: ${l.url}`)] : []),
+        ...(supportChat?.url
+            ? [
+                '',
+                `${SUPPORT_CHAT_EMAIL_COPY.heading}:`,
+                supportLine,
+                `${SUPPORT_CHAT_EMAIL_COPY.buttonLabel}: ${supportChat.url}`,
+            ]
+            : []),
         ...(c.start && reason === 'purchase' ? ['', `Старт потока — ${c.start}.`] : []),
         '',
         'Если что-то не открывается — напишите @tymuron в Telegram (https://t.me/tymuron).',
@@ -539,6 +623,8 @@ export function createFulfilment({
     reconcileSince,
     supabaseUrl,
     serviceRoleKey,
+    supportChatBotUsername,
+    env = process.env,
     fetchFn = fetch,
 }) {
     const appBase = (appUrl || 'https://vastu-portal-app.onrender.com').replace(/\/$/, '');
@@ -595,7 +681,7 @@ export function createFulfilment({
         for (const id of lavaIds.filter(Boolean)) {
             const { data: rows, error } = await supabase
                 .from('course_offers')
-                .select('course_id, is_lifetime, access_months')
+                .select('course_id, is_lifetime, access_months, access_from, support_chat_months')
                 .eq('lava_offer_id', id);
             if (error) throw new Error(`course_offers lookup failed: ${error.message}`);
             if (!rows || rows.length === 0) continue;
@@ -608,6 +694,57 @@ export function createFulfilment({
             return { matchedId: id, rows: rows.map((r) => ({ ...r, courses: byId.get(r.course_id) || null })) };
         }
         return { matchedId: null, rows: [] };
+    }
+
+    // One support_chat_access row per contract_id (idempotent across webhook +
+    // poll + retries). A later purchase by the same email gets its own row.
+    async function ensureSupportChatAccess(supabase, { contractId, email, userId, paidAtIso, months }) {
+        const { data: existing, error: selErr } = await supabase
+            .from('support_chat_access')
+            .select('*')
+            .eq('contract_id', contractId)
+            .maybeSingle();
+        if (selErr) throw new Error(`support_chat_access lookup failed: ${selErr.message}`);
+        if (existing) return { row: existing, created: false };
+
+        const expiresAt = addMonthsIso(paidAtIso, months);
+        const joinToken = crypto.randomBytes(24).toString('base64url');
+        const { data: inserted, error: insErr } = await supabase
+            .from('support_chat_access')
+            .insert({
+                email,
+                user_id: userId,
+                contract_id: contractId,
+                starts_at: paidAtIso,
+                expires_at: expiresAt,
+                join_token: joinToken,
+            })
+            .select('*')
+            .single();
+
+        if (insErr) {
+            if (insErr.code === '23505') {
+                const { data: raced, error: reErr } = await supabase
+                    .from('support_chat_access')
+                    .select('*')
+                    .eq('contract_id', contractId)
+                    .maybeSingle();
+                if (!reErr && raced) return { row: raced, created: false };
+            }
+            throw new Error(`support_chat_access insert failed: ${insErr.message}`);
+        }
+        return { row: inserted, created: true };
+    }
+
+    function supportChatLinkFor(row, months = 6) {
+        if (!row) return null;
+        const username = String(supportChatBotUsername ?? env?.SUPPORT_CHAT_BOT_USERNAME ?? '').trim().replace(/^@+/, '');
+        if (!username) return null;
+        return {
+            url: `https://t.me/${username}?start=${row.join_token}`,
+            expiresAt: row.expires_at,
+            months,
+        };
     }
 
     async function updatePurchase(supabase, contractId, patch) {
@@ -632,7 +769,7 @@ export function createFulfilment({
         return courses || [];
     }
 
-    async function sendWelcome(supabase, { contractId, user, courses, reason, idempotencyKey }) {
+    async function sendWelcome(supabase, { contractId, user, courses, reason, idempotencyKey, supportChat = null }) {
         const email = normEmail(user.email);
         const { subject, html, text } = buildWelcomeEmail({
             email,
@@ -642,16 +779,27 @@ export function createFulfilment({
             spareUrl: spareUrlFor(email),
             returning: !!user.last_sign_in_at,
             reason,
+            supportChat,
         });
         return sendEmail({ to: email, subject, html, text, idempotencyKey });
+    }
+
+    function normalizePaidAt(paidAt, fallbackIso = null) {
+        for (const candidate of [paidAt, fallbackIso]) {
+            if (candidate == null) continue;
+            const d = new Date(candidate);
+            if (!Number.isNaN(d.getTime())) return d.toISOString();
+        }
+        return new Date().toISOString();
     }
 
     // The single entry point. Safe to call any number of times for the same
     // contract: entitlements merge, and the email goes out once.
     //   lavaIds   — ids to map, most specific first ([offerId, productId])
+    //   paidAt    — payment timestamp (ISO / Date / ms); used when access_from = 'purchase'
     //   sendEmail — false for a silent manual grant
     //   resend    — true to send the welcome email again even if it went out
-    async function fulfil({ contractId, email, lavaIds, source, amount = null, currency = null, sendEmail: wantEmail = true, resend = false }) {
+    async function fulfil({ contractId, email, lavaIds, source, amount = null, currency = null, paidAt = null, sendEmail: wantEmail = true, resend = false }) {
         return withLock(contractId, async () => {
             const supabase = getSupabase();
             email = normEmail(email);
@@ -666,6 +814,8 @@ export function createFulfilment({
             if (existing?.status === 'granted' && (existing.email_sent_at || existing.email_skipped_reason || !wantEmail) && !resend) {
                 return { status: 'granted', already: true, userId: existing.user_id, courseSlugs: existing.course_slugs };
             }
+
+            const paidAtIso = normalizePaidAt(paidAt, existing?.created_at);
 
             const ids = (lavaIds || []).filter(Boolean);
             if (!existing) {
@@ -698,16 +848,51 @@ export function createFulfilment({
 
                 const { user, created } = await ensureUser(supabase, email);
 
+                // Snapshot existing expiries before upserting so we can tell if
+                // a repeat purchase genuinely extended a time-limited course.
+                const { data: prevEnts } = await supabase
+                    .from('user_entitlements')
+                    .select('course_id, expires_at')
+                    .eq('user_id', user.id)
+                    .in('course_id', rows.map((r) => r.course_id));
+                const prevExpiryByCourse = new Map((prevEnts || []).map((e) => [e.course_id, e.expires_at]));
+
+                let extendedEntitlement = false;
                 for (const row of rows) {
+                    const expiresAt = computeExpiresAt(row, paidAtIso);
+                    if (prevExpiryByCourse.has(row.course_id)) {
+                        const prev = prevExpiryByCourse.get(row.course_id);
+                        if (prev !== null && (expiresAt === null || new Date(expiresAt).getTime() > new Date(prev).getTime())) {
+                            extendedEntitlement = true;
+                        }
+                    }
                     const err = await upsertEntitlement(
                         supabase,
                         user.id,
                         row.course_id,
-                        computeExpiresAt(row),
+                        expiresAt,
                         contractId,
                         channelOf(contractId, source)
                     );
                     if (err) throw new Error(`user_entitlements upsert failed: ${err.message}`);
+                }
+
+                // Support chat entitlement: one row per purchase whenever any
+                // matched offer specifies support_chat_months.
+                const supportMonthsList = rows
+                    .map((r) => Number(r.support_chat_months))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+                const supportChatMonths = supportMonthsList.length ? Math.max(...supportMonthsList) : null;
+                let supportChatRow = null;
+                if (supportChatMonths) {
+                    const sc = await ensureSupportChatAccess(supabase, {
+                        contractId,
+                        email,
+                        userId: user.id,
+                        paidAtIso,
+                        months: supportChatMonths,
+                    });
+                    supportChatRow = sc.row;
                 }
 
                 const courses = rows.map((r) => r.courses).filter(Boolean);
@@ -717,6 +902,8 @@ export function createFulfilment({
                 // contract that created it (source_payment_id, first record wins),
                 // so this also holds when an earlier attempt of this same contract
                 // crashed after granting. Decided once, on the first grant.
+                // A purchase that extends expiry or creates a support chat period
+                // also unlocks something new (unlike installment payments 2–4).
                 let unlockedSomething = true;
                 if (existing?.status !== 'granted' && source !== 'manual') {
                     const { data: ents, error: entErr } = await supabase
@@ -725,7 +912,10 @@ export function createFulfilment({
                         .eq('user_id', user.id)
                         .in('course_id', rows.map((r) => r.course_id));
                     if (entErr) throw new Error(`user_entitlements lookup failed: ${entErr.message}`);
-                    unlockedSomething = (ents || []).some((e) => e.source_payment_id === contractId);
+                    unlockedSomething =
+                        (ents || []).some((e) => e.source_payment_id === contractId) ||
+                        extendedEntitlement ||
+                        !!supportChatRow;
                 }
 
                 await updatePurchase(supabase, contractId, {
@@ -748,6 +938,7 @@ export function createFulfilment({
                             courses,
                             reason: 'purchase',
                             idempotencyKey: `welcome/${contractId}/${emailAttempts}`,
+                            supportChat: supportChatLinkFor(supportChatRow, supportChatMonths || 6),
                         });
                         await updatePurchase(supabase, contractId, {
                             email_sent_at: new Date().toISOString(),
@@ -763,7 +954,15 @@ export function createFulfilment({
                     }
                 }
 
-                return { status: 'granted', userId: user.id, created, courseSlugs, email: emailResult, accessUrl: accessUrlFor(email) };
+                return {
+                    status: 'granted',
+                    userId: user.id,
+                    created,
+                    courseSlugs,
+                    email: emailResult,
+                    accessUrl: accessUrlFor(email),
+                    supportChat: supportChatRow ? { id: supportChatRow.id, expiresAt: supportChatRow.expires_at } : null,
+                };
             } catch (err) {
                 await updatePurchase(supabase, contractId, { status: 'error', attempts, error: String(err?.message || err) });
                 await alert(`оплата не обработана (${email})`, { contractId, source, error: String(err?.message || err) });
@@ -925,6 +1124,7 @@ export function createFulfilment({
                             source: 'poll',
                             amount: inv.amount,
                             currency: inv.currency,
+                            paidAt: inv.createdAt || new Date().toISOString(),
                         });
                         result.fulfilled.push({ contractId: inv.contractId, email: inv.email, status: r.status, emailSent: !!r.email?.sent });
                     } catch (err) {
@@ -936,7 +1136,7 @@ export function createFulfilment({
             // Retry anything that failed earlier, whatever its source.
             const { data: stuck } = await supabase
                 .from('purchases')
-                .select('contract_id, email, lava_ids, source, status, email_sent_at, attempts, email_attempts, updated_at')
+                .select('contract_id, email, lava_ids, source, status, email_sent_at, attempts, email_attempts, updated_at, created_at')
                 .in('status', ['error', 'processing', 'granted'])
                 .is('email_sent_at', null)
                 .is('email_skipped_reason', null)
@@ -952,7 +1152,13 @@ export function createFulfilment({
                     continue;
                 }
                 try {
-                    const r = await fulfil({ contractId: p.contract_id, email: p.email, lavaIds: p.lava_ids || [], source: p.source });
+                    const r = await fulfil({
+                        contractId: p.contract_id,
+                        email: p.email,
+                        lavaIds: p.lava_ids || [],
+                        source: p.source,
+                        paidAt: p.created_at || new Date().toISOString(),
+                    });
                     result.retried.push({ contractId: p.contract_id, email: p.email, status: r.status, emailSent: !!r.email?.sent });
                 } catch (err) {
                     result.errors.push({ contractId: p.contract_id, error: String(err?.message || err) });
@@ -1068,7 +1274,7 @@ export function createFulfilment({
                     emailSentAt: p.email_sent_at,
                     createdAt: p.created_at,
                 })),
-                tiers: GRANT_TIERS.map(({ key, label }) => ({ key, label })),
+                tiers: availableGrantTiers(env).map(({ key, label }) => ({ key, label })),
             },
         };
     }
@@ -1076,21 +1282,22 @@ export function createFulfilment({
     // Grant access by tier key or Russian label, supporting dryRun=true.
     async function grantByTier({ email: rawEmail, tier: rawTier, sendEmail: wantEmail = true, dryRun = false }) {
         const email = normEmail(rawEmail);
-        const tier = resolveGrantTier(rawTier);
+        const activeTiers = availableGrantTiers(env);
+        const tier = resolveGrantTier(rawTier, env);
         if (!EMAIL_RE.test(email)) {
             return { status: 400, body: { error: 'Invalid email' } };
         }
         if (!tier) {
             return {
                 status: 400,
-                body: { error: `tier must be one of: ${GRANT_TIERS.map((t) => t.key).join(', ')}` },
+                body: { error: `tier must be one of: ${activeTiers.map((t) => t.key).join(', ')}` },
             };
         }
         if (dryRun) {
             const supabase = getSupabase();
             const { data: offerRows } = await supabase
                 .from('course_offers')
-                .select('course_id, access_months, is_lifetime, courses(slug, title)')
+                .select('course_id, access_months, access_from, is_lifetime, support_chat_months, courses(slug, title)')
                 .eq('lava_offer_id', tier.lavaId);
             const courses = (offerRows || []).map((r) => r.courses?.slug).filter(Boolean);
             return {
@@ -1111,6 +1318,7 @@ export function createFulfilment({
             email,
             lavaIds: [tier.lavaId],
             source: 'manual',
+            paidAt: new Date().toISOString(),
             sendEmail: wantEmail !== false,
         });
         if (result.status !== 'granted') {
