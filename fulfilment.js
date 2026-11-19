@@ -205,7 +205,7 @@ export function readAccessToken(secret, token, now = Date.now()) {
 //   - access_months on the offer           -> starts_at + that many months
 //   - else access_duration_months of course -> starts_at + that many months
 //   - course without starts_at / months    -> null (lifetime)
-export function computeExpiresAt(offerRow) {
+export function computeExpiresAt(offerRow, now = new Date()) {
     if (!offerRow) return null;
     if (offerRow.is_lifetime) return null;
     const course = offerRow.courses || null;
@@ -215,6 +215,14 @@ export function computeExpiresAt(offerRow) {
     const d = new Date(startsAt);
     if (Number.isNaN(d.getTime())) return null;
     d.setUTCMonth(d.getUTCMonth() + Number(months));
+    // The course's access window has already closed, so it is being sold as a recording: count the
+    // months from the grant, or the buyer gets access that is over the moment it is given («Васту для
+    // бизнеса» since 18 Nov 2026, until course_offers.access_from = 'purchase' takes over).
+    const grantedAt = new Date(now);
+    if (!Number.isNaN(grantedAt.getTime()) && d.getTime() <= grantedAt.getTime()) {
+        grantedAt.setUTCMonth(grantedAt.getUTCMonth() + Number(months));
+        return grantedAt.toISOString();
+    }
     return d.toISOString();
 }
 

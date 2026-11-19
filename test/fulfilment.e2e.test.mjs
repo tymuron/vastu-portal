@@ -491,7 +491,14 @@ test('/grant: wrong secret refused; tier grant = purchase grant, with email and 
     assert.equal(silent.granted, true);
     assert.equal(silent.emailSent, false);
     assert.equal(mailsTo('quiet@example.com').length, 0);
-    assert.deepEqual(entitlements('quiet@example.com'), [{ slug: 'vastu-2', expires_at: '2026-11-18T00:00:00.000Z' }]);
+    // vastu-2's window (18 May + 6 months) closed on 18 Nov 2026: a grant after that counts 6 months from the grant
+    const quiet = entitlements('quiet@example.com');
+    assert.deepEqual(quiet.map((e) => e.slug), ['vastu-2']);
+    const sixMonths = new Date();
+    sixMonths.setUTCMonth(sixMonths.getUTCMonth() + 6);
+    const windowEnd = Date.parse('2026-11-18T00:00:00.000Z');
+    const expected = Date.now() < windowEnd ? windowEnd : sixMonths.getTime();
+    assert.ok(Math.abs(Date.parse(quiet[0].expires_at) - expected) < 5 * 60 * 1000, `vastu-2 access ends ${quiet[0].expires_at}`);
 });
 
 test('teacher Bearer token grants and checks access; student token gets 403; missing token gets 401', async () => {
