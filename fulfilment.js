@@ -784,11 +784,18 @@ export function createFulfilment({
         return sendEmail({ to: email, subject, html, text, idempotencyKey });
     }
 
-    function normalizePaidAt(paidAt, fallbackIso = null) {
-        for (const candidate of [paidAt, fallbackIso]) {
-            if (candidate == null) continue;
+    // The moment access counts from (access_from = 'purchase'). A time is used only if it is
+    // plausible: a real date from 2024 on. That guards against a payload that sends seconds where
+    // milliseconds are expected (read as January 1970, which would close access at once) or
+    // garbage. Callers pass the purchase's first-seen time first, so a retry, poll or resend of
+    // the same contract always gets the same expiry and can never stretch access.
+    function normalizePaidAt(...candidates) {
+        for (const candidate of candidates) {
+            if (candidate == null || candidate === '') continue;
             const d = new Date(candidate);
-            if (!Number.isNaN(d.getTime())) return d.toISOString();
+            const t = d.getTime();
+            if (Number.isNaN(t) || t < Date.UTC(2024, 0, 1)) continue;
+            return d.toISOString();
         }
         return new Date().toISOString();
     }
@@ -815,7 +822,8 @@ export function createFulfilment({
                 return { status: 'granted', already: true, userId: existing.user_id, courseSlugs: existing.course_slugs };
             }
 
-            const paidAtIso = normalizePaidAt(paidAt, existing?.created_at);
+            // Once the purchase exists, its first-seen time wins over whatever this call brings.
+            const paidAtIso = normalizePaidAt(existing?.created_at, paidAt);
 
             const ids = (lavaIds || []).filter(Boolean);
             if (!existing) {
