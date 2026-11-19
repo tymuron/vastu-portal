@@ -1836,7 +1836,20 @@ if (supportChatConfig.mode !== 'off') {
     if (supportChatConfig.problems.length) {
         console.warn('support chat:', supportChatConfig.problems.join('; '));
     }
-    console.log(`support chat bot: ${supportChatConfig.mode}`);
+    // Hourly reminder + expiry removal, on the same in-process timer as the other jobs (no separate paid
+    // Render cron service). POST /api/cron/support-chat still runs it on demand.
+    if (SUPABASE_SERVICE_ROLE_KEY) {
+        const runSupportChat = () =>
+            supportChat.run().then(
+                (r) => {
+                    if (r?.error) console.error(`support-chat (${supportChatConfig.mode}): ${r.error}`);
+                },
+                (err) => console.error('support-chat threw:', err)
+            );
+        setTimeout(runSupportChat, 90 * 1000);
+        setInterval(runSupportChat, 60 * 60 * 1000);
+    }
+    console.log(`support chat bot: ${supportChatConfig.mode}, removal check every 60 min`);
 } else {
     console.log('support chat bot is OFF (SUPPORT_CHAT)');
 }

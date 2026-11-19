@@ -52,4 +52,4 @@ A modern educational platform for Vastu courses.
 5. **Проверить в режиме `SUPPORT_CHAT=dry-run`**:
    - статус и ближайшие 20 истечений (без токенов): `GET /api/admin/support-chat` с `x-cron-secret`;
    - пробный прогон крона (логирует действия, ничего не отправляет): `POST /api/cron/support-chat` с `x-cron-secret`.
-6. **Переключить в боевой режим**: выставить `SUPPORT_CHAT=live` на Render. Почасовой крон `vastu-support-chat-cron` из `render.yaml` начнёт отправлять напоминание за 7 дней и выводить участников по истечении 6 месяцев (`banChatMember` + `unbanChatMember` с `only_if_banned=true`, не трогая владельца и админов чата).
+6. **Переключить в боевой режим**: выставить `SUPPORT_CHAT=live` на Render. Почасовая проверка внутри сервера (тот же таймер, что у остальных задач; отдельного платного крона на Render нет) начнёт отправлять напоминание за 7 дней и выводить участников по истечении 6 месяцев (`banChatMember` + `unbanChatMember` с `only_if_banned=true`, не трогая владельца и админов чата).
