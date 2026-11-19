@@ -163,7 +163,7 @@ test('/buy can pay by СБП, and sends lava return links back to /buy', async (
     let sentToLava = fake.control.lastInvoiceRequest;
     assert.equal(sentToLava.paymentProvider, 'PAY2ME');
     assert.equal(sentToLava.paymentMethod, 'SBP');
-    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks`);
+    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks?offer=${T.discount[1]}`);
     assert.equal(sentToLava.failure_return_url, `${app}/buy/${T.discount[1]}?currency=RUB&failed=1`);
 
     await make('card');
@@ -178,7 +178,7 @@ test('/buy can pay by СБП, and sends lava return links back to /buy', async (
     });
     assert.equal(uk.status, 200);
     sentToLava = fake.control.lastInvoiceRequest;
-    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks?lang=uk`);
+    assert.equal(sentToLava.successful_return_url, `${app}/buy/thanks?offer=${T.base[1]}&lang=uk`);
     assert.equal(sentToLava.failure_return_url, `${app}/buy/${T.base[1]}?currency=EUR&failed=1&lang=uk`);
     assert.equal(sentToLava.cancel_return_url, `${app}/buy/${T.base[1]}?currency=EUR&lang=uk`);
 });

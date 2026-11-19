@@ -467,7 +467,8 @@ async function handleCreateInvoice(req, res) {
                 ...(method === 'sbp' ? { paymentProvider: 'PAY2ME', paymentMethod: 'SBP' } : {}),
                 // Back to us after paying: a page that says what happens next,
                 // or the same tariff with a hint to try СБП / another card.
-                successful_return_url: `${appBase}/buy/thanks${lang ? `?lang=${lang}` : ''}`,
+                // ?offer= lets the thanks page say what this tariff includes (chat or not).
+                successful_return_url: `${appBase}/buy/thanks?offer=${offerId}${lang ? `&lang=${lang}` : ''}`,
                 failure_return_url: `${appBase}/buy/${offerId}?currency=${currency}&failed=1${lang ? `&lang=${lang}` : ''}`,
                 cancel_return_url: `${appBase}/buy/${offerId}?currency=${currency}${lang ? `&lang=${lang}` : ''}`
             })

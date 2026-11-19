@@ -62,6 +62,19 @@ const UK_TITLES: Record<string, string> = {
     'ded0ec37-2888-4336-8e2d-38c49bab7df6': 'Курс «Васту-дизайн» від Anna Romeo · тариф «Основний» (ціна для учасниць майстер-класу)',
 };
 
+// «Васту для бизнеса» in recording: «Самостоятельно» has no chat, and «С поддержкой» enters the support
+// chat through the bot button in the welcome email (no course channel). The generic texts promise both.
+const OFFER_TEXT: Record<string, { intro: string; thanks1: string }> = {
+    'caa3c132-dca3-438d-b424-eafff3dd3033': {
+        intro: 'Введите email, на который придёт доступ к курсу. Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет.',
+        thanks1: 'В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой в личный кабинет.',
+    },
+    'a2562349-b3ae-4b13-a9ff-ae1182c6bfde': {
+        intro: 'Введите email, на который придёт доступ к курсу. Сразу после оплаты на эту почту придёт письмо со ссылкой в личный кабинет и кнопкой входа в чат поддержки.',
+        thanks1: 'В течение нескольких минут на вашу почту придёт письмо от Anna Romeo со ссылкой в личный кабинет и кнопкой входа в чат поддержки.',
+    },
+};
+
 function useLang(): Lang {
     const [searchParams] = useSearchParams();
     const lang: Lang = searchParams.get('lang') === 'uk' ? 'uk' : 'ru';
@@ -107,12 +120,15 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function BuyThanks() {
-    const t = TEXT[useLang()];
+    const lang = useLang();
+    const t = TEXT[lang];
+    const [searchParams] = useSearchParams();
+    const offerText = lang === 'ru' ? OFFER_TEXT[(searchParams.get('offer') || '').toLowerCase()] : undefined;
     return (
         <Shell>
             <div className="text-center space-y-4 text-vastu-light/85 text-sm leading-relaxed">
                 <p className="text-vastu-gold font-serif text-2xl">{t.thanksTitle}</p>
-                <p>{t.thanks1}</p>
+                <p>{offerText?.thanks1 || t.thanks1}</p>
                 <p className="text-vastu-light/60">{t.thanks2}</p>
                 <a
                     href="/forgot-password"
@@ -208,7 +224,7 @@ function BuyForm({ offerId }: { offerId?: string }) {
                             )}
                         </div>
                     )}
-                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">{t.intro}</p>
+                    <p className="text-vastu-light/80 text-center text-sm leading-relaxed">{(lang === 'ru' && offerId && OFFER_TEXT[offerId.toLowerCase()]?.intro) || t.intro}</p>
 
                     {paymentFailed && !error && (
                         <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-200 text-sm text-center">
