@@ -254,7 +254,9 @@ export function formatDateRu(iso) {
 // row.courses. null = lifetime.
 //   - is_lifetime offer                    -> null
 //   - access_from === 'purchase'           -> paidAt (or now) + months
-//   - access_from === 'course_start' (def) -> course.starts_at + months
+//   - access_from === 'course_start' (def) -> course.starts_at + months; but if that window has
+//     already closed at paidAt (or now), paidAt + months: a closed course is sold as a recording,
+//     and nobody is granted access that is over the moment it is given
 //   - months from offer.access_months, else course.access_duration_months
 //   - missing anchor date or months        -> null (lifetime)
 export function computeExpiresAt(offerRow, paidAt = null) {
@@ -263,12 +265,14 @@ export function computeExpiresAt(offerRow, paidAt = null) {
     const course = offerRow.courses || null;
     const months = offerRow.access_months ?? course?.access_duration_months;
     if (months == null) return null;
-    const accessFrom = offerRow.access_from || 'course_start';
-    const anchor = accessFrom === 'purchase'
-        ? (paidAt != null ? paidAt : new Date().toISOString())
-        : (course?.starts_at || null);
-    if (!anchor) return null;
-    return addMonthsIso(anchor, months);
+    const grantedAt = paidAt != null ? paidAt : new Date().toISOString();
+    if ((offerRow.access_from || 'course_start') === 'purchase') return addMonthsIso(grantedAt, months);
+    const fromStart = addMonthsIso(course?.starts_at || null, months);
+    const grantedMs = new Date(grantedAt).getTime();
+    if (fromStart && !Number.isNaN(grantedMs) && Date.parse(fromStart) <= grantedMs) {
+        return addMonthsIso(grantedAt, months);
+    }
+    return fromStart;
 }
 
 // Manual per-row upsert into public.user_entitlements with VIP-aware merge.

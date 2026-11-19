@@ -58,7 +58,7 @@ const ALERTS = 'alerts@example.com';
 // 1. Unit tests: expiry, tiers, GetCourse parsing, welcome email
 // ---------------------------------------------------------------------------
 
-test('computeExpiresAt: old Standard (caa3c132) and VIP (1daaffb0) keep exact existing behaviour; purchase offers expire paid_at + 6m', () => {
+test('computeExpiresAt: old Standard (caa3c132) ends with the course window while it is open and 6 months from payment after it closed; VIP stays lifetime; purchase offers expire paid_at + 6m', () => {
     const bizCourse = {
         slug: 'vastu-2',
         starts_at: '2026-05-18T00:00:00+00:00',
@@ -74,9 +74,13 @@ test('computeExpiresAt: old Standard (caa3c132) and VIP (1daaffb0) keep exact ex
         access_from: 'course_start',
         courses: bizCourse,
     };
-    assert.equal(computeExpiresAt(oldStd, nowToday), '2026-11-18T00:00:00.000Z');
+    // Paid while the course window (18 May + 6 months) was open: ends with the window, as before
+    assert.equal(computeExpiresAt(oldStd, '2026-11-17T12:00:00.000Z'), '2026-11-18T00:00:00.000Z');
+    // Paid after the window closed: 6 months from the payment, never access that is already over
+    assert.equal(computeExpiresAt(oldStd, nowToday), '2027-05-19T12:00:00.000Z');
     // Also when access_from is omitted (legacy row shape)
-    assert.equal(computeExpiresAt({ lava_offer_id: BIZ_STD_OFFER, is_lifetime: false, courses: bizCourse }, nowToday), '2026-11-18T00:00:00.000Z');
+    assert.equal(computeExpiresAt({ lava_offer_id: BIZ_STD_OFFER, is_lifetime: false, courses: bizCourse }, '2026-11-17T12:00:00.000Z'), '2026-11-18T00:00:00.000Z');
+    assert.equal(computeExpiresAt({ lava_offer_id: BIZ_STD_OFFER, is_lifetime: false, courses: bizCourse }, nowToday), '2027-05-19T12:00:00.000Z');
 
     // Old VIP offer (lifetime)
     const oldVip = {
